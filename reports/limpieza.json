@@ -1,0 +1,50 @@
+{
+  "generado": "2026-10-24T16:00:59-05:00",
+  "entrada": "vigilancia_dengue_2000_2025.csv",
+  "sha256_entrada": "7865e8b2f5a7aef1e8dce159444891f2c2e59b311d574f28c55aaca5a9abb8ba",
+  "silver": "data/silver/dengue.csv",
+  "sha256_silver": "192f2824eb06a158f02776011f524598d850b3e6b505114dbe159778926888f7",
+  "workers": 2,
+  "bloques": 113,
+  "seg_lectura_disco": 0.062576747,
+  "seg_limpieza_secuencial": 0.891695105,
+  "seg_limpieza_concurrente": 0.478711038,
+  "speedup": 1.8627001138837331,
+  "silver_concurrente_igual_al_secuencial": true,
+  "limpieza": {
+    "filas_entrada": 1065274,
+    "filas_salida": 1065260,
+    "filas_descartadas": 14,
+    "descartadas_por_regla": {
+      "año fuera de 2000–2025": 0,
+      "departamento vacío": 0,
+      "diagnostico fuera de A97.0/A97.1/A97.2": 0,
+      "edad mayor a 110 años": 14,
+      "edad no numérica, negativa o tipo_edad ∉ {A,M,D}": 0,
+      "enfermedad no coincide con el código CIE-10": 0,
+      "mal_formada (columnas ≠ 15 aun reparando comillas)": 0,
+      "semana epidemiológica fuera de 1–53": 0,
+      "sexo ∉ {F,M}": 0,
+      "tipo_dx ∉ {C,P}": 0,
+      "ubigeo no numérico o de largo ≠ 5/6": 0
+    },
+    "ubigeo_rellenado_con_cero": 0,
+    "comillas_sin_escapar_reparadas": 85,
+    "positivos": 120601,
+    "tasa_positivos": 0.11321273679665059,
+    "filas_identicas_conservadas": 148787,
+    "orden_reglas": [
+      "mal_formada (columnas ≠ 15 aun reparando comillas)",
+      "diagnostico fuera de A97.0/A97.1/A97.2",
+      "enfermedad no coincide con el código CIE-10",
+      "año fuera de 2000–2025",
+      "semana epidemiológica fuera de 1–53",
+      "edad no numérica, negativa o tipo_edad ∉ {A,M,D}",
+      "edad mayor a 110 años",
+      "sexo ∉ {F,M}",
+      "tipo_dx ∉ {C,P}",
+      "ubigeo no numérico o de largo ≠ 5/6",
+      "departamento vacío"
+    ]
+  }
+}
