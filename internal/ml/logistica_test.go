@@ -10,26 +10,8 @@ import (
 // logística conocida. Es determinista: misma semilla, mismos datos.
 func datasetSintetico(t testing.TB, n, d int, semilla uint64) (*Dataset, []float64) {
 	t.Helper()
-	r := rand.New(rand.NewPCG(semilla, semilla^0x9e3779b97f4a7c15))
-	verdaderos := make([]float64, d+1)
-	for j := range verdaderos {
-		verdaderos[j] = r.NormFloat64()
-	}
-	x := make([]float64, n*d)
-	y := make([]float64, n)
-	for i := 0; i < n; i++ {
-		z := verdaderos[d]
-		for j := 0; j < d; j++ {
-			v := r.NormFloat64()
-			x[i*d+j] = v
-			z += verdaderos[j] * v
-		}
-		if r.Float64() < Sigmoide(z) {
-			y[i] = 1
-		}
-	}
-	ds, err := NuevoDataset(x, y, d)
-	if err != nil {
+	ds, verdaderos := Sintetico(n, d, semilla)
+	if _, err := NuevoDataset(ds.X, ds.Y, ds.D); err != nil {
 		t.Fatal(err)
 	}
 	return ds, verdaderos
