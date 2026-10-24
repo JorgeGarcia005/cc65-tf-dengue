@@ -125,3 +125,12 @@ func TestMapearEnOrdenEsDeterministaYSinCarreras(t *testing.T) {
 		t.Errorf("líneas contadas = %d", total)
 	}
 }
+
+func mustLeer(t *testing.T, ruta string) []byte {
+	t.Helper()
+	b, err := os.ReadFile(ruta)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return b
+}
