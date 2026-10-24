@@ -107,11 +107,6 @@ type Parcial struct {
 // NuevoParcial reserva un Parcial para d features.
 func NuevoParcial(d int) Parcial { return Parcial{Grad: make([]float64, d+1)} }
 
-func (p *Parcial) reiniciar() {
-	clear(p.Grad)
-	p.Perdida, p.Peso = 0, 0
-}
-
 // Acumular suma otro parcial a p (p += q).
 func (p *Parcial) Acumular(q *Parcial) {
 	for j, v := range q.Grad {
@@ -160,11 +155,17 @@ func Puntaje(w, x []float64) float64 {
 // ParcialBloque calcula las sumas del bloque k en out (que se sobrescribe).
 // Es la única función que toca las filas: secuencial, concurrente y
 // distribuido la comparten, por eso sus resultados por bloque son idénticos.
+//
+// La pérdida y el peso se acumulan en variables locales (registros) y se
+// escriben en out una sola vez al final: así dos goroutines que procesan
+// bloques vecinos no escriben fila a fila en la misma línea de caché.
 func ParcialBloque(ds *Dataset, cfg Config, w []float64, k int, out *Parcial) {
 	cfg = cfg.normalizada()
-	out.reiniciar()
+	clear(out.Grad)
 	ini, fin := LimitesBloque(k, ds.N, cfg.TamBloque)
 	d := ds.D
+	grad := out.Grad
+	var perdida, peso float64
 	for i := ini; i < fin; i++ {
 		x := ds.Fila(i)
 		y := ds.Y[i]
@@ -175,12 +176,19 @@ func ParcialBloque(ds *Dataset, cfg Config, w []float64, k int, out *Parcial) {
 		z := Puntaje(w, x)
 		r := s * (Sigmoide(z) - y)
 		for j, v := range x {
-			out.Grad[j] += r * v
+			grad[j] += r * v
 		}
-		out.Grad[d] += r
-		out.Perdida += s * perdidaLogistica(z, y)
-		out.Peso += s
+		grad[d] += r
+		perdida += s * perdidaLogistica(z, y)
+		peso += s
 	}
+	out.Perdida, out.Peso = perdida, peso
+}
+
+// copiarEn copia p en dst (mismas dimensiones) sin reservar memoria.
+func (p *Parcial) copiarEn(dst *Parcial) {
+	copy(dst.Grad, p.Grad)
+	dst.Perdida, dst.Peso = p.Perdida, p.Peso
 }
 
 // ReducirEnOrden acumula los parciales en el orden del slice (índice de bloque).
@@ -221,12 +229,22 @@ func NuevoSecuencial(ds *Dataset, cfg Config) *Secuencial {
 
 // Gradiente implementa Calculador.
 func (s *Secuencial) Gradiente(w []float64) Gradiente {
+	validarPesos(w, s.ds.D)
 	total := NuevoParcial(s.ds.D)
 	for k := 0; k < NumBloques(s.ds.N, s.cfg.TamBloque); k++ {
 		ParcialBloque(s.ds, s.cfg, w, k, &s.parcial)
 		total.Acumular(&s.parcial)
 	}
 	return Finalizar(total, s.cfg, w)
+}
+
+// validarPesos exige len(w) = d+1 (d features más el sesgo). Un largo distinto
+// es un error de programación: sin esta guarda, el Pool reutilizaría en
+// silencio restos de los pesos de la época anterior.
+func validarPesos(w []float64, d int) {
+	if len(w) != d+1 {
+		panic(fmt.Sprintf("ml: len(w) = %d, se esperaban %d (%d features + sesgo)", len(w), d+1, d))
+	}
 }
 
 // PesosBalanceados devuelve pesos por clase que igualan el aporte total de
