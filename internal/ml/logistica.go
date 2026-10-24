@@ -229,12 +229,22 @@ func NuevoSecuencial(ds *Dataset, cfg Config) *Secuencial {
 
 // Gradiente implementa Calculador.
 func (s *Secuencial) Gradiente(w []float64) Gradiente {
+	validarPesos(w, s.ds.D)
 	total := NuevoParcial(s.ds.D)
 	for k := 0; k < NumBloques(s.ds.N, s.cfg.TamBloque); k++ {
 		ParcialBloque(s.ds, s.cfg, w, k, &s.parcial)
 		total.Acumular(&s.parcial)
 	}
 	return Finalizar(total, s.cfg, w)
+}
+
+// validarPesos exige len(w) = d+1 (d features más el sesgo). Un largo distinto
+// es un error de programación: sin esta guarda, el Pool reutilizaría en
+// silencio restos de los pesos de la época anterior.
+func validarPesos(w []float64, d int) {
+	if len(w) != d+1 {
+		panic(fmt.Sprintf("ml: len(w) = %d, se esperaban %d (%d features + sesgo)", len(w), d+1, d))
+	}
 }
 
 // PesosBalanceados devuelve pesos por clase que igualan el aporte total de

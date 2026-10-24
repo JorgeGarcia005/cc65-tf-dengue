@@ -86,6 +86,7 @@ func (p *Pool) Gradiente(w []float64) Gradiente {
 	if p.cerrado {
 		panic("ml: Gradiente sobre un Pool cerrado")
 	}
+	validarPesos(w, p.ds.D)
 	copy(p.w, w)
 	p.wg.Add(p.bloques)
 	for k := 0; k < p.bloques; k++ {

@@ -3,6 +3,7 @@
 package estadistica
 
 import (
+	"fmt"
 	"math"
 	"math/rand/v2"
 	"slices"
@@ -22,8 +23,10 @@ type Resumen struct {
 }
 
 // MediaRecortada descarta ⌊n·frac⌋ valores en cada extremo y promedia el resto.
-// frac debe estar en [0, 0.5).
+// frac debe estar en [0, 0.5); fuera de ese rango entra en pánico con un mensaje
+// claro (es un error de programación, igual que una Config inválida en ml).
 func MediaRecortada(xs []float64, frac float64) float64 {
+	ValidarRecorte(frac)
 	if len(xs) == 0 {
 		return math.NaN()
 	}
@@ -36,6 +39,14 @@ func MediaRecortada(xs []float64, frac float64) float64 {
 		suma += v
 	}
 	return suma / float64(len(s))
+}
+
+// ValidarRecorte entra en pánico si frac no está en [0, 0.5). Con frac < 0.5
+// siempre queda al menos un valor tras recortar: 2·⌊n·frac⌋ < n.
+func ValidarRecorte(frac float64) {
+	if !(frac >= 0 && frac < 0.5) {
+		panic(fmt.Sprintf("estadistica: recorte = %v (debe estar en [0, 0.5))", frac))
+	}
 }
 
 // Mediana de la muestra.

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math"
 	"math/rand/v2"
+	"sync"
 	"testing"
 )
 
@@ -117,5 +118,62 @@ func BenchmarkGradiente(b *testing.B) {
 				p.Gradiente(w)
 			}
 		})
+	}
+}
+
+// PR-12 H1: varias goroutines llamando Gradiente a la vez sobre el mismo Pool.
+// El mutex debe serializarlas (sin carreras bajo -race) y cada una debe recibir
+// exactamente el gradiente de sus propios pesos.
+func TestPoolLlamadasConcurrentes(t *testing.T) {
+	ds, _ := datasetSintetico(t, 4_000, 4, 17)
+	cfg := Config{TamBloque: 256}
+	p := NuevoPool(ds, cfg, 4)
+	defer p.Cerrar()
+	sec := NuevoSecuencial(ds, cfg)
+
+	const llamadores = 8
+	pesos := make([][]float64, llamadores)
+	esperados := make([]Gradiente, llamadores)
+	for i := range pesos {
+		pesos[i] = pesosAleatorios(ds.D, uint64(100+i))
+		esperados[i] = sec.Gradiente(pesos[i])
+	}
+
+	obtenidos := make([]Gradiente, llamadores)
+	var wg sync.WaitGroup
+	for i := range llamadores {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for range 5 {
+				obtenidos[i] = p.Gradiente(pesos[i])
+			}
+		}()
+	}
+	wg.Wait()
+
+	for i := range llamadores {
+		mismosBits(t, fmt.Sprintf("llamador %d", i), esperados[i].Grad, obtenidos[i].Grad)
+	}
+}
+
+// PR-12 H1: un w de largo incorrecto falla con mensaje claro en vez de mezclar
+// pesos de la época anterior.
+func TestPesosDeLargoIncorrectoEntranEnPanico(t *testing.T) {
+	ds, _ := datasetSintetico(t, 500, 3, 1)
+	p := NuevoPool(ds, Config{}, 2)
+	defer p.Cerrar()
+	calcs := map[string]Calculador{"pool": p, "secuencial": NuevoSecuencial(ds, Config{})}
+	for nombre, c := range calcs {
+		for _, largo := range []int{ds.D, ds.D + 2} {
+			func() {
+				defer func() {
+					if recover() == nil {
+						t.Errorf("%s con len(w)=%d: esperaba pánico", nombre, largo)
+					}
+				}()
+				c.Gradiente(make([]float64, largo))
+			}()
+		}
 	}
 }

@@ -54,3 +54,40 @@ func TestResumirVacio(t *testing.T) {
 		t.Errorf("Resumir(nil) = %+v", r)
 	}
 }
+
+// PR-12 H2: Resumir sobre una muestra real.
+func TestResumir(t *testing.T) {
+	xs := []float64{5, 1, 4, 2, 3, 100, 3, 2, 4, 1}
+	r := Resumir(xs, 0.1)
+	if r.N != 10 || r.Recorte != 0.1 || r.Min != 1 || r.Max != 100 || r.Mediana != 3 {
+		t.Fatalf("Resumir = %+v", r)
+	}
+	// Recorta 1 por extremo: quedan {1,2,2,3,3,4,4,5} → media 3.
+	if math.Abs(r.MediaRecortada-3) > 1e-12 {
+		t.Errorf("MediaRecortada = %v, quiere 3", r.MediaRecortada)
+	}
+	if !(r.IC95Inf <= r.MediaRecortada && r.MediaRecortada <= r.IC95Sup) {
+		t.Errorf("IC [%v, %v] no contiene %v", r.IC95Inf, r.IC95Sup, r.MediaRecortada)
+	}
+	if r.Desviacion <= 0 {
+		t.Errorf("Desviacion = %v", r.Desviacion)
+	}
+}
+
+// PR-12 H2: un recorte fuera de [0, 0.5) falla con mensaje claro.
+func TestRecorteInvalidoEntraEnPanico(t *testing.T) {
+	for _, frac := range []float64{-0.1, 0.5, 0.7, math.NaN()} {
+		func() {
+			defer func() {
+				if recover() == nil {
+					t.Errorf("frac = %v: esperaba pánico", frac)
+				}
+			}()
+			MediaRecortada([]float64{1, 2, 3}, frac)
+		}()
+	}
+	// Con frac casi 0.5 siempre queda al menos un valor.
+	if v := MediaRecortada([]float64{1, 2, 3}, 0.49); v != 2 {
+		t.Errorf("MediaRecortada(frac=0.49) = %v, quiere 2", v)
+	}
+}

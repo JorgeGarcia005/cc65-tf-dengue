@@ -79,6 +79,12 @@ func main() {
 	salida := flag.String("salida", "", "archivo JSON (por defecto reports/bench_gradiente_<host>.json)")
 	semilla := flag.Uint64("semilla", 2026, "semilla del dataset y del barajado")
 	flag.Parse()
+	if !(*recorte >= 0 && *recorte < 0.5) {
+		log.Fatalf("-recorte = %v: debe estar en [0, 0.5)", *recorte)
+	}
+	if *reps < 1 || *filas < 1 || *features < 1 || *tamBloque < 1 {
+		log.Fatal("-reps, -filas, -features y -bloque deben ser ≥ 1")
+	}
 
 	workers := parsearLista(*listaWorkers)
 	if len(workers) == 0 {
