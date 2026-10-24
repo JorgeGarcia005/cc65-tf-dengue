@@ -41,5 +41,5 @@ tiene un archivo descargable y ninguno trae comorbilidades.
 
 - El informe debe explicar por qué el objetivo es un indicador de necesidad de
   hospitalización y declarar la ausencia de comorbilidades como limitación.
-- El volumen de entrenamiento (~973 mil filas desde 2010) queda por debajo de 1 M; el
+- El volumen de entrenamiento (~956 mil filas desde 2011) queda por debajo de 1 M; el
   requisito de > 1 M se cumple en la carga y limpieza concurrentes.
