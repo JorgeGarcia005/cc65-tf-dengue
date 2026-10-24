@@ -32,8 +32,9 @@ tiene un archivo descargable y ninguno trae comorbilidades.
 ## Decisión
 
 - Se mantiene el caso 1 con el dataset de dengue y regresión logística distribuida.
-- La carga y la limpieza procesan las 1 065 274 filas; el entrenamiento usa los años en los
-  que existe la categoría "con signos de alarma" (desde 2010, clasificación OMS 2009).
+- La carga y la limpieza procesan las 1 065 274 filas; el entrenamiento usa los años en que
+  la categoría "con signos de alarma" se aplica de forma sistemática: desde 2011 (en 2010 es
+  marginal, 1 % de positivos; clasificación OMS 2009).
 - `AGENTS.md` §3.2 se actualiza: los drivers de MongoDB y Redis quedan permitidos; el resto
   del núcleo sigue en stdlib.
 
