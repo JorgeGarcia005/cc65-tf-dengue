@@ -125,7 +125,8 @@ func TestLimpiezaConcurrenteIgualALaSecuencial(t *testing.T) {
 	if suma != ref.Descartadas {
 		t.Fatalf("Σ por regla = %d, descartadas = %d", suma, ref.Descartadas)
 	}
-	// Defectos sembrados por csvSintetico: comillas (i%1999==7), edad NA (i%997==13), sexo X (i%997==29).
+	// Defectos sembrados por csvSintetico: comillas sin cerrar (i%1999==7, irreparables),
+	// edad NA (i%997==13), sexo X (i%997==29).
 	if ref.PorRegla[NombresReglas[MalFormada]] != 21 {
 		t.Errorf("mal formadas = %d, quiere 21", ref.PorRegla[NombresReglas[MalFormada]])
 	}

@@ -1,0 +1,77 @@
+{
+  "generado": "2026-10-24T16:01:32-05:00",
+  "maquina": {
+    "arquitectura": "amd64",
+    "cpu": "Intel(R) Xeon(R) Processor @ 2.10GHz",
+    "go": "go1.24.7",
+    "gomaxprocs": 2,
+    "num_cpu": 2,
+    "so": "linux"
+  },
+  "protocolo": {
+    "calentamiento": 1,
+    "estimador": "media recortada 10 % + IC95 bootstrap",
+    "gc": "runtime.GC() antes de cada medición",
+    "medida": "limpieza completa en memoria (parseo + reglas + silver), sin lectura de disco",
+    "orden": "barajado por repetición",
+    "repeticiones": 15
+  },
+  "filas": 1065274,
+  "bloques": 113,
+  "mediciones": [
+    {
+      "workers": 1,
+      "segundos": {
+        "n": 15,
+        "media_recortada": 0.7516551933846153,
+        "recorte": 0.1,
+        "mediana": 0.743387704,
+        "desviacion": 0.039248407418429186,
+        "min": 0.686887759,
+        "max": 0.804390481,
+        "ic95_inf": 0.7295105100057692,
+        "ic95_sup": 0.7728270384403847
+      },
+      "speedup": 1,
+      "eficiencia": 1,
+      "filas_por_segundo": 1417237.5969401554,
+      "silver_igual_al_secuencial": true
+    },
+    {
+      "workers": 2,
+      "segundos": {
+        "n": 15,
+        "media_recortada": 0.45077522784615387,
+        "recorte": 0.1,
+        "mediana": 0.450788659,
+        "desviacion": 0.01973604329756665,
+        "min": 0.4209473,
+        "max": 0.494614682,
+        "ic95_inf": 0.44067715588461537,
+        "ic95_sup": 0.4616209111134616
+      },
+      "speedup": 1.667472272103536,
+      "eficiencia": 0.833736136051768,
+      "filas_por_segundo": 2363204.3958803564,
+      "silver_igual_al_secuencial": true
+    },
+    {
+      "workers": 4,
+      "segundos": {
+        "n": 15,
+        "media_recortada": 0.4469870650769231,
+        "recorte": 0.1,
+        "mediana": 0.44538004,
+        "desviacion": 0.019175290466125837,
+        "min": 0.412420708,
+        "max": 0.487961922,
+        "ic95_inf": 0.4375967000057692,
+        "ic95_sup": 0.4577710730961539
+      },
+      "speedup": 1.681603903359622,
+      "eficiencia": 0.4204009758399055,
+      "filas_por_segundo": 2383232.2750025764,
+      "silver_igual_al_secuencial": true
+    }
+  ]
+}

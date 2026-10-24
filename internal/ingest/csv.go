@@ -57,6 +57,65 @@ func ParsearLinea(linea []byte, buf [][]byte) ([][]byte, error) {
 	return ParsearLineaN(linea, buf, NumColumnas)
 }
 
+// ParsearLineaTolerante intenta primero el parseo estricto (RFC 4180) y, si
+// falla por comillas, reintenta tratando como literal toda comilla dentro de un
+// campo entrecomillado que no esté seguida de coma ni de fin de línea. Así se
+// recuperan filas como `"ISLA SANTA ROSA "AMAZONAS""`, que el portal publica
+// sin escapar. reparada indica que hizo falta el segundo intento.
+func ParsearLineaTolerante(linea []byte, buf [][]byte, n int) (campos [][]byte, reparada bool, err error) {
+	campos, err = ParsearLineaN(linea, buf, n)
+	if err != ErrComillas {
+		return campos, false, err
+	}
+	campos, err = parsearLaxo(linea, buf, n)
+	return campos, err == nil, err
+}
+
+// parsearLaxo: en un campo que empieza con comillas, solo la comilla seguida de
+// ',' o de fin de línea cierra el campo; las demás se toman como texto.
+func parsearLaxo(linea []byte, buf [][]byte, n int) ([][]byte, error) {
+	campos := buf[:0]
+	i := 0
+	for {
+		if i < len(linea) && linea[i] == '"' {
+			j := i + 1
+			for {
+				k := bytes.IndexByte(linea[j:], '"')
+				if k < 0 {
+					return campos, ErrComillas
+				}
+				j += k
+				if j+1 == len(linea) || linea[j+1] == ',' {
+					break
+				}
+				j++
+			}
+			campos = append(campos, linea[i+1:j])
+			i = j + 1
+		} else {
+			k := bytes.IndexByte(linea[i:], ',')
+			fin := len(linea)
+			if k >= 0 {
+				fin = i + k
+			}
+			campos = append(campos, linea[i:fin])
+			i = fin
+		}
+		if i >= len(linea) {
+			break
+		}
+		i++
+		if i == len(linea) {
+			campos = append(campos, linea[i:])
+			break
+		}
+	}
+	if len(campos) != n {
+		return campos, ErrColumnas
+	}
+	return campos, nil
+}
+
 // ParsearLineaN separa una línea CSV (RFC 4180, sin saltos de línea dentro de
 // campos) en exactamente n campos. Reutiliza buf si tiene capacidad.
 // Los campos sin comillas son subslices de linea (sin copiar); los que llevan
