@@ -57,12 +57,24 @@ func (ds *Dataset) Fila(i int) []float64 { return ds.X[i*ds.D : (i+1)*ds.D] }
 // Config define cómo se calcula la pérdida.
 type Config struct {
 	TamBloque int     // filas por bloque; 0 = TamBloquePorDefecto
-	Lambda    float64 // regularización L2 (no se aplica al sesgo)
-	PesoPos   float64 // peso de cada muestra con y = 1; 0 = 1
-	PesoNeg   float64 // peso de cada muestra con y = 0; 0 = 1
+	Lambda    float64 // regularización L2 (no se aplica al sesgo); ≥ 0
+	PesoPos   float64 // peso de cada muestra con y = 1; 0 = 1; nunca negativo
+	PesoNeg   float64 // peso de cada muestra con y = 0; 0 = 1; nunca negativo
 }
 
+// normalizada completa los valores por defecto. Un peso negativo, un λ
+// negativo o un valor no finito es un error de programación: entra en pánico
+// con un mensaje claro en vez de corregirlo en silencio, porque reemplazarlo
+// por 1 escondería el error y entrenaría otro modelo sin avisar.
 func (c Config) normalizada() Config {
+	for _, v := range []struct {
+		nombre string
+		valor  float64
+	}{{"PesoPos", c.PesoPos}, {"PesoNeg", c.PesoNeg}, {"Lambda", c.Lambda}} {
+		if v.valor < 0 || math.IsNaN(v.valor) || math.IsInf(v.valor, 0) {
+			panic(fmt.Sprintf("ml: Config.%s = %v (debe ser finito y ≥ 0)", v.nombre, v.valor))
+		}
+	}
 	if c.TamBloque <= 0 {
 		c.TamBloque = TamBloquePorDefecto
 	}

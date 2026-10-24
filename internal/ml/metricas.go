@@ -2,6 +2,7 @@ package ml
 
 import (
 	"errors"
+	"fmt"
 	"slices"
 )
 
@@ -59,8 +60,11 @@ func AUC(y, p []float64) (float64, error) {
 
 // Evaluar calcula la matriz de confusión y las métricas para un umbral.
 // Si falta alguna clase, AUC queda en 0.
-func Evaluar(y, p []float64, umbral float64) Metricas {
+func Evaluar(y, p []float64, umbral float64) (Metricas, error) {
 	m := Metricas{Umbral: umbral}
+	if len(y) != len(p) {
+		return m, fmt.Errorf("ml: Evaluar con %d etiquetas y %d probabilidades", len(y), len(p))
+	}
 	for i := range y {
 		pred := p[i] >= umbral
 		switch {
@@ -87,5 +91,5 @@ func Evaluar(y, p []float64, umbral float64) Metricas {
 		m.F1 = 2 * m.Precision * m.Recall / (m.Precision + m.Recall)
 	}
 	m.AUC, _ = AUC(y, p)
-	return m
+	return m, nil
 }

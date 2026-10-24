@@ -160,3 +160,74 @@ func TestPesosBalanceados(t *testing.T) {
 		t.Errorf("las clases no pesan lo mismo: %v vs %v", pos*1, neg*3)
 	}
 }
+
+// PR-11 H1: calcular cada bloque por separado y reducir con ReducirEnOrden +
+// Finalizar debe dar exactamente los mismos bits que Secuencial.Gradiente.
+// Es el camino que usan el worker pool y el clúster.
+func TestReducirEnOrdenIgualASecuencial(t *testing.T) {
+	ds, _ := datasetSintetico(t, 7_777, 5, 13)
+	cfg := Config{TamBloque: 300, Lambda: 0.02, PesoPos: 1.7, PesoNeg: 0.6}
+	w := []float64{0.2, -0.1, 0.05, 0.3, -0.25, 0.1}
+
+	parciales := make([]Parcial, NumBloques(ds.N, cfg.TamBloque))
+	for k := range parciales {
+		parciales[k] = NuevoParcial(ds.D)
+		ParcialBloque(ds, cfg, w, k, &parciales[k])
+	}
+	porPartes := Finalizar(ReducirEnOrden(parciales, ds.D), cfg, w)
+	ref := NuevoSecuencial(ds, cfg).Gradiente(w)
+
+	for j := range ref.Grad {
+		if math.Float64bits(ref.Grad[j]) != math.Float64bits(porPartes.Grad[j]) {
+			t.Fatalf("grad[%d]: %.17g vs %.17g", j, ref.Grad[j], porPartes.Grad[j])
+		}
+	}
+	if math.Float64bits(ref.Perdida) != math.Float64bits(porPartes.Perdida) {
+		t.Fatalf("pérdida: %.17g vs %.17g", ref.Perdida, porPartes.Perdida)
+	}
+}
+
+// PR-11 H1: Probabilidad, usada por la API de predicción, sobre un modelo entrenado.
+func TestProbabilidadTrasEntrenar(t *testing.T) {
+	ds, _ := datasetSintetico(t, 20_000, 3, 31)
+	res := Entrenar(NuevoSecuencial(ds, Config{}), ds.D, Entrenamiento{Epocas: 200, Tasa: 1})
+	p := make([]float64, ds.N)
+	for i := range p {
+		p[i] = Probabilidad(res.W, ds.Fila(i))
+		if p[i] < 0 || p[i] > 1 || math.IsNaN(p[i]) {
+			t.Fatalf("Probabilidad fila %d = %v fuera de [0,1]", i, p[i])
+		}
+		if want := Sigmoide(Puntaje(res.W, ds.Fila(i))); p[i] != want {
+			t.Fatalf("Probabilidad fila %d = %v, quiere σ(xᵀw+b) = %v", i, p[i], want)
+		}
+	}
+	m, err := Evaluar(ds.Y, p, 0.5)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if m.AUC < 0.75 {
+		t.Errorf("AUC en datos sintéticos = %.3f, esperaba ≥ 0.75", m.AUC)
+	}
+}
+
+// PR-11 H2: una configuración inválida falla con un mensaje claro en vez de
+// corregirse en silencio.
+func TestConfigInvalidaEntraEnPanico(t *testing.T) {
+	ds, _ := datasetSintetico(t, 100, 2, 1)
+	for _, cfg := range []Config{
+		{PesoPos: -1},
+		{PesoNeg: -0.5},
+		{Lambda: -1e-3},
+		{PesoPos: math.NaN()},
+		{PesoNeg: math.Inf(1)},
+	} {
+		func() {
+			defer func() {
+				if recover() == nil {
+					t.Errorf("Config %+v: esperaba pánico", cfg)
+				}
+			}()
+			NuevoSecuencial(ds, cfg)
+		}()
+	}
+}

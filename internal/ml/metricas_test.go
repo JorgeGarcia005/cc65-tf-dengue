@@ -39,7 +39,10 @@ func TestAUCRequiereAmbasClases(t *testing.T) {
 func TestConfusionYMetricas(t *testing.T) {
 	y := []float64{1, 1, 1, 0, 0, 0, 0, 1}
 	p := []float64{0.9, 0.6, 0.4, 0.7, 0.2, 0.1, 0.3, 0.8}
-	m := Evaluar(y, p, 0.5)
+	m, err := Evaluar(y, p, 0.5)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if m.VP != 3 || m.FN != 1 || m.FP != 1 || m.VN != 3 {
 		t.Fatalf("confusión = %+v", m)
 	}
@@ -54,4 +57,11 @@ func TestConfusionYMetricas(t *testing.T) {
 	cerca("exactitud", m.Exactitud, 0.75)
 	// 14 de los 16 pares (positivo, negativo) quedan bien ordenados.
 	cerca("auc", m.AUC, 0.875)
+}
+
+// PR-11 H2: largos distintos no deben leer fuera de rango ni dar métricas falsas.
+func TestEvaluarRechazaLargosDistintos(t *testing.T) {
+	if _, err := Evaluar([]float64{1, 0, 1}, []float64{0.9, 0.1}, 0.5); err == nil {
+		t.Error("esperaba error con len(y) != len(p)")
+	}
 }
