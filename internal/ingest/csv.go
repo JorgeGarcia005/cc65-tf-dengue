@@ -35,7 +35,7 @@ const (
 // Errores de parseo de una línea.
 var (
 	ErrComillas = errors.New("comillas desbalanceadas")
-	ErrColumnas = errors.New("número de columnas distinto de 15")
+	ErrColumnas = errors.New("número de columnas inesperado")
 )
 
 // ValidarEncabezado comprueba que el CSV tenga exactamente las columnas esperadas.
@@ -52,11 +52,16 @@ func ValidarEncabezado(encabezado []byte) error {
 	return nil
 }
 
-// ParsearLinea separa una línea CSV (RFC 4180, sin saltos de línea dentro de
-// campos) en exactamente NumColumnas campos. Reutiliza buf si tiene capacidad.
+// ParsearLinea separa una línea del CSV original en sus NumColumnas campos.
+func ParsearLinea(linea []byte, buf [][]byte) ([][]byte, error) {
+	return ParsearLineaN(linea, buf, NumColumnas)
+}
+
+// ParsearLineaN separa una línea CSV (RFC 4180, sin saltos de línea dentro de
+// campos) en exactamente n campos. Reutiliza buf si tiene capacidad.
 // Los campos sin comillas son subslices de linea (sin copiar); los que llevan
 // "" escapado se copian una vez.
-func ParsearLinea(linea []byte, buf [][]byte) ([][]byte, error) {
+func ParsearLineaN(linea []byte, buf [][]byte, n int) ([][]byte, error) {
 	campos := buf[:0]
 	i := 0
 	for {
@@ -108,7 +113,7 @@ func ParsearLinea(linea []byte, buf [][]byte) ([][]byte, error) {
 			break
 		}
 	}
-	if len(campos) != NumColumnas {
+	if len(campos) != n {
 		return campos, ErrColumnas
 	}
 	return campos, nil

@@ -156,3 +156,12 @@ func TestUltimaLineaSinSaltoFinal(t *testing.T) {
 		t.Errorf("una línea: enc=%q cuerpo=%q", enc, cuerpo)
 	}
 }
+
+func mustLeer(t *testing.T, ruta string) []byte {
+	t.Helper()
+	b, err := os.ReadFile(ruta)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return b
+}
