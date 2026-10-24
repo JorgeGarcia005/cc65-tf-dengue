@@ -73,6 +73,8 @@ estrategia de caché) se debate antes de escribir código:
 1. Clonar el repo y abrirlo en Antigravity como workspace. Antigravity lee `AGENTS.md`,
    `.agents/rules/`, `.agents/skills/` y `.agents/workflows/` automáticamente.
 2. Verificar: en el chat de Antigravity, escribir `/juez` debe sugerir el workflow.
-3. Tener Go instalado (la misma versión que `go.mod`) y `make` (en Windows: Git Bash o WSL).
+3. Tener Go (≥ la versión de `go.mod`) y, para `go test -race` en Windows, un `gcc` de
+   64 bits en el `PATH` con `CGO_ENABLED=1`. `make` es opcional: el juez usa comandos de Go
+   directos y el CI de GitHub corre la verificación completa.
 4. En GitHub: **Projects → New project → Board** llamado `TF CC65`, columnas
    *Backlog / En curso / En revisión / Hecho*, y vincularlo al repo (la rúbrica lo exige).

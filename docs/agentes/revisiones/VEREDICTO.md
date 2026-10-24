@@ -8,7 +8,11 @@
 ## Verificación automática
 
 ```text
-$ make check
+$ gofmt -l .
+<vacío = ok>
+$ go vet ./...
+<salida>
+$ go test -race -count=1 ./...
 <últimas líneas de la salida>
 ```
 
