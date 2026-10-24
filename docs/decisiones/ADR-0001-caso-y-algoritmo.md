@@ -42,4 +42,5 @@ tiene un shard fijo).
 - **En contra:** el dataset tiene pocas variables clínicas, así que el poder predictivo será
   moderado; hay desbalance de clases (se usarán pesos por clase y se reportarán AUC y
   recall, no solo exactitud). Se declarará como limitación.
-- **Pendiente:** confirmar con el profesor que se permiten los drivers de MongoDB y Redis.
+- **Resuelto en ADR-0003:** el profesor aprobó el dataset, el objetivo, las variables y
+  los drivers de MongoDB y Redis.

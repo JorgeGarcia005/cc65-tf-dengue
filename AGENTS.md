@@ -49,8 +49,8 @@ SPA (D) ◄─ WebSocket/REST ─► C. coordinator (API HTTP + parameter server
 
 1. **Go para todo el backend** y todo contenerizado; se despliega con `docker compose up`.
 2. **Núcleo con biblioteca estándar:** loader, ML, protocolo TCP y API usan solo stdlib.
-   Terceros permitidos únicamente para drivers de MongoDB y Redis (pendiente de confirmar
-   con el profesor; ver `docs/decisiones/`). Nada de librerías de ML.
+   Terceros permitidos únicamente para drivers de MongoDB y Redis (aprobado por el
+   profesor, ver ADR-0003). Nada de librerías de ML.
 3. **Determinismo:** los bloques de datos tienen límites fijos (independientes del número de
    workers o nodos) y las sumas parciales se reducen **en orden de índice de bloque**. El
    gradiente distribuido debe ser **idéntico bit a bit** al secuencial. Hay un test que lo exige.
