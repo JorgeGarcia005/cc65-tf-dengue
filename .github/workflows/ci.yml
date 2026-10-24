@@ -41,7 +41,7 @@ jobs:
             echo "go=false" >> "$GITHUB_OUTPUT"
             echo "Sin código Go todavía; se omite."
           fi
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v7
         if: steps.hay.outputs.go == 'true'
         with:
           go-version-file: go.mod
