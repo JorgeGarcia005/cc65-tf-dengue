@@ -117,11 +117,126 @@ los resultados se unen en orden de bloque. El perfil con {{.Workers}} workers to
 **idéntico** al secuencial: {{if .Equivale}}verificado{{else}}NO verificado{{end}} por ` + "`cmd/perfil`" + `.
 `
 
+type limpieza struct {
+	SHA256Silver string  `json:"sha256_silver"`
+	Workers      int     `json:"workers"`
+	Bloques      int     `json:"bloques"`
+	SegLectura   float64 `json:"seg_lectura_disco"`
+	SegSec       float64 `json:"seg_limpieza_secuencial"`
+	SegConc      float64 `json:"seg_limpieza_concurrente"`
+	Speedup      float64 `json:"speedup"`
+	Equivale     bool    `json:"silver_concurrente_igual_al_secuencial"`
+	L            struct {
+		Entradas    int            `json:"filas_entrada"`
+		Salidas     int            `json:"filas_salida"`
+		Descartadas int            `json:"filas_descartadas"`
+		PorRegla    map[string]int `json:"descartadas_por_regla"`
+		Corregidas  int            `json:"ubigeo_rellenado_con_cero"`
+		Reparadas   int            `json:"comillas_sin_escapar_reparadas"`
+		Positivos   int            `json:"positivos"`
+		Tasa        float64        `json:"tasa_positivos"`
+		Identicas   int            `json:"filas_identicas_conservadas"`
+		Orden       []string       `json:"orden_reglas"`
+	} `json:"limpieza"`
+	Bench []benchLoader
+}
+
+type benchLoader struct {
+	Archivo string
+	Maquina struct {
+		CPU    string `json:"cpu"`
+		NumCPU int    `json:"num_cpu"`
+		SO     string `json:"so"`
+	} `json:"maquina"`
+	Mediciones []struct {
+		Workers  int `json:"workers"`
+		Segundos struct {
+			Media float64 `json:"media_recortada"`
+			Inf   float64 `json:"ic95_inf"`
+			Sup   float64 `json:"ic95_sup"`
+		} `json:"segundos"`
+		Speedup    float64 `json:"speedup"`
+		Eficiencia float64 `json:"eficiencia"`
+		FilasPorS  float64 `json:"filas_por_segundo"`
+		Equivale   bool    `json:"silver_igual_al_secuencial"`
+	} `json:"mediciones"`
+}
+
+const plantillaLimpieza = `<!-- Generado por cmd/informe desde reports/limpieza.json y reports/bench_loader_*.json. No editar a mano. -->
+
+# 3. Limpieza y carga concurrente (Parte A)
+
+## 3.1 Procedimiento
+
+El loader (` + "`cmd/loader`" + `) lee el CSV original completo en memoria, lo divide en
+**{{.Bloques}} bloques** de ~1 MiB que siempre terminan en un salto de línea y los reparte a un
+*worker pool*. Cada worker parsea, valida y normaliza las filas de su bloque y escribe el
+resultado en un slot propio; al final los bloques se concatenan **en orden**. Por eso el CSV
+limpio (capa silver) es **idéntico byte a byte** para cualquier número de workers
+({{if .Equivale}}verificado con sha256{{else}}NO verificado{{end}}: ` + "`{{.SHA256Silver}}`" + `).
+
+Cada fila se evalúa contra las reglas en este orden y se descarta por la **primera** que
+incumple, así que cada fila descartada se cuenta una sola vez:
+
+| # | Regla | Filas descartadas |
+|---:|---|---:|
+{{- range $i, $r := .L.Orden}}
+| {{inc $i}} | {{$r}} | {{miles (index $.L.PorRegla $r)}} |
+{{- end}}
+
+Además de descartar, el loader **repara** sin perder filas:
+
+- **Comillas sin escapar:** {{miles .L.Reparadas}} filas traen comillas dentro del campo
+  ` + "`localidad`" + ` (p. ej. ` + "`\"ISLA SANTA ROSA \"AMAZONAS\"\"`" + `), que el estándar CSV no admite. Se
+  recuperan con un segundo intento de parseo que trata esas comillas como texto.
+- **Ubigeo de 5 dígitos:** {{miles .L.Corregidas}} filas (se rellena el cero inicial).
+- **Edad:** se normaliza a años según ` + "`tipo_edad`" + ` (A = años, M = meses / 12, D = días / 365).
+
+**Filas idénticas:** {{miles .L.Identicas}} filas repiten exactamente a otra. **No se eliminan**: el
+dataset no tiene identificador de paciente, y dos casos reales pueden coincidir en todos los
+campos (misma localidad, semana, edad y sexo). Eliminarlas borraría casos verdaderos.
+
+## 3.2 Resultado
+
+| | Filas |
+|---|---:|
+| Entrada (bronze) | {{miles .L.Entradas}} |
+| Descartadas | {{miles .L.Descartadas}} |
+| **Salida (silver)** | **{{miles .L.Salidas}}** |
+| Positivos (con signos o grave) | {{miles .L.Positivos}} ({{pct .L.Tasa}} %) |
+
+## 3.3 Rendimiento de la carga concurrente
+{{range .Bench}}
+**{{.Maquina.CPU}}** · {{.Maquina.NumCPU}} CPU lógicas · {{.Maquina.SO}} (` + "`{{.Archivo}}`" + `)
+
+| Workers | Media recortada (ms) | IC 95 % (ms) | Speedup | Eficiencia | Filas/s | Silver = secuencial |
+|---:|---:|---|---:|---:|---:|:---:|
+{{- range .Mediciones}}
+| {{.Workers}} | {{ms .Segundos.Media}} | [{{ms .Segundos.Inf}}, {{ms .Segundos.Sup}}] | {{dos .Speedup}}× | {{pct .Eficiencia}} % | {{miles (entero .FilasPorS)}} | {{if .Equivale}}✔{{else}}✘{{end}} |
+{{- end}}
+{{end}}
+Protocolo: limpieza completa en memoria (sin lectura de disco), un calentamiento, repeticiones
+en orden barajado, ` + "`runtime.GC()`" + ` antes de cada medición, media recortada al 10 % e intervalo
+de confianza por bootstrap.
+`
+
 func main() {
 	var p perfil
 	leer("reports/perfil_bronze.json", &p)
 	slices.Sort(p.Anos)
 	escribir("docs/informe/pc3/02-datos.md", plantillaDatos, p)
+
+	var l limpieza
+	leer("reports/limpieza.json", &l)
+	archivos, _ := filepath.Glob("reports/bench_loader_*.json")
+	slices.Sort(archivos)
+	for _, a := range archivos {
+		var b benchLoader
+		leer(a, &b)
+		b.Archivo = filepath.Base(a)
+		l.Bench = append(l.Bench, b)
+	}
+	escribir("docs/informe/pc3/03-limpieza.md", plantillaLimpieza, l)
 }
 
 var funciones = template.FuncMap{
@@ -136,10 +251,13 @@ var funciones = template.FuncMap{
 		}
 		return b.String()
 	},
-	"mb":  func(b int) string { return strings.Replace(fmt.Sprintf("%.1f", float64(b)/1e6), ".", ",", 1) },
-	"pct": func(x float64) string { return strings.Replace(fmt.Sprintf("%.2f", 100*x), ".", ",", 1) },
-	"seg": func(x float64) string { return strings.Replace(fmt.Sprintf("%.3f", x), ".", ",", 1) },
-	"dos": func(x float64) string { return strings.Replace(fmt.Sprintf("%.2f", x), ".", ",", 1) },
+	"inc":    func(i int) int { return i + 1 },
+	"entero": func(x float64) int { return int(x + 0.5) },
+	"ms":     func(x float64) string { return strings.Replace(fmt.Sprintf("%.1f", 1000*x), ".", ",", 1) },
+	"mb":     func(b int) string { return strings.Replace(fmt.Sprintf("%.1f", float64(b)/1e6), ".", ",", 1) },
+	"pct":    func(x float64) string { return strings.Replace(fmt.Sprintf("%.2f", 100*x), ".", ",", 1) },
+	"seg":    func(x float64) string { return strings.Replace(fmt.Sprintf("%.3f", x), ".", ",", 1) },
+	"dos":    func(x float64) string { return strings.Replace(fmt.Sprintf("%.2f", x), ".", ",", 1) },
 	"tasaAno": func(c [3]int) string {
 		t := c[0] + c[1] + c[2]
 		if t == 0 {

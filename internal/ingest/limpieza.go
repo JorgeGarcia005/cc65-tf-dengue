@@ -30,7 +30,7 @@ const (
 // NombresReglas describe cada regla para el reporte y el informe.
 var NombresReglas = [numReglas]string{
 	OK:                      "ok",
-	MalFormada:              "mal_formada (comillas o columnas ≠ 15)",
+	MalFormada:              "mal_formada (columnas ≠ 15 aun reparando comillas)",
 	DiagnosticoDesconocido:  "diagnostico fuera de A97.0/A97.1/A97.2",
 	EnfermedadInconsistente: "enfermedad no coincide con el código CIE-10",
 	AnoFueraDeRango:         "año fuera de 2000–2025",
@@ -206,6 +206,7 @@ type ResultadoBloque struct {
 	Salidas    int
 	PorRegla   [numReglas]int
 	Corregidas int
+	Reparadas  int
 	Positivos  int
 	Huellas    []uint64 // huella de cada línea bronze válida, para contar repetidas
 }
@@ -220,10 +221,13 @@ func LimpiarBloque(bloque []byte) ResultadoBloque {
 	buf := make([][]byte, 0, NumColumnas)
 	ParaCadaLinea(bloque, func(linea []byte) {
 		res.Entradas++
-		campos, err := ParsearLinea(linea, buf)
+		campos, reparada, err := ParsearLineaTolerante(linea, buf, NumColumnas)
 		if err != nil {
 			res.PorRegla[MalFormada]++
 			return
+		}
+		if reparada {
+			res.Reparadas++
 		}
 		r, regla, corr := LimpiarCampos(campos)
 		if regla != OK {
@@ -250,6 +254,7 @@ type Limpieza struct {
 	Descartadas    int            `json:"filas_descartadas"`
 	PorRegla       map[string]int `json:"descartadas_por_regla"`
 	Corregidas     int            `json:"ubigeo_rellenado_con_cero"`
+	Reparadas      int            `json:"comillas_sin_escapar_reparadas"`
 	Positivos      int            `json:"positivos"`
 	TasaPositivos  float64        `json:"tasa_positivos"`
 	FilasIdenticas int            `json:"filas_identicas_conservadas"`
@@ -278,6 +283,7 @@ func LimpiarConcurrente(cuerpo []byte, tamBloque, workers int) ([]byte, Limpieza
 		l.Entradas += p.Entradas
 		l.Salidas += p.Salidas
 		l.Corregidas += p.Corregidas
+		l.Reparadas += p.Reparadas
 		l.Positivos += p.Positivos
 		for j, n := range p.PorRegla {
 			porRegla[j] += n

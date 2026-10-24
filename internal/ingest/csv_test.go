@@ -134,3 +134,32 @@ func mustLeer(t *testing.T, ruta string) []byte {
 	}
 	return b
 }
+
+func TestParsearLineaTolerante(t *testing.T) {
+	reales := []string{
+		`LORETO,"MARISCAL RAMON CASTILLA","RAMON CASTILLA","ISLA SANTA ROSA "AMAZONAS"","DENGUE CON SIGNOS DE ALARMA",2012,46,A97.1,C,16,160401,1604010076,28,A,F`,
+		`LORETO,MAYNAS,PUNCHANA,"PSJE. VICTORIA N"51","DENGUE SIN SIGNOS DE ALARMA",2004,39,A97.0,P,16,160108,,21,A,M`,
+		`ICA,ICA,PACHACUTEC,"SAN FRANCISCO "A"","DENGUE SIN SIGNOS DE ALARMA",2020,51,A97.0,P,11,110105,1101050019,62,A,F`,
+	}
+	localidades := []string{`ISLA SANTA ROSA "AMAZONAS"`, `PSJE. VICTORIA N"51`, `SAN FRANCISCO "A"`}
+	for i, l := range reales {
+		if _, err := ParsearLinea([]byte(l), nil); !errors.Is(err, ErrComillas) {
+			t.Fatalf("fila %d: el parseo estricto debía fallar por comillas, dio %v", i, err)
+		}
+		c, reparada, err := ParsearLineaTolerante([]byte(l), nil, NumColumnas)
+		if err != nil || !reparada {
+			t.Fatalf("fila %d: err=%v reparada=%v", i, err, reparada)
+		}
+		if string(c[ColLocalidad]) != localidades[i] || string(c[ColEnfermedad])[:6] != "DENGUE" || len(c[ColSexo]) != 1 {
+			t.Fatalf("fila %d: campos %q", i, c)
+		}
+	}
+	// Una línea válida no se marca como reparada.
+	if _, reparada, err := ParsearLineaTolerante([]byte(reales[0][:0]+`A,B,C,D,E,2000,1,A97.0,C,1,100101,,1,A,F`), nil, NumColumnas); err != nil || reparada {
+		t.Fatalf("línea válida: err=%v reparada=%v", err, reparada)
+	}
+	// Si ni el modo laxo da 15 columnas, sigue siendo error.
+	if _, _, err := ParsearLineaTolerante([]byte(`A,"B`), nil, NumColumnas); err == nil {
+		t.Fatal("esperaba error")
+	}
+}
