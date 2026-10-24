@@ -1,0 +1,105 @@
+{
+  "generado": "2026-10-24T16:05:11-05:00",
+  "filas_silver": 1065260,
+  "ano_min": 2011,
+  "filas_excluidas_por_ano": 109144,
+  "fraccion_test": 0.2,
+  "train": {
+    "filas": 765297,
+    "positivos": 96012,
+    "tasa_positivos": 0.12545717544953136
+  },
+  "test": {
+    "filas": 190819,
+    "positivos": 24002,
+    "tasa_positivos": 0.12578412002997605
+  },
+  "variables": 31,
+  "tam_bloque": 4096,
+  "bloques_train": 187,
+  "shards": [
+    {
+      "bloque_inicial": 0,
+      "bloques": 62,
+      "filas": 253952,
+      "shard": 0
+    },
+    {
+      "bloque_inicial": 62,
+      "bloques": 62,
+      "filas": 253952,
+      "shard": 1
+    },
+    {
+      "bloque_inicial": 124,
+      "bloques": 63,
+      "filas": 257393,
+      "shard": 2
+    }
+  ],
+  "esquema": {
+    "ano_min": 2011,
+    "min_casos_departamento": 100,
+    "departamentos": [
+      "AMAZONAS",
+      "ANCASH",
+      "AYACUCHO",
+      "CAJAMARCA",
+      "CALLAO",
+      "CUSCO",
+      "HUANUCO",
+      "ICA",
+      "JUNIN",
+      "LA LIBERTAD",
+      "LAMBAYEQUE",
+      "LIMA",
+      "LORETO",
+      "MADRE DE DIOS",
+      "PASCO",
+      "PIURA",
+      "PUNO",
+      "SAN MARTIN",
+      "TUMBES",
+      "UCAYALI",
+      "OTROS"
+    ],
+    "media_edad": 30.729156950455,
+    "desv_edad": 19.225933317669238,
+    "media_ano": 2021.0643096732379,
+    "desv_ano": 3.838082070834408,
+    "nombres": [
+      "edad_z",
+      "etapa_nino_0_11",
+      "etapa_adolescente_12_17",
+      "etapa_joven_18_29",
+      "etapa_adulto_30_59",
+      "etapa_adulto_mayor_60_mas",
+      "sexo_m",
+      "semana_sin",
+      "semana_cos",
+      "ano_z",
+      "depto_amazonas",
+      "depto_ancash",
+      "depto_ayacucho",
+      "depto_cajamarca",
+      "depto_callao",
+      "depto_cusco",
+      "depto_huanuco",
+      "depto_ica",
+      "depto_junin",
+      "depto_la_libertad",
+      "depto_lambayeque",
+      "depto_lima",
+      "depto_loreto",
+      "depto_madre_de_dios",
+      "depto_pasco",
+      "depto_piura",
+      "depto_puno",
+      "depto_san_martin",
+      "depto_tumbes",
+      "depto_ucayali",
+      "depto_otros"
+    ]
+  },
+  "seg_lectura_silver": 1.27151312
+}

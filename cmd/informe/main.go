@@ -223,6 +223,230 @@ en orden barajado, ` + "`runtime.GC()`" + ` antes de cada medición, media recor
 de confianza por bootstrap.
 `
 
+type split struct {
+	FilasSilver    int     `json:"filas_silver"`
+	AnoMin         int     `json:"ano_min"`
+	FilasExcluidas int     `json:"filas_excluidas_por_ano"`
+	FracTest       float64 `json:"fraccion_test"`
+	Train          struct {
+		Filas     int     `json:"filas"`
+		Positivos int     `json:"positivos"`
+		Tasa      float64 `json:"tasa_positivos"`
+	} `json:"train"`
+	Test struct {
+		Filas     int     `json:"filas"`
+		Positivos int     `json:"positivos"`
+		Tasa      float64 `json:"tasa_positivos"`
+	} `json:"test"`
+	D         int              `json:"variables"`
+	TamBloque int              `json:"tam_bloque"`
+	Bloques   int              `json:"bloques_train"`
+	Shards    []map[string]int `json:"shards"`
+}
+
+type grupoRiesgo struct {
+	Grupo string  `json:"grupo"`
+	Casos int     `json:"casos_test"`
+	Obs   float64 `json:"tasa_observada"`
+	Calib float64 `json:"riesgo_calibrado_medio"`
+}
+
+type entrenamiento struct {
+	Workers  int       `json:"workers"`
+	Epocas   int       `json:"epocas"`
+	Tasa     float64   `json:"tasa_aprendizaje"`
+	Lambda   float64   `json:"lambda"`
+	PesoPos  float64   `json:"peso_positivos"`
+	PesoNeg  float64   `json:"peso_negativos"`
+	Equivale bool      `json:"gradiente_pool_igual_al_secuencial"`
+	SegTotal float64   `json:"seg_entrenamiento"`
+	SegEpoca float64   `json:"seg_por_epoca"`
+	Historia []float64 `json:"perdida_por_epoca"`
+	Test     struct {
+		Umbral                float64
+		VP, FP, VN, FN        int
+		Exactitud             float64
+		Precision, Recall, F1 float64
+		AUC                   float64
+	} `json:"metricas_test"`
+	Coef []struct {
+		Variable  string  `json:"variable"`
+		Peso      float64 `json:"peso"`
+		RazonOdds float64 `json:"razon_de_odds"`
+	} `json:"coeficientes_por_magnitud"`
+	PorDepto []grupoRiesgo `json:"riesgo_por_departamento"`
+	PorEtapa []grupoRiesgo `json:"riesgo_por_etapa_de_vida"`
+}
+
+type benchGrad struct {
+	Archivo string
+	Maquina struct {
+		CPU    string `json:"cpu"`
+		NumCPU int    `json:"num_cpu"`
+	} `json:"maquina"`
+	Fuente     string `json:"fuente"`
+	Mediciones []struct {
+		Config   string `json:"config"`
+		Workers  int    `json:"workers"`
+		Segundos struct {
+			Media float64 `json:"media_recortada"`
+			Inf   float64 `json:"ic95_inf"`
+			Sup   float64 `json:"ic95_sup"`
+		} `json:"segundos"`
+		Speedup    float64 `json:"speedup"`
+		Eficiencia float64 `json:"eficiencia"`
+		Bits       bool    `json:"equivalente_bit_a_bit"`
+	} `json:"mediciones"`
+	Equilibrio []struct {
+		Filas   int     `json:"filas"`
+		Bloques int     `json:"bloques"`
+		Sec     float64 `json:"seg_secuencial"`
+		Conc    float64 `json:"seg_concurrente"`
+		Speedup float64 `json:"speedup"`
+	} `json:"punto_equilibrio"`
+	FilasEq   *int `json:"filas_equilibrio"`
+	WorkersEq int  `json:"workers_equilibrio"`
+}
+
+type modelo struct {
+	S     split
+	E     entrenamiento
+	Bench []benchGrad
+}
+
+const plantillaModelo = `<!-- Generado por cmd/informe desde reports/split.json, reports/entrenamiento.json y reports/bench_gradiente_*.json. No editar a mano. -->
+
+# 4. Modelo de ML distribuido y paralelización del cálculo (Parte B)
+
+## 4.1 Datos de entrenamiento
+
+- Se usan los casos desde **{{.S.AnoMin}}** (la categoría *con signos de alarma* se aplica de forma
+  sistemática desde ese año, ver §2.3). Quedan fuera {{miles .S.FilasExcluidas}} de las
+  {{miles .S.FilasSilver}} filas del silver.
+- **Split determinista** {{pct .S.FracTest}} % prueba: cada fila va a prueba según un hash (splitmix64)
+  de su posición en el silver, así que el split no depende del número de workers ni de nodos.
+
+| Conjunto | Filas | Positivos | % positivos |
+|---|---:|---:|---:|
+| Entrenamiento | {{miles .S.Train.Filas}} | {{miles .S.Train.Positivos}} | {{pct .S.Train.Tasa}} |
+| Prueba | {{miles .S.Test.Filas}} | {{miles .S.Test.Positivos}} | {{pct .S.Test.Tasa}} |
+
+**{{.S.D}} variables**, todas conocidas al notificar el caso: edad estandarizada y etapa de vida MINSA
+(5), sexo, estacionalidad de la semana epidemiológica (seno y coseno), tendencia anual y departamento
+(one-hot; los de menos de 100 casos en entrenamiento se agrupan en OTROS). Se excluye ` + "`tipo_dx`" + `
+(confirmado/probable) porque los casos graves se confirman en laboratorio con más frecuencia: sería
+una fuga de información del objetivo (ADR-0004). La media y desviación de edad y año se calculan
+**solo con el entrenamiento**.
+
+## 4.2 Modelo: regresión logística con pesos por clase
+
+$$L(w) = \frac{1}{S}\sum_i s_i\,\big[\log(1+e^{z_i}) - y_i z_i\big] + \frac{\lambda}{2}\lVert w\rVert^2,\qquad z_i = x_i^\top w + b$$
+
+$$\nabla_w L = \frac{1}{S}\sum_i s_i\,(\sigma(z_i) - y_i)\,x_i + \lambda w,\qquad S = \sum_i s_i$$
+
+Los pesos por clase ($s_i$ = {{tres .E.PesoPos}} para positivos y {{tres .E.PesoNeg}} para negativos)
+igualan el aporte de ambas clases ante el desbalance. λ = {{.E.Lambda}}.
+
+**Por qué se puede distribuir:** el gradiente es una **suma sobre filas**. Si las filas se parten en
+bloques $B_1,\dots,B_K$, cada bloque aporta su suma parcial $g_k$ y el gradiente total es
+$\frac{1}{S}\sum_k g_k + \lambda w$. Un worker, un hilo o un nodo puede calcular cualquier $g_k$;
+solo hace falta **sumar los parciales siempre en el mismo orden de bloque** para que el resultado sea
+idéntico bit a bit (la suma en punto flotante no es asociativa).
+
+## 4.3 Paralelización en Go dentro de un nodo
+
+| Patrón | Dónde | Para qué |
+|---|---|---|
+| *Worker pool* persistente | ` + "`ml.Pool`" + ` | Los workers viven todo el entrenamiento; no se crean goroutines por época |
+| *Fan-out* por canal | ` + "`tareas chan int`" + ` | Reparte índices de bloque; cada bloque lo procesa un solo worker |
+| Acumuladores privados | búfer local + slot ` + "`parciales[k]`" + ` | Nadie escribe donde otro escribe: sin mutex y sin *false sharing* |
+| Barrera | ` + "`sync.WaitGroup`" + ` | Espera los {{.S.Bloques}} bloques de la época antes de reducir |
+| *Fan-in* ordenado | ` + "`ml.ReducirEnOrden`" + ` | Un solo goroutine suma en orden de bloque → determinismo |
+
+El gradiente del pool es **{{if .E.Equivale}}idéntico{{else}}DISTINTO{{end}} bit a bit** al secuencial
+sobre los datos reales (verificado por ` + "`cmd/entrenar`" + `); ` + "`TestEquivalencia`" + ` lo exige con 1 a 64 workers.
+
+## 4.4 Distribución en el clúster (diseño para PC4)
+
+El entrenamiento de {{miles .S.Train.Filas}} filas se reparte en **{{len .S.Shards}} shards** de bloques
+contiguos ({{.S.TamBloque}} filas por bloque, {{.S.Bloques}} bloques):
+
+| Shard | Bloque inicial | Bloques | Filas |
+|---:|---:|---:|---:|
+{{- range .S.Shards}}
+| {{index . "shard"}} | {{index . "bloque_inicial"}} | {{index . "bloques"}} | {{miles (index . "filas")}} |
+{{- end}}
+
+En cada época el coordinador (parameter server) envía los pesos a los nodos por TCP; cada nodo calcula
+con su worker pool los parciales de sus bloques y los devuelve; el coordinador los concatena **en orden
+de shard** (que es el orden global de bloque), aplica ` + "`Finalizar`" + ` y actualiza los pesos. El test
+` + "`TestShardsReproducenElGradienteGlobal`" + ` comprueba que con 1, 2, 3, 5 u 8 shards el gradiente es
+idéntico bit a bit al secuencial. El protocolo TCP se define en #9 (ADR pendiente).
+
+## 4.5 Resultados del entrenamiento
+
+Descenso de gradiente *full-batch*: {{.E.Epocas}} épocas, tasa {{.E.Tasa}}, {{.E.Workers}} workers,
+{{dos .E.SegTotal}} s ({{ms .E.SegEpoca}} ms por época). Pérdida: {{cuatro (index .E.Historia 0)}} →
+{{cuatro (ultimo .E.Historia)}}.
+
+| Métrica (prueba, umbral {{.E.Test.Umbral}}) | Valor |
+|---|---:|
+| AUC-ROC | {{cuatro .E.Test.AUC}} |
+| Recall (sensibilidad) | {{tres .E.Test.Recall}} |
+| Precisión | {{tres .E.Test.Precision}} |
+| F1 | {{tres .E.Test.F1}} |
+| Exactitud | {{tres .E.Test.Exactitud}} |
+| VP / FN / FP / VN | {{miles .E.Test.VP}} / {{miles .E.Test.FN}} / {{miles .E.Test.FP}} / {{miles .E.Test.VN}} |
+
+El poder predictivo es **moderado**: sin comorbilidades ni datos clínicos, solo con edad, sexo, lugar y
+momento, el modelo ordena el riesgo mejor que el azar pero no lo determina. Es una limitación de los
+datos abiertos disponibles, declarada y aceptada (ADR-0003).
+
+**Variables más influyentes** (razón de odds = $e^{w}$; > 1 aumenta el riesgo):
+
+| Variable | Peso | Razón de odds |
+|---|---:|---:|
+{{- range $i, $c := .E.Coef}}{{if lt $i 10}}
+| ` + "`{{$c.Variable}}`" + ` | {{signo $c.Peso}} | {{dos $c.RazonOdds}} |
+{{- end}}{{end}}
+
+## 4.6 Primera respuesta a la pregunta de impacto social
+
+Riesgo de dengue con signos de alarma o grave en el conjunto de prueba. El riesgo calibrado corrige el
+efecto de los pesos por clase (corrección de prior, King y Zeng, 2001) para que esté en la escala real.
+
+| Departamento | Casos (prueba) | Tasa observada | Riesgo calibrado |
+|---|---:|---:|---:|
+{{- range $i, $g := .E.PorDepto}}{{if lt $i 8}}
+| {{$g.Grupo}} | {{miles $g.Casos}} | {{pct $g.Obs}} % | {{pct $g.Calib}} % |
+{{- end}}{{end}}
+
+| Etapa de vida | Casos (prueba) | Tasa observada | Riesgo calibrado |
+|---|---:|---:|---:|
+{{- range .E.PorEtapa}}
+| {{.Grupo}} | {{miles .Casos}} | {{pct .Obs}} % | {{pct .Calib}} % |
+{{- end}}
+
+## 4.7 Speedup del cálculo del gradiente
+{{range .Bench}}
+**{{.Maquina.CPU}}** · {{.Maquina.NumCPU}} CPU lógicas (` + "`{{.Archivo}}`" + `; {{.Fuente}})
+
+| Configuración | Workers | Media recortada (ms) | IC 95 % (ms) | Speedup | Eficiencia | Bit a bit |
+|---|---:|---:|---|---:|---:|:---:|
+{{- range .Mediciones}}
+| {{.Config}} | {{.Workers}} | {{ms .Segundos.Media}} | [{{ms .Segundos.Inf}}, {{ms .Segundos.Sup}}] | {{dos .Speedup}}× | {{pct .Eficiencia}} % | {{if .Bits}}✔{{else}}✘{{end}} |
+{{- end}}
+
+Punto de equilibrio con {{.WorkersEq}} workers{{if .FilasEq}}: la concurrencia conviene desde **{{miles (deref .FilasEq)}} filas**{{else}}: no se alcanzó en los tamaños medidos{{end}}.
+
+| Filas | Bloques | Secuencial (ms) | Concurrente (ms) | Speedup |
+|---:|---:|---:|---:|---:|
+{{- range .Equilibrio}}
+| {{miles .Filas}} | {{.Bloques}} | {{ms .Sec}} | {{ms .Conc}} | {{dos .Speedup}}× |
+{{- end}}
+{{end}}
+`
+
 func main() {
 	var p perfil
 	leer("reports/perfil_bronze.json", &p)
@@ -240,6 +464,19 @@ func main() {
 		l.Bench = append(l.Bench, b)
 	}
 	escribir("docs/informe/pc3/03-limpieza.md", plantillaLimpieza, l)
+
+	var m modelo
+	leer("reports/split.json", &m.S)
+	leer("reports/entrenamiento.json", &m.E)
+	archivos, _ = filepath.Glob("reports/bench_gradiente_*.json")
+	slices.Sort(archivos)
+	for _, a := range archivos {
+		var b benchGrad
+		leer(a, &b)
+		b.Archivo = filepath.Base(a)
+		m.Bench = append(m.Bench, b)
+	}
+	escribir("docs/informe/pc3/04-modelo.md", plantillaModelo, m)
 }
 
 var funciones = template.FuncMap{
@@ -254,6 +491,11 @@ var funciones = template.FuncMap{
 		}
 		return b.String()
 	},
+	"tres":   func(x float64) string { return strings.Replace(fmt.Sprintf("%.3f", x), ".", ",", 1) },
+	"cuatro": func(x float64) string { return strings.Replace(fmt.Sprintf("%.4f", x), ".", ",", 1) },
+	"signo":  func(x float64) string { return strings.Replace(fmt.Sprintf("%+.3f", x), ".", ",", 1) },
+	"ultimo": func(xs []float64) float64 { return xs[len(xs)-1] },
+	"deref":  func(p *int) int { return *p },
 	"inc":    func(i int) int { return i + 1 },
 	"entero": func(x float64) int { return int(x + 0.5) },
 	"ms":     func(x float64) string { return strings.Replace(fmt.Sprintf("%.1f", 1000*x), ".", ",", 1) },
