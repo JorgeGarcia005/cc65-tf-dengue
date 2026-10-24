@@ -1,0 +1,58 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  agentes:
+    name: Ecosistema de agentes
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Skills sincronizadas (.agents ↔ .claude)
+        run: bash scripts/check-skills-sync.sh
+      - name: AGENTS.md dentro del límite de Antigravity (12 000 caracteres)
+        run: |
+          n=$(wc -m < AGENTS.md)
+          echo "AGENTS.md: $n caracteres"
+          test "$n" -le 12000
+
+  go:
+    name: Go (gofmt, vet, test -race)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: ¿Hay código Go?
+        id: hay
+        run: |
+          if [ -f go.mod ] && [ -n "$(find . -name '*.go' -not -path './web/*' | head -1)" ]; then
+            echo "go=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "go=false" >> "$GITHUB_OUTPUT"
+            echo "Sin código Go todavía; se omite."
+          fi
+      - uses: actions/setup-go@v5
+        if: steps.hay.outputs.go == 'true'
+        with:
+          go-version-file: go.mod
+      - name: gofmt
+        if: steps.hay.outputs.go == 'true'
+        run: |
+          out=$(gofmt -l $(find . -name '*.go' -not -path './web/*'))
+          if [ -n "$out" ]; then echo "$out"; exit 1; fi
+      - name: go vet
+        if: steps.hay.outputs.go == 'true'
+        run: go vet ./...
+      - name: go test -race
+        if: steps.hay.outputs.go == 'true'
+        run: go test -race -count=1 ./...

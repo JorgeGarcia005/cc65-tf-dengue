@@ -1,0 +1,43 @@
+name: Tarea
+description: Unidad de trabajo para el tablero Kanban (un issue = un PR)
+labels: ["tarea"]
+body:
+  - type: dropdown
+    id: entregable
+    attributes:
+      label: Entregable
+      options: [PC3, PC4, TB2, DD, transversal]
+    validations:
+      required: true
+  - type: dropdown
+    id: parte
+    attributes:
+      label: Parte de la arquitectura
+      options: ["A · loader", "B · nodos ML", "C · API/coordinador", "D · SPA", "Datos", "Infra/Docker", "Informe", "Agentes"]
+    validations:
+      required: true
+  - type: textarea
+    id: contexto
+    attributes:
+      label: Contexto
+      description: Por qué hace falta y qué parte del enunciado o la rúbrica atiende.
+    validations:
+      required: true
+  - type: textarea
+    id: criterios
+    attributes:
+      label: Criterios de aceptación
+      description: Cada uno verificable con un comando o test.
+      value: |
+        - [ ] ... — verificar con: `...`
+    validations:
+      required: true
+  - type: input
+    id: estimado
+    attributes:
+      label: Estimado (horas)
+  - type: dropdown
+    id: responsable
+    attributes:
+      label: Integrante responsable (defiende esta parte en la sustentación)
+      options: [Jorge, José, Marco]

@@ -1,0 +1,35 @@
+# Datos: se descargan con `make data`; solo se versiona el manifiesto
+data/*
+!data/MANIFEST.sha256
+!data/README.md
+
+# Go
+/bin/
+*.exe
+*.test
+*.out
+coverage.*
+
+# Spin
+spin/pan
+spin/pan.*
+spin/*.trail
+spin/_spin_nvr.tmp
+
+# Frontend
+web/node_modules/
+web/dist/
+
+# Entorno y secretos
+.env
+deploy/.env
+!deploy/.env.example
+
+# Editores / SO
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Informe: borradores temporales de Word
+~$*.docx
