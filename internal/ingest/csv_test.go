@@ -67,7 +67,16 @@ func TestEncabezadoReal(t *testing.T) {
 		t.Errorf("filas = %d, quiere 8", n)
 	}
 	if err := ValidarEncabezado([]byte("a,b,c")); err == nil {
-		t.Error("esperaba error con encabezado distinto")
+		t.Error("esperaba error con encabezado de 3 columnas")
+	}
+	// PR-14 H1: 15 columnas, pero una con nombre distinto → ejercita la comparación de nombres.
+	malo := strings.Replace(string(enc), "semana", "semana_epi", 1)
+	if err := ValidarEncabezado([]byte(malo)); err == nil || !strings.Contains(err.Error(), "semana_epi") {
+		t.Errorf("esperaba error que nombre la columna 'semana_epi', dio %v", err)
+	}
+	// Mayúsculas y espacios alrededor se aceptan.
+	if err := ValidarEncabezado([]byte(strings.ToUpper(strings.ReplaceAll(string(enc), ",", " , ")))); err != nil {
+		t.Errorf("encabezado en mayúsculas con espacios: %v", err)
 	}
 }
 
@@ -123,5 +132,27 @@ func TestMapearEnOrdenEsDeterministaYSinCarreras(t *testing.T) {
 	}
 	if total != 20_000 {
 		t.Errorf("líneas contadas = %d", total)
+	}
+}
+
+// PR-14 H2: datos cuya última línea no termina en '\n'.
+func TestUltimaLineaSinSaltoFinal(t *testing.T) {
+	datos := []byte("a,b\nuno\r\ndos\ntres")
+	enc, cuerpo := SepararEncabezado(datos)
+	if string(enc) != "a,b" || string(cuerpo) != "uno\r\ndos\ntres" {
+		t.Fatalf("encabezado=%q cuerpo=%q", enc, cuerpo)
+	}
+	for _, tam := range []int{1, 3, 100} {
+		var lineas []string
+		for _, r := range PartirEnBloques(cuerpo, tam) {
+			ParaCadaLinea(cuerpo[r.Ini:r.Fin], func(l []byte) { lineas = append(lineas, string(l)) })
+		}
+		if strings.Join(lineas, "|") != "uno|dos|tres" {
+			t.Errorf("tam=%d: líneas = %q", tam, lineas)
+		}
+	}
+	// Archivo de una sola línea sin salto: todo es encabezado.
+	if enc, cuerpo := SepararEncabezado([]byte("solo\r")); string(enc) != "solo" || cuerpo != nil {
+		t.Errorf("una línea: enc=%q cuerpo=%q", enc, cuerpo)
 	}
 }

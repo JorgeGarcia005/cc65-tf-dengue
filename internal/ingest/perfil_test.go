@@ -113,3 +113,20 @@ func TestEdadEnAnios(t *testing.T) {
 		}
 	}
 }
+
+// PR-14 H1: filas con número de columnas distinto de 15 (sin problemas de comillas).
+func TestPerfilCuentaErroresDeColumnas(t *testing.T) {
+	bloque := []byte(strings.Join([]string{
+		`PIURA,SULLANA,BELLAVISTA,BELLAVISTA,"DENGUE CON SIGNOS DE ALARMA",2024,44,A97.1,C,31,200602,2006020001,71,A,F`,
+		`PIURA,SULLANA,BELLAVISTA`,                       // 3 columnas
+		`A,B,C,D,E,2024,1,A97.0,C,1,100101,,1,A,F,EXTRA`, // 16 columnas
+		`PIURA,"SIN CERRAR,X`,                            // comillas
+	}, "\n") + "\n")
+	p := PerfilarBloque(bloque)
+	if p.Filas != 4 || p.FilasMalas != 3 || p.ErrColumnas != 2 || p.ErrComillas != 1 {
+		t.Fatalf("filas=%d malas=%d columnas=%d comillas=%d", p.Filas, p.FilasMalas, p.ErrColumnas, p.ErrComillas)
+	}
+	if p.Columnas[ColDepartamento].Valores["PIURA"] != 1 {
+		t.Error("solo la fila válida debe contar en las columnas")
+	}
+}

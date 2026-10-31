@@ -86,6 +86,8 @@ limpieza procesan todas las filas.
 | adulto_30_59 | 400 993 |
 | adulto_mayor_60_mas | 93 079 |
 
+Filas con edad no numérica o `tipo_edad` desconocido: **0**.
+
 ## 2.5 Procesamiento concurrente del perfil
 
 El archivo se lee en memoria y se divide en **113 bloques** de ~1 MiB alineados a fin

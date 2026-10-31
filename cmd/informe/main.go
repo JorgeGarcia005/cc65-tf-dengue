@@ -52,6 +52,7 @@ type perfil struct {
 		Edad struct {
 			Tramos  []string `json:"tramos"`
 			Conteos []int    `json:"conteos"`
+			NoNum   int      `json:"no_numerica"`
 		} `json:"edad_anios"`
 		PorAno map[string][3]int `json:"por_ano_y_clase"`
 	} `json:"perfil"`
@@ -107,6 +108,8 @@ limpieza procesan todas las filas.
 {{- range $i, $t := .Perfil.Edad.Tramos}}
 | {{$t}} | {{miles (index $.Perfil.Edad.Conteos $i)}} |
 {{- end}}
+
+Filas con edad no numérica o ` + "`tipo_edad`" + ` desconocido: **{{miles .Perfil.Edad.NoNum}}**.
 
 ## 2.5 Procesamiento concurrente del perfil
 
