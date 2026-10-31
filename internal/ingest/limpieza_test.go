@@ -146,3 +146,48 @@ func TestMuestraRealPasaLaLimpieza(t *testing.T) {
 		t.Fatalf("muestra real: %+v", l)
 	}
 }
+
+// PR-15 H1: contadores de LimpiarBloque para filas reparadas, corregidas y
+// reparadas pero descartadas por otra regla.
+func TestLimpiarBloqueContadores(t *testing.T) {
+	bloque := []byte(strings.Join([]string{
+		// válida, clase 0
+		`ICA,ICA,ICA,ICA,"DENGUE SIN SIGNOS DE ALARMA",2020,5,A97.0,C,11,110101,,30,A,F`,
+		// comillas sin escapar en localidad (reparable), válida, clase 1
+		`LORETO,"MARISCAL RAMON CASTILLA","RAMON CASTILLA","ISLA SANTA ROSA "AMAZONAS"","DENGUE CON SIGNOS DE ALARMA",2012,46,A97.1,C,16,160401,1604010076,28,A,F`,
+		// reparable pero con edad > 110: se descarta y NO cuenta como reparada
+		`LORETO,MAYNAS,PUNCHANA,"PSJE. VICTORIA N"51","DENGUE SIN SIGNOS DE ALARMA",2004,39,A97.0,P,16,160108,,111,A,M`,
+		// ubigeo de 5 dígitos: se corrige y se conserva
+		`CAJAMARCA,JAEN,JAEN,JAEN,"DENGUE SIN SIGNOS DE ALARMA",2012,13,A97.0,C,38,60801,,40,A,F`,
+	}, "\n") + "\n")
+	res := LimpiarBloque(bloque)
+	if res.Entradas != 4 || res.Salidas != 3 || res.Reparadas != 1 || res.Corregidas != 1 || res.Positivos != 1 {
+		t.Fatalf("entradas=%d salidas=%d reparadas=%d corregidas=%d positivos=%d",
+			res.Entradas, res.Salidas, res.Reparadas, res.Corregidas, res.Positivos)
+	}
+	if res.PorRegla[EdadFueraDeRango] != 1 {
+		t.Errorf("edad fuera de rango = %d, quiere 1", res.PorRegla[EdadFueraDeRango])
+	}
+	var filas [][]string
+	ParaCadaLinea(res.Silver, func(l []byte) {
+		c, err := ParsearLineaN(l, nil, 10)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var f []string
+		for _, x := range c {
+			f = append(f, string(x))
+		}
+		filas = append(filas, f)
+	})
+	// clase (col 9): 0 y 1; ubigeo (col 3) rellenado con cero.
+	if len(filas) != 3 || filas[0][9] != "0" || filas[1][9] != "1" || filas[2][3] != "060801" {
+		t.Errorf("silver = %q", filas)
+	}
+	// Objetivo: 0 para clase 0, 1 para clases 1 y 2.
+	for clase, quiere := range []float64{0, 1, 1} {
+		if got := (Registro{Clase: clase}).Objetivo(); got != quiere {
+			t.Errorf("Objetivo(clase %d) = %v", clase, got)
+		}
+	}
+}

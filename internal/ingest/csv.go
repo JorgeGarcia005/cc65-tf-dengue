@@ -72,7 +72,9 @@ func ParsearLineaTolerante(linea []byte, buf [][]byte, n int) (campos [][]byte, 
 }
 
 // parsearLaxo: en un campo que empieza con comillas, solo la comilla seguida de
-// ',' o de fin de línea cierra el campo; las demás se toman como texto.
+// ',' o de fin de línea cierra el campo; las demás se toman como texto. Un campo
+// que NO empieza con comillas sigue sin admitir comillas: esa forma no aparece en
+// el portal y aceptarla podría esconder un corte de columnas mal hecho.
 func parsearLaxo(linea []byte, buf [][]byte, n int) ([][]byte, error) {
 	campos := buf[:0]
 	i := 0
@@ -98,7 +100,11 @@ func parsearLaxo(linea []byte, buf [][]byte, n int) ([][]byte, error) {
 			if k >= 0 {
 				fin = i + k
 			}
-			campos = append(campos, linea[i:fin])
+			campo := linea[i:fin]
+			if bytes.IndexByte(campo, '"') >= 0 {
+				return campos, ErrComillas
+			}
+			campos = append(campos, campo)
 			i = fin
 		}
 		if i >= len(linea) {

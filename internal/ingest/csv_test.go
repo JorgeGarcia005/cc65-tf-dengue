@@ -194,3 +194,11 @@ func TestParsearLineaTolerante(t *testing.T) {
 		t.Fatal("esperaba error")
 	}
 }
+
+// PR-15 H2: el modo laxo solo repara campos entrecomillados.
+func TestParsearLaxoNoAceptaComillasEnCampoSinComillas(t *testing.T) {
+	linea := `PIURA,SULL"ANA,BELLAVISTA,BELLAVISTA,"DENGUE SIN SIGNOS DE ALARMA",2024,44,A97.0,C,31,200602,,71,A,F`
+	if _, _, err := ParsearLineaTolerante([]byte(linea), nil, NumColumnas); !errors.Is(err, ErrComillas) {
+		t.Fatalf("esperaba ErrComillas, dio %v", err)
+	}
+}

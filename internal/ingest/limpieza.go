@@ -226,13 +226,14 @@ func LimpiarBloque(bloque []byte) ResultadoBloque {
 			res.PorRegla[MalFormada]++
 			return
 		}
-		if reparada {
-			res.Reparadas++
-		}
 		r, regla, corr := LimpiarCampos(campos)
 		if regla != OK {
 			res.PorRegla[regla]++
 			return
+		}
+		// Solo se cuentan como reparadas las filas que llegan al silver.
+		if reparada {
+			res.Reparadas++
 		}
 		if corr {
 			res.Corregidas++
