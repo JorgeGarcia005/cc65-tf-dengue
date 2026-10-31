@@ -191,3 +191,28 @@ func TestLimpiarBloqueContadores(t *testing.T) {
 		}
 	}
 }
+
+func TestLeerSilverConcurrenteIgualAlRegistroOriginal(t *testing.T) {
+	_, cuerpo := SepararEncabezado(csvSintetico(20_000, 8))
+	silver, l := LimpiarConcurrente(cuerpo, 4096, 4)
+	for _, w := range []int{1, 4} {
+		regs, err := LeerSilverConcurrente(silver, 2048, w)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(regs) != l.Salidas {
+			t.Fatalf("workers=%d: %d registros, quiere %d", w, len(regs), l.Salidas)
+		}
+		// Reescribir los registros leídos debe dar exactamente el mismo silver.
+		otra := []byte(EncabezadoSilver)
+		for _, r := range regs {
+			otra = AgregarSilver(otra, r)
+		}
+		if !bytes.Equal(otra, silver) {
+			t.Fatalf("workers=%d: silver → registros → silver no es idéntico", w)
+		}
+	}
+	if _, err := LeerSilverConcurrente([]byte("a,b\n"), 0, 1); err == nil {
+		t.Error("esperaba error con encabezado inválido")
+	}
+}
