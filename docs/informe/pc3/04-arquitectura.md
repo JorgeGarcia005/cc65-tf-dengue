@@ -1,7 +1,7 @@
 # 4. Arquitectura de la solución
 
-La solución sigue la arquitectura de referencia del enunciado: cuatro partes que funcionan como una
-cadena y que se pueden desarrollar por separado. Los datos pasan por tres capas (*medallion*): **bronze**
+La solución se organiza en cuatro partes que funcionan como una cadena y que se pueden desarrollar por
+separado. Los datos pasan por tres capas (*medallion*): **bronze**
 (el CSV original, sin tocar), **silver** (filas limpias y validadas) y **gold** (la matriz numérica de
 entrenamiento, partida en shards para los nodos).
 
@@ -21,7 +21,7 @@ Estas reglas son comunes a todo el código y las revisa el agente juez en cada P
 1. **Go para todo el backend y núcleo con biblioteca estándar:** la concurrencia se expresa con goroutines
    y canales (Donovan & Kernighan, 2015). El loader, el modelo de ML, el protocolo
    TCP y la API usan solo la biblioteca estándar de Go. Los únicos terceros permitidos son los drivers de
-   MongoDB y Redis, aprobados por el profesor. No se usa ninguna biblioteca de ML.
+   MongoDB y Redis. No se usa ninguna biblioteca de ML.
 2. **Determinismo:** los bloques de datos tienen límites fijos, independientes del número de workers o
    nodos, y las sumas parciales se reducen en orden de índice de bloque. El resultado distribuido debe ser
    idéntico bit a bit al secuencial, y hay tests que lo exigen.

@@ -104,6 +104,7 @@ var (
 	reNumerada = regexp.MustCompile(`^(\d+)\.\s+(.*)$`)
 	reTitulo   = regexp.MustCompile(`^(#{1,4})\s+(.*)$`)
 	reEstilo   = regexp.MustCompile(`^<!--\s*estilo:\s*(\S+)\s*-->\s*$`)
+	reCaptura  = regexp.MustCompile(`^<!--\s*captura:\s*(.+?)\s*-->\s*$`)
 )
 
 // Convertir agrega al cuerpo el Markdown del archivo (ruta relativa a d.dir).
@@ -138,6 +139,9 @@ func (d *documento) bloques(lineas []string, base string) {
 			} else {
 				d.aviso("no se pudo incluir %s: %v", ruta, err)
 			}
+			i++
+		case reCaptura.MatchString(t):
+			d.captura(reCaptura.FindStringSubmatch(t)[1])
 			i++
 		case reEstilo.MatchString(t):
 			d.referencias = reEstilo.FindStringSubmatch(t)[1] == "referencias"
@@ -243,9 +247,24 @@ func (d *documento) parrafo(s, ppr string, e estilo) {
 	d.b.WriteString(`</w:p>`)
 }
 
+// cita: el informe es sobrio, así que una cita (> …) es un párrafo normal,
+// sin recuadro ni color.
 func (d *documento) cita(s string) {
-	ppr := `<w:pBdr><w:left w:val="single" w:sz="18" w:space="8" w:color="2A78D6"/></w:pBdr><w:shd w:val="clear" w:color="auto" w:fill="F2F6FC"/><w:spacing w:before="120" w:after="200"/><w:ind w:left="360" w:right="360"/><w:jc w:val="both"/>`
-	d.parrafo(s, ppr, texto(22))
+	d.parrafo(s, `<w:jc w:val="both"/>`, texto(22))
+}
+
+// captura deja un espacio enmarcado para pegar una captura de pantalla, con
+// su pie numerado como el de cualquier figura.
+func (d *documento) captura(descripcion string) {
+	d.figuras++
+	d.b.WriteString(`<w:p><w:pPr><w:keepNext/><w:pBdr>` +
+		`<w:top w:val="single" w:sz="4" w:space="40" w:color="A6A6A6"/><w:left w:val="single" w:sz="4" w:space="4" w:color="A6A6A6"/>` +
+		`<w:bottom w:val="single" w:sz="4" w:space="40" w:color="A6A6A6"/><w:right w:val="single" w:sz="4" w:space="4" w:color="A6A6A6"/>` +
+		`</w:pBdr><w:spacing w:before="240" w:after="120"/><w:jc w:val="center"/></w:pPr>`)
+	e := estilo{Fuente: fuenteTexto, Color: "808080", Tam: 20}
+	d.b.WriteString(`<w:r><w:rPr>` + e.rPr() + `</w:rPr><w:t>[Pegar aquí la captura]</w:t></w:r></w:p>`)
+	pie := estilo{Fuente: fuenteTexto, Cursiva: true, Color: "404040", Tam: 20}
+	d.parrafo(fmt.Sprintf("Figura %d. %s", d.figuras, descripcion), `<w:spacing w:before="0" w:after="240"/><w:jc w:val="center"/>`, pie)
 }
 
 // lista convierte una lista con viñetas o numerada; devuelve la línea siguiente.
@@ -512,14 +531,14 @@ func (d *documento) inline(s string, base estilo) string {
 			if fin := indiceRuna(r, i+1, '`'); fin >= 0 {
 				volcar()
 				e := actual
-				e.Fuente, e.Sombreado = fuenteCodigo, "F2F2F2"
+				e.Fuente = fuenteCodigo
 				b.WriteString(`<w:r><w:rPr>` + e.rPr() + `</w:rPr><w:t xml:space="preserve">` + escapar(string(r[i+1:fin])) + `</w:t></w:r>`)
 				i = fin
 				continue
 			}
 		case strings.HasPrefix(resto, "**"):
-			volcar()
-			actual.Negrita = !actual.Negrita
+			// El informe no usa negrita dentro del texto: solo los títulos y
+			// los encabezados de tabla van en negrita (por su estilo base).
 			i++
 			continue
 		case c == '*' && (actual.Cursiva != base.Cursiva || (i+1 < len(r) && r[i+1] != ' ')):

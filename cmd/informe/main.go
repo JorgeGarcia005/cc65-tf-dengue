@@ -84,7 +84,7 @@ const plantillaDatos = `<!-- Generado por cmd/informe desde reports/perfil_bronz
 El objetivo es **1** si el caso es *dengue con signos de alarma* (CIE-10 A97.1) o *dengue grave*
 (A97.2) y **0** si es *dengue sin signos de alarma* (A97.0). Según la guía clínica, los casos
 con signos de alarma requieren hospitalización, por lo que el objetivo funciona como indicador
-de **necesidad de hospitalización** (validado con el profesor, ADR-0003).
+de **necesidad de hospitalización** (ADR-0003).
 
 - Sin signos (0): **{{miles .Neg}}** · Con signos o grave (1): **{{miles .Pos}}** · Proporción de positivos:
   **{{pct .Tasa}} %**. Hay desbalance de clases, que se trata con pesos por clase.

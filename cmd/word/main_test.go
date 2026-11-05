@@ -84,10 +84,20 @@ func TestInlineEscapaYFormatea(t *testing.T) {
 	if err := xmlBienFormado(envolver(`<w:p>` + x + `</w:p>`)); err != nil {
 		t.Fatalf("XML mal formado: %v\n%s", err, x)
 	}
-	for _, quiere := range []string{"<w:b/>", "<w:i/>", "Consolas", "<w:hyperlink", "<m:oMath>", "3 &lt; 4", "a&lt;b &amp;&amp; c"} {
+	for _, quiere := range []string{"<w:i/>", "Consolas", "<w:hyperlink", "<m:oMath>", "3 &lt; 4", "a&lt;b &amp;&amp; c"} {
 		if !strings.Contains(x, quiere) {
 			t.Errorf("falta %q en %s", quiere, x)
 		}
+	}
+	// Sin negrita dentro del texto y sin marcas ** visibles.
+	if strings.Contains(x, "<w:b/>") || strings.Contains(x, "**") {
+		t.Errorf("el texto no debe llevar negrita: %s", x)
+	}
+	// En un encabezado (estilo base en negrita) la negrita sí se mantiene.
+	e := texto(20)
+	e.Negrita = true
+	if !strings.Contains(d.inline("Columna", e), "<w:b/>") {
+		t.Error("el encabezado perdió la negrita")
 	}
 	if len(d.orden) != 1 || d.orden[0].URL != "https://x.pe/?a=1&b=2" {
 		t.Errorf("enlaces: %+v", d.orden)
@@ -115,7 +125,8 @@ func TestMarkdownCompletoEsXMLValido(t *testing.T) {
 	dir := t.TempDir()
 	md := "# 1. Título\n\nPárrafo con **negrita**\ny continuación.\n\n- uno\n  sigue\n- dos\n\n1. a\n2. b\n\n" +
 		"| A | B |\n|---|---:|\n| `x|y` | 2 |\n\n> cita\n\n$$x^2$$\n\n```go\nfunc main() {}\n```\n\n" +
-		"<!-- estilo: referencias -->\n\nAutor, A. (2020). *Título*.\n\n![Figura de prueba](f.svg)\n"
+		"<!-- estilo: referencias -->\n\nAutor, A. (2020). *Título*.\n\n![Figura de prueba](f.svg)\n\n" +
+		"<!-- captura: Ejecución del loader -->\n"
 	if err := os.WriteFile(filepath.Join(dir, "01-x.md"), []byte(md), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -139,6 +150,10 @@ func TestMarkdownCompletoEsXMLValido(t *testing.T) {
 	}
 	if !strings.Contains(d.b.String(), ">x|y<") {
 		t.Error("una barra dentro de `código` no debe partir la celda")
+	}
+	// La captura se numera después de la figura: Figura 2.
+	if !strings.Contains(d.b.String(), "Figura 2. Ejecución del loader") || !strings.Contains(d.b.String(), "[Pegar aquí la captura]") {
+		t.Error("falta el espacio para la captura con su pie numerado")
 	}
 }
 

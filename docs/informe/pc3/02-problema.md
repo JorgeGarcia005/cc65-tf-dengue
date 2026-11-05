@@ -28,24 +28,22 @@ de riesgos para la salud). Quienes se benefician son los pacientes que llegan a 
 equipos de salud de las DIRESA que planifican la respuesta y la población de las zonas donde se
 intensifica el cerco epidemiológico.
 
-## 2.3 Caso y conjunto de datos
+## 2.3 Conjunto de datos
 
-Se eligió el **caso 1 del enunciado** (predicción de riesgo epidemiológico con regresión logística
-distribuida) con el conjunto de datos abierto **Vigilancia epidemiológica de dengue** del MINSA y el
-Centro Nacional de Epidemiología, Prevención y Control de Enfermedades (CDC Perú), publicado en la
-Plataforma Nacional de Datos Abiertos (Ministerio de Salud del Perú, s.f.). Cada fila es un caso notificado entre 2000 y 2025, con su
-ubicación (departamento, provincia, distrito, localidad y ubigeo), su semana epidemiológica, la edad y
-el sexo del paciente, el tipo de diagnóstico y la clasificación clínica.
+Se usa el conjunto de datos abierto Vigilancia epidemiológica de dengue del MINSA y el Centro Nacional
+de Epidemiología, Prevención y Control de Enfermedades (CDC Perú), publicado en la Plataforma Nacional
+de Datos Abiertos (Ministerio de Salud del Perú, s.f.). Cada fila es un caso notificado entre 2000 y
+2025, con su ubicación (departamento, provincia, distrito, localidad y ubigeo), su semana
+epidemiológica, la edad y el sexo del paciente, el tipo de diagnóstico y la clasificación clínica.
 
-El dataset difiere de la descripción del caso en el enunciado (no trae hospitalización ni
-comorbilidades), por lo que el planteamiento se validó con el profesor antes de implementar
-(ADR-0003):
+El dataset no registra la hospitalización ni las comorbilidades del paciente, por lo que el problema se
+plantea así (ADR-0003):
 
-| Punto del enunciado | Cómo se resuelve con estos datos |
+| Necesidad | Cómo se resuelve con estos datos |
 |---|---|
-| Más de 1 000 000 de registros | El archivo completo se carga y limpia de forma concurrente (sección 6) |
-| Severidad u hospitalización del paciente | Objetivo binario: 1 si el caso es *con signos de alarma* (CIE-10 A97.1) o *grave* (A97.2), 0 si es *sin signos* (A97.0). Clínicamente, el objetivo indica **necesidad de hospitalización** |
-| Comorbilidades y geolocalización | No hay comorbilidades en los datos abiertos; se usan ubicación, semana epidemiológica, edad y sexo |
+| Procesar más de un millón de registros | El archivo completo se carga y limpia de forma concurrente (sección 6) |
+| Medir la severidad del caso | Objetivo binario: 1 si el caso es *con signos de alarma* (CIE-10 A97.1) o *grave* (A97.2), 0 si es *sin signos* (A97.0). Clínicamente, el objetivo indica necesidad de hospitalización |
+| Variables explicativas | Sin comorbilidades en los datos abiertos, se usan ubicación, semana epidemiológica, edad y sexo |
 
 ## 2.4 Por qué es un problema de cómputo concurrente y distribuido
 
