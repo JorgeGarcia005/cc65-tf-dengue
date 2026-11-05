@@ -4,17 +4,22 @@
 // concurrente es más rápida que la secuencial.
 //
 // Protocolo (fijado en código para que sea reproducible):
-//  1. Dataset sintético determinista con la misma forma que el gold de dengue.
+//  1. Dataset sintético determinista con la misma forma que el gold de dengue,
+//     o el gold real con -gold (se usa su tamaño de bloque).
 //  2. Calentamiento: 2 pasadas por configuración, descartadas.
-//  3. R repeticiones; en cada una, el orden de las configuraciones se baraja
+//  3. Cada medición agrupa k pasadas seguidas (k calibrado para que dure al
+//     menos medicionMinima) y divide entre k, para no caer bajo la resolución
+//     del reloj (en Windows, ~0,5–1 ms).
+//  4. R repeticiones; en cada una, el orden de las configuraciones se baraja
 //     para que la deriva térmica o de caché no favorezca a ninguna.
-//  4. Estimador: media recortada al 10 % con IC 95 % por bootstrap.
-//  5. Antes de medir se comprueba que cada configuración da el mismo gradiente,
+//  5. Estimador: media recortada al 10 % con IC 95 % por bootstrap.
+//  6. Antes de medir se comprueba que cada configuración da el mismo gradiente,
 //     bit a bit, que la secuencial.
 //
 // Uso:
 //
 //	go run ./cmd/benchmark -filas 1000000 -features 40 -reps 20
+//	go run ./cmd/benchmark -gold data/gold/train.bin -reps 20   # → reports/bench_gradiente_<host>_gold.json
 package main
 
 import (
@@ -33,6 +38,8 @@ import (
 	"time"
 
 	"github.com/JorgeGarcia005/cc65-tf-dengue/internal/estadistica"
+	"github.com/JorgeGarcia005/cc65-tf-dengue/internal/gold"
+	"github.com/JorgeGarcia005/cc65-tf-dengue/internal/maquina"
 	"github.com/JorgeGarcia005/cc65-tf-dengue/internal/ml"
 )
 
@@ -78,6 +85,7 @@ func main() {
 	listaEquilibrio := flag.String("equilibrio", "1000,4096,10000,30000,100000,300000,1000000", "tamaños para el punto de equilibrio")
 	salida := flag.String("salida", "", "archivo JSON (por defecto reports/bench_gradiente_<host>.json)")
 	semilla := flag.Uint64("semilla", 2026, "semilla del dataset y del barajado")
+	rutaGold := flag.String("gold", "", "archivo gold real (p. ej. data/gold/train.bin) en vez del sintético")
 	flag.Parse()
 	if !(*recorte >= 0 && *recorte < 0.5) {
 		log.Fatalf("-recorte = %v: debe estar en [0, 0.5)", *recorte)
@@ -94,8 +102,22 @@ func main() {
 	}
 	tamanos := parsearLista(*listaEquilibrio)
 
-	log.Printf("generando dataset sintético: %d filas × %d features", *filas, *features)
-	ds, _ := ml.Sintetico(*filas, *features, *semilla)
+	var ds *ml.Dataset
+	var fuente, sufijo string
+	if *rutaGold != "" {
+		a, err := gold.Leer(*rutaGold)
+		if err != nil {
+			log.Fatalf("leyendo %s: %v", *rutaGold, err)
+		}
+		ds, *tamBloque = a.Dataset, a.TamBloque
+		fuente = fmt.Sprintf("gold(%s, filas=%d, features=%d)", filepath.ToSlash(*rutaGold), ds.N, ds.D)
+		sufijo = "_gold"
+		log.Printf("gold real: %d filas × %d features, bloques de %d filas", ds.N, ds.D, *tamBloque)
+	} else {
+		log.Printf("generando dataset sintético: %d filas × %d features", *filas, *features)
+		ds, _ = ml.Sintetico(*filas, *features, *semilla)
+		fuente = fmt.Sprintf("sintetico(filas=%d, features=%d, semilla=%d)", *filas, *features, *semilla)
+	}
 	cfg := ml.Config{TamBloque: *tamBloque, Lambda: 1e-4}
 	w := make([]float64, ds.D+1)
 	for j := range w {
@@ -105,12 +127,14 @@ func main() {
 
 	rep := reporte{
 		Generado: time.Now().Format(time.RFC3339),
-		Fuente:   fmt.Sprintf("sintetico(filas=%d, features=%d, semilla=%d)", *filas, *features, *semilla),
-		Maquina:  maquina(),
+		Fuente:   fuente,
+		Maquina:  maquina.Describir(),
 		Protocolo: map[string]any{
 			"calentamiento": 2, "repeticiones": *reps, "orden": "barajado por repetición",
 			"estimador": fmt.Sprintf("media recortada %.0f %% + IC95 bootstrap (2000)", *recorte*100),
 			"medida":    "una pasada de gradiente completa (= una época)", "tam_bloque": *tamBloque,
+			"agrupacion": fmt.Sprintf("cada medición cronometra k pasadas seguidas (k calibrado por configuración para durar ≥ %v) y divide entre k",
+				medicionMinima),
 		},
 	}
 
@@ -150,6 +174,9 @@ func main() {
 	rep.WorkersEquilibrio = mejor
 
 	imprimir(rep)
+	if *salida == "" {
+		*salida = filepath.Join("reports", "bench_gradiente_"+maquina.Host()+sufijo+".json")
+	}
 	escribir(rep, *salida)
 }
 
@@ -185,16 +212,41 @@ func medir(ds *ml.Dataset, cfg ml.Config, w []float64, workers []int, reps int, 
 		calcs[n].Gradiente(w) // segunda pasada de calentamiento
 	}
 
+	pasadas := map[string]int{}
+	for _, n := range nombres {
+		pasadas[n] = pasadasPorMedicion(func() { calcs[n].Gradiente(w) }, medicionMinima)
+	}
+
 	tiempos := map[string][]float64{}
 	for i := 0; i < reps; i++ {
 		r.Shuffle(len(nombres), func(a, b int) { nombres[a], nombres[b] = nombres[b], nombres[a] })
 		for _, n := range nombres {
 			ini := time.Now()
-			calcs[n].Gradiente(w)
-			tiempos[n] = append(tiempos[n], time.Since(ini).Seconds())
+			for range pasadas[n] {
+				calcs[n].Gradiente(w)
+			}
+			tiempos[n] = append(tiempos[n], time.Since(ini).Seconds()/float64(pasadas[n]))
 		}
 	}
 	return tiempos, equivalentes
+}
+
+// medicionMinima es lo que dura, como mínimo, cada medición cronometrada. En
+// Windows el reloj de Go avanza a saltos de ~0,5–1 ms y una pasada sobre pocas
+// filas dura microsegundos: medida sola, daría 0 s.
+const medicionMinima = 20 * time.Millisecond
+
+// pasadasPorMedicion cuenta cuántas veces seguidas hay que ejecutar f para que
+// el tiempo total alcance minimo. Cada medición cronometra esas pasadas juntas
+// y divide entre su número.
+func pasadasPorMedicion(f func(), minimo time.Duration) int {
+	ini := time.Now()
+	k := 0
+	for k == 0 || time.Since(ini) < minimo {
+		f()
+		k++
+	}
+	return k
 }
 
 func filasEquilibrio(ps []puntoEquilibrio) *int {
@@ -235,22 +287,6 @@ func parsearLista(s string) []int {
 	return out
 }
 
-func maquina() map[string]any {
-	m := map[string]any{
-		"so": runtime.GOOS, "arquitectura": runtime.GOARCH, "go": runtime.Version(),
-		"num_cpu": runtime.NumCPU(), "gomaxprocs": runtime.GOMAXPROCS(0),
-	}
-	if b, err := os.ReadFile("/proc/cpuinfo"); err == nil {
-		for _, l := range strings.Split(string(b), "\n") {
-			if strings.HasPrefix(l, "model name") {
-				m["cpu"] = strings.TrimSpace(strings.SplitN(l, ":", 2)[1])
-				break
-			}
-		}
-	}
-	return m
-}
-
 func imprimir(rep reporte) {
 	fmt.Printf("\n%-12s %8s %12s %22s %9s %10s %6s\n", "config", "workers", "media rec.", "IC95", "speedup", "eficiencia", "bits")
 	for _, m := range rep.Mediciones {
@@ -270,16 +306,6 @@ func imprimir(rep reporte) {
 }
 
 func escribir(rep reporte, ruta string) {
-	if ruta == "" {
-		host, _ := os.Hostname()
-		host = strings.Map(func(r rune) rune {
-			if r == '-' || r == '_' || (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') {
-				return r
-			}
-			return '-'
-		}, strings.ToLower(host))
-		ruta = filepath.Join("reports", "bench_gradiente_"+host+".json")
-	}
 	if err := os.MkdirAll(filepath.Dir(ruta), 0o755); err != nil {
 		log.Fatal(err)
 	}
