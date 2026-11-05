@@ -8,7 +8,8 @@
 #   powershell -ExecutionPolicy Bypass -File scripts/word-final.ps1 [-Pdf]
 param(
     [string]$Carpeta = "entregables",
-    [switch]$Pdf
+    [switch]$Pdf,
+    [switch]$Visible   # muestra Word: útil si un diálogo (p. ej. de recuperación) lo detiene
 )
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName System.IO.Compression, System.IO.Compression.FileSystem
@@ -24,7 +25,7 @@ $word = New-Object -ComObject Word.Application
 # Si la automatización se conectó a un Word que ya tenía documentos abiertos,
 # no hay que cerrarlo al final: se perderían los documentos del usuario.
 $propio = $word.Documents.Count -eq 0
-if ($propio) { $word.Visible = $false }
+if ($propio -and -not $Visible) { $word.Visible = $false }
 $word.DisplayAlerts = 0
 try {
     foreach ($a in $archivos) {
