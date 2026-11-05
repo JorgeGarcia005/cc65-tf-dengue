@@ -1,0 +1,209 @@
+{
+  "generado": "2026-11-05T00:03:36-05:00",
+  "fuente": "sintetico(filas=1000000, features=40, semilla=2026)",
+  "maquina": {
+    "arquitectura": "amd64",
+    "cpu": "AMD Ryzen 7 5800X 8-Core Processor",
+    "go": "go1.26.10",
+    "gomaxprocs": 16,
+    "num_cpu": 16,
+    "so": "windows"
+  },
+  "protocolo": {
+    "agrupacion": "cada medición cronometra k pasadas seguidas (k calibrado por configuración para durar ≥ 20ms) y divide entre k",
+    "calentamiento": 2,
+    "estimador": "media recortada 10 % + IC95 bootstrap (2000)",
+    "medida": "una pasada de gradiente completa (= una época)",
+    "orden": "barajado por repetición",
+    "repeticiones": 20,
+    "tam_bloque": 4096
+  },
+  "mediciones": [
+    {
+      "config": "secuencial",
+      "workers": 1,
+      "segundos": {
+        "n": 20,
+        "media_recortada": 0.09919560625000001,
+        "recorte": 0.1,
+        "mediana": 0.09938195,
+        "desviacion": 0.0016034775584647272,
+        "min": 0.0965303,
+        "max": 0.1030522,
+        "ic95_inf": 0.09850972750000002,
+        "ic95_sup": 0.09994435250000001
+      },
+      "speedup": 1,
+      "eficiencia": 1,
+      "equivalente_bit_a_bit": true
+    },
+    {
+      "config": "pool-01",
+      "workers": 1,
+      "segundos": {
+        "n": 20,
+        "media_recortada": 0.10036701875,
+        "recorte": 0.1,
+        "mediana": 0.100589,
+        "desviacion": 0.0017086100211329064,
+        "min": 0.0964514,
+        "max": 0.1031783,
+        "ic95_inf": 0.09955315265625,
+        "ic95_sup": 0.10107946312500002
+      },
+      "speedup": 0.9883287108196588,
+      "eficiencia": 0.9883287108196588,
+      "equivalente_bit_a_bit": true
+    },
+    {
+      "config": "pool-02",
+      "workers": 2,
+      "segundos": {
+        "n": 20,
+        "media_recortada": 0.05124913125,
+        "recorte": 0.1,
+        "mediana": 0.05119635,
+        "desviacion": 0.002158985837518455,
+        "min": 0.0485847,
+        "max": 0.0589664,
+        "ic95_inf": 0.05060323656250001,
+        "ic95_sup": 0.05213550328125
+      },
+      "speedup": 1.9355568344390228,
+      "eficiencia": 0.9677784172195114,
+      "equivalente_bit_a_bit": true
+    },
+    {
+      "config": "pool-04",
+      "workers": 4,
+      "segundos": {
+        "n": 20,
+        "media_recortada": 0.027008675000000003,
+        "recorte": 0.1,
+        "mediana": 0.0270732,
+        "desviacion": 0.000646243915984799,
+        "min": 0.0253705,
+        "max": 0.0280763,
+        "ic95_inf": 0.026682448124999997,
+        "ic95_sup": 0.027245089531249995
+      },
+      "speedup": 3.6727313076261607,
+      "eficiencia": 0.9181828269065402,
+      "equivalente_bit_a_bit": true
+    },
+    {
+      "config": "pool-08",
+      "workers": 8,
+      "segundos": {
+        "n": 20,
+        "media_recortada": 0.014869784375000002,
+        "recorte": 0.1,
+        "mediana": 0.014892175,
+        "desviacion": 0.000554985410542001,
+        "min": 0.0142548,
+        "max": 0.0162596,
+        "ic95_inf": 0.01464329890625,
+        "ic95_sup": 0.015163239609375002
+      },
+      "speedup": 6.670951222182736,
+      "eficiencia": 0.833868902772842,
+      "equivalente_bit_a_bit": true
+    },
+    {
+      "config": "pool-16",
+      "workers": 16,
+      "segundos": {
+        "n": 20,
+        "media_recortada": 0.009890793750000001,
+        "recorte": 0.1,
+        "mediana": 0.009870133333333333,
+        "desviacion": 0.00031909949714160207,
+        "min": 0.009528833333333334,
+        "max": 0.010731699999999999,
+        "ic95_inf": 0.009787279427083335,
+        "ic95_sup": 0.010057727552083336
+      },
+      "speedup": 10.02908449587274,
+      "eficiencia": 0.6268177809920462,
+      "equivalente_bit_a_bit": true
+    },
+    {
+      "config": "pool-32",
+      "workers": 32,
+      "segundos": {
+        "n": 20,
+        "media_recortada": 0.009927447916666665,
+        "recorte": 0.1,
+        "mediana": 0.00995735,
+        "desviacion": 0.0004062223585881986,
+        "min": 0.0093592,
+        "max": 0.011027533333333332,
+        "ic95_inf": 0.009765949687499997,
+        "ic95_sup": 0.010116567395833335
+      },
+      "speedup": 9.992055066183301,
+      "eficiencia": 0.31225172081822816,
+      "equivalente_bit_a_bit": true
+    }
+  ],
+  "punto_equilibrio": [
+    {
+      "filas": 1000,
+      "bloques": 1,
+      "seg_secuencial": 0.00009977919776119403,
+      "seg_concurrente": 0.00010178914634146341,
+      "speedup": 0.9802538025662698,
+      "conviene_concurrente": false
+    },
+    {
+      "filas": 4096,
+      "bloques": 1,
+      "seg_secuencial": 0.0003980213235294118,
+      "seg_concurrente": 0.000409700375,
+      "speedup": 0.9714936763956142,
+      "conviene_concurrente": false
+    },
+    {
+      "filas": 10000,
+      "bloques": 3,
+      "seg_secuencial": 0.0010164083333333333,
+      "seg_concurrente": 0.00043445847222222224,
+      "speedup": 2.339483283947673,
+      "conviene_concurrente": true
+    },
+    {
+      "filas": 30000,
+      "bloques": 8,
+      "seg_secuencial": 0.0029808794642857146,
+      "seg_concurrente": 0.0005267990131578947,
+      "speedup": 5.658475794054442,
+      "conviene_concurrente": true
+    },
+    {
+      "filas": 100000,
+      "bloques": 25,
+      "seg_secuencial": 0.0101436625,
+      "seg_concurrente": 0.0012318625,
+      "speedup": 8.234411308080244,
+      "conviene_concurrente": true
+    },
+    {
+      "filas": 300000,
+      "bloques": 74,
+      "seg_secuencial": 0.029863912499999996,
+      "seg_concurrente": 0.003100491071428571,
+      "speedup": 9.63199435573282,
+      "conviene_concurrente": true
+    },
+    {
+      "filas": 1000000,
+      "bloques": 245,
+      "seg_secuencial": 0.0998362875,
+      "seg_concurrente": 0.009976559375,
+      "speedup": 10.007085984991695,
+      "conviene_concurrente": true
+    }
+  ],
+  "filas_equilibrio": 10000,
+  "workers_equilibrio": 16
+}

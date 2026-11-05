@@ -148,3 +148,50 @@ Punto de equilibrio con 2 workers: la concurrencia conviene desde **10 000 fil
 | 300 000 | 74 | 34,2 | 23,9 | 1,43× |
 | 1 000 000 | 245 | 121,3 | 96,8 | 1,25× |
 
+**AMD Ryzen 7 5800X 8-Core Processor** · 16 CPU lógicas (`bench_gradiente_deez.json`; sintetico(filas=1000000, features=40, semilla=2026))
+
+| Configuración | Workers | Media recortada (ms) | IC 95 % (ms) | Speedup | Eficiencia | Bit a bit |
+|---|---:|---:|---|---:|---:|:---:|
+| secuencial | 1 | 99,2 | [98,5, 99,9] | 1,00× | 100,00 % | ✔ |
+| pool-01 | 1 | 100,4 | [99,6, 101,1] | 0,99× | 98,83 % | ✔ |
+| pool-02 | 2 | 51,2 | [50,6, 52,1] | 1,94× | 96,78 % | ✔ |
+| pool-04 | 4 | 27,0 | [26,7, 27,2] | 3,67× | 91,82 % | ✔ |
+| pool-08 | 8 | 14,9 | [14,6, 15,2] | 6,67× | 83,39 % | ✔ |
+| pool-16 | 16 | 9,9 | [9,8, 10,1] | 10,03× | 62,68 % | ✔ |
+| pool-32 | 32 | 9,9 | [9,8, 10,1] | 9,99× | 31,23 % | ✔ |
+
+Punto de equilibrio con 16 workers: la concurrencia conviene desde **10 000 filas**.
+
+| Filas | Bloques | Secuencial (ms) | Concurrente (ms) | Speedup |
+|---:|---:|---:|---:|---:|
+| 1 000 | 1 | 0,1 | 0,1 | 0,98× |
+| 4 096 | 1 | 0,4 | 0,4 | 0,97× |
+| 10 000 | 3 | 1,0 | 0,4 | 2,34× |
+| 30 000 | 8 | 3,0 | 0,5 | 5,66× |
+| 100 000 | 25 | 10,1 | 1,2 | 8,23× |
+| 300 000 | 74 | 29,9 | 3,1 | 9,63× |
+| 1 000 000 | 245 | 99,8 | 10,0 | 10,01× |
+
+**AMD Ryzen 7 5800X 8-Core Processor** · 16 CPU lógicas (`bench_gradiente_deez_gold.json`; gold(data/gold/train.bin, filas=765297, features=31))
+
+| Configuración | Workers | Media recortada (ms) | IC 95 % (ms) | Speedup | Eficiencia | Bit a bit |
+|---|---:|---:|---|---:|---:|:---:|
+| secuencial | 1 | 67,3 | [66,7, 68,1] | 1,00× | 100,00 % | ✔ |
+| pool-01 | 1 | 67,7 | [67,0, 68,9] | 0,99× | 99,43 % | ✔ |
+| pool-02 | 2 | 34,8 | [34,4, 35,3] | 1,93× | 96,68 % | ✔ |
+| pool-04 | 4 | 17,8 | [17,6, 18,1] | 3,79× | 94,65 % | ✔ |
+| pool-08 | 8 | 10,0 | [9,9, 10,2] | 6,72× | 84,06 % | ✔ |
+| pool-16 | 16 | 6,8 | [6,6, 7,1] | 9,86× | 61,64 % | ✔ |
+| pool-32 | 32 | 6,6 | [6,5, 6,9] | 10,13× | 31,67 % | ✔ |
+
+Punto de equilibrio con 16 workers: la concurrencia conviene desde **10 000 filas**.
+
+| Filas | Bloques | Secuencial (ms) | Concurrente (ms) | Speedup |
+|---:|---:|---:|---:|---:|
+| 1 000 | 1 | 0,1 | 0,1 | 0,95× |
+| 4 096 | 1 | 0,4 | 0,4 | 0,99× |
+| 10 000 | 3 | 0,9 | 0,4 | 2,29× |
+| 30 000 | 8 | 2,7 | 0,5 | 5,68× |
+| 100 000 | 25 | 8,7 | 1,0 | 8,33× |
+| 300 000 | 74 | 26,9 | 2,8 | 9,60× |
+
