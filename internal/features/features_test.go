@@ -100,3 +100,31 @@ func TestAjustarRequiereDatos(t *testing.T) {
 		t.Error("esperaba error sin datos")
 	}
 }
+
+// TestSemanaDeAnguloInvierteLaCodificacion: la semana se guarda como seno y
+// coseno; para reportar el riesgo por semana hay que recuperarla exactamente
+// desde las variables del gold, tal como las escribe Llenar.
+func TestSemanaDeAnguloInvierteLaCodificacion(t *testing.T) {
+	e, err := Ajustar(registros(), 2011, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	x := make([]float64, e.D())
+	jSin, jCos := e.Indice("semana_sin"), e.Indice("semana_cos")
+	if jSin < 0 || jCos < 0 {
+		t.Fatal("el esquema no tiene semana_sin / semana_cos")
+	}
+	for s := 1; s <= 53; s++ {
+		e.Llenar(ingest.Registro{Departamento: "LORETO", Ano: 2020, Semana: s, EdadAnios: 30, Sexo: 'F'}, x)
+		quiere := s
+		if s == 53 { // la codificación es periódica en 52: la semana 53 coincide con la 1
+			quiere = 1
+		}
+		if got := SemanaDeAngulo(x[jSin], x[jCos]); got != quiere {
+			t.Errorf("semana %d: SemanaDeAngulo = %d, quiere %d", s, got, quiere)
+		}
+	}
+	if e.Indice("no_existe") != -1 {
+		t.Error("Indice de una variable inexistente debe ser -1")
+	}
+}
