@@ -97,6 +97,9 @@ func Decodificar(b []byte) (Archivo, error) {
 	n := int(le.Uint64(b[16:]))
 	tam := int(le.Uint32(b[24:]))
 	b0 := int(le.Uint64(b[28:]))
+	if tam < 1 {
+		return Archivo{}, errors.New("gold: tamaño de bloque inválido (0)")
+	}
 	if want := tamCab + 8*(n*d+n); len(b) != want {
 		return Archivo{}, fmt.Errorf("gold: %d bytes, se esperaban %d", len(b), want)
 	}

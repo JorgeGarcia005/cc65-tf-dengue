@@ -51,6 +51,19 @@ func TestDecodificarRechazaArchivosDanados(t *testing.T) {
 	}
 }
 
+// TestDecodificarRechazaTamBloqueCero cubre PR-16 H1: un archivo con
+// tam_bloque = 0 haría que Particionar dividiera entre cero.
+func TestDecodificarRechazaTamBloqueCero(t *testing.T) {
+	ds, _ := ml.Sintetico(10, 2, 1)
+	ruta := filepath.Join(t.TempDir(), "x.bin")
+	if err := Escribir(ruta, Archivo{Dataset: ds, TamBloque: 0}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Decodificar(mustLeerBytes(t, ruta)); err == nil {
+		t.Error("esperaba error con tam_bloque = 0")
+	}
+}
+
 // TestShardsReproducenElGradienteGlobal es la base del clúster (PC4): si cada
 // nodo calcula los parciales de sus bloques locales y el coordinador los
 // concatena en orden de shard, la reducción da los mismos bits que la versión
