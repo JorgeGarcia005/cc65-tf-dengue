@@ -17,5 +17,6 @@ de modo que el gradiente concurrente es **idéntico bit a bit** al secuencial.
 En un AMD Ryzen 7 5800X (16 hilos), el cálculo del gradiente sobre el conjunto de entrenamiento real alcanza un speedup
 de **10,13× a 10,96×** según el sistema operativo, y la limpieza de
 3,25× a 3,54×. El modelo logra un AUC de 0,6221 en prueba
-y señala el mayor riesgo en Madre de Dios (20,65 %), Loreto (19,78 %) y San Martín (19,17 %). Por último, se diseñó el clúster de nodos que se
+y señala el mayor riesgo en Madre de Dios (20,65 %), Loreto (19,78 %) y San Martín (19,17 %); los casos graves se concentran en las semanas
+epidemiológicas 15–16 y 18–20. Por último, se diseñó el clúster de nodos que se
 implementará en PC4 (parameter server síncrono por TCP) y se verificó su protocolo con Spin.

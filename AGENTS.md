@@ -11,7 +11,7 @@ Sistema distribuido en **Go** que entrena una **Regresión Logística Distribuid
 ~1 millón de casos de dengue notificados en el Perú (MINSA / CDC Perú, 2000-2025) para
 estimar el riesgo de **dengue con signos de alarma o grave**.
 
-**Pregunta de impacto social (ODS 3):** ¿en qué distritos, semanas epidemiológicas y grupos
+**Pregunta de impacto social (ODS 3):** ¿en qué departamentos, semanas epidemiológicas y grupos
 de edad conviene reforzar camas, vigilancia y cerco epidemiológico por dengue con signos de
 alarma?
 

@@ -71,8 +71,8 @@ idéntico bit a bit al secuencial. El protocolo TCP y su verificación formal se
 
 ## 7.5 Resultados del entrenamiento
 
-Descenso de gradiente *full-batch*: 600 épocas, tasa 2, 2 workers,
-36,92 s (61,5 ms por época). Pérdida: 0,6931 →
+Descenso de gradiente *full-batch*: 600 épocas, tasa 2, 16 workers,
+3,83 s (6,4 ms por época). Pérdida: 0,6931 →
 0,6701.
 
 | Métrica (prueba, umbral 0,5) | Valor |
@@ -123,11 +123,22 @@ efecto de los pesos por clase (corrección de prior, King y Zeng, 2001) para que
 
 | Etapa de vida | Casos (prueba) | Tasa observada | Riesgo calibrado |
 |---|---:|---:|---:|
-| nino_0_11 | 32 078 | 14,66 % | 14,79 % |
-| adolescente_12_17 | 25 914 | 13,61 % | 13,55 % |
-| joven_18_29 | 43 650 | 12,82 % | 12,67 % |
-| adulto_mayor_60_mas | 17 313 | 12,66 % | 12,52 % |
-| adulto_30_59 | 71 864 | 11,11 % | 11,08 % |
+| niño (0–11 años) | 32 078 | 14,66 % | 14,79 % |
+| adolescente (12–17 años) | 25 914 | 13,61 % | 13,55 % |
+| joven (18–29 años) | 43 650 | 12,82 % | 12,67 % |
+| adulto mayor (60 años a más) | 17 313 | 12,66 % | 12,52 % |
+| adulto (30–59 años) | 71 864 | 11,11 % | 11,08 % |
+
+**Por semana epidemiológica**, el volumen y el riesgo por caso no coinciden en el tiempo. Los casos con
+signos de alarma o grave se concentran en las semanas 15–16 y 18–20, que es
+cuando más camas se necesitan. En cambio, la proporción de casos que se agravan es mayor fuera de esa
+temporada: el riesgo calibrado más alto se da en las semanas 45–49
+(17,18 % frente a 10,40 % en la semana de menor
+riesgo), así que la vigilancia clínica debe mantenerse activa también al inicio y al final de la
+temporada. Parte de esta diferencia puede deberse a que, fuera de la temporada alta, se notifican sobre
+todo los casos más evidentes. La semana 53, que existe en algunos años, se cuenta junto con la semana 1.
+
+![Casos con signos de alarma o grave y riesgo por semana epidemiológica (conjunto de prueba)](fig/riesgo_semana.svg)
 
 ## 7.7 Speedup del cálculo del gradiente
 

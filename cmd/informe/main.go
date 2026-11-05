@@ -249,10 +249,11 @@ type split struct {
 }
 
 type grupoRiesgo struct {
-	Grupo string  `json:"grupo"`
-	Casos int     `json:"casos_test"`
-	Obs   float64 `json:"tasa_observada"`
-	Calib float64 `json:"riesgo_calibrado_medio"`
+	Grupo  string  `json:"grupo"`
+	Semana int     `json:"semana"`
+	Casos  int     `json:"casos_test"`
+	Obs    float64 `json:"tasa_observada"`
+	Calib  float64 `json:"riesgo_calibrado_medio"`
 }
 
 type entrenamiento struct {
@@ -278,8 +279,9 @@ type entrenamiento struct {
 		Peso      float64 `json:"peso"`
 		RazonOdds float64 `json:"razon_de_odds"`
 	} `json:"coeficientes_por_magnitud"`
-	PorDepto []grupoRiesgo `json:"riesgo_por_departamento"`
-	PorEtapa []grupoRiesgo `json:"riesgo_por_etapa_de_vida"`
+	PorDepto  []grupoRiesgo `json:"riesgo_por_departamento"`
+	PorEtapa  []grupoRiesgo `json:"riesgo_por_etapa_de_vida"`
+	PorSemana []grupoRiesgo `json:"riesgo_por_semana_epidemiologica"`
 }
 
 type benchGrad struct {
@@ -433,8 +435,19 @@ efecto de los pesos por clase (corrección de prior, King y Zeng, 2001) para que
 | Etapa de vida | Casos (prueba) | Tasa observada | Riesgo calibrado |
 |---|---:|---:|---:|
 {{- range .E.PorEtapa}}
-| {{.Grupo}} | {{miles .Casos}} | {{pct .Obs}} % | {{pct .Calib}} % |
+| {{etapa .Grupo}} | {{miles .Casos}} | {{pct .Obs}} % | {{pct .Calib}} % |
 {{- end}}
+
+**Por semana epidemiológica**, el volumen y el riesgo por caso no coinciden en el tiempo. Los casos con
+signos de alarma o grave se concentran en las semanas {{semanas (picosCasos .E.PorSemana)}}, que es
+cuando más camas se necesitan. En cambio, la proporción de casos que se agravan es mayor fuera de esa
+temporada: el riesgo calibrado más alto se da en las semanas {{semanas (picosRiesgo .E.PorSemana)}}
+({{pct (riesgoMax .E.PorSemana)}} % frente a {{pct (riesgoMin .E.PorSemana)}} % en la semana de menor
+riesgo), así que la vigilancia clínica debe mantenerse activa también al inicio y al final de la
+temporada. Parte de esta diferencia puede deberse a que, fuera de la temporada alta, se notifican sobre
+todo los casos más evidentes. La semana 53, que existe en algunos años, se cuenta junto con la semana 1.
+
+![Casos con signos de alarma o grave y riesgo por semana epidemiológica (conjunto de prueba)](fig/riesgo_semana.svg)
 
 ## 7.7 Speedup del cálculo del gradiente
 {{range .Bench}}
@@ -494,6 +507,7 @@ func main() {
 
 	escribirFigura("docs/informe/pc3/fig/casos_por_ano.svg", figuraCasosPorAno(p))
 	escribirFigura("docs/informe/pc3/fig/riesgo_departamento.svg", figuraRiesgoDepto(m.E))
+	escribirFigura("docs/informe/pc3/fig/riesgo_semana.svg", figuraRiesgoSemana(m.E))
 	escribirFigura("docs/informe/pc3/fig/speedup_gradiente.svg",
 		figuraSpeedup("Speedup del cálculo del gradiente", curvasGradiente(m.Bench)))
 	escribirFigura("docs/informe/pc3/fig/speedup_loader.svg",

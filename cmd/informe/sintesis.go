@@ -146,7 +146,8 @@ de modo que el gradiente concurrente es **idéntico bit a bit** al secuencial.
 En un {{.GradMaq}}, el cálculo del gradiente sobre el conjunto de entrenamiento real alcanza un speedup
 de **{{dos .GradMin}}× a {{dos .GradMax}}×** según el sistema operativo, y la limpieza de
 {{dos .LoaderMin}}× a {{dos .LoaderMax}}×. El modelo logra un AUC de {{cuatro .M.E.Test.AUC}} en prueba
-y señala el mayor riesgo en {{deptos .TopDeptos}}. Por último, se diseñó el clúster de nodos que se
+y señala el mayor riesgo en {{deptos .TopDeptos}}; los casos graves se concentran en las semanas
+epidemiológicas {{semanas (picosCasos .M.E.PorSemana)}}. Por último, se diseñó el clúster de nodos que se
 implementará en PC4 (parameter server síncrono por TCP) y se verificó su protocolo con Spin.
 `
 
@@ -173,7 +174,9 @@ const plantillaConclusiones = `<!-- Generado por cmd/informe desde reports/*.jso
 - **El modelo responde la pregunta de impacto, con límites.** Con un AUC de {{cuatro .M.E.Test.AUC}}, solo
   con edad, sexo, lugar y semana, el modelo ordena el riesgo mejor que el azar pero no lo determina. Aun
   así identifica dónde reforzar: por departamento, {{deptos .TopDeptos}}; por edad, el grupo
-  {{etapa .TopEtapa.Grupo}}, con {{pct .TopEtapa.Calib}} % de riesgo calibrado.
+  {{etapa .TopEtapa.Grupo}}, con {{pct .TopEtapa.Calib}} % de riesgo calibrado; y por semana, las camas
+  hacen más falta en las semanas {{semanas (picosCasos .M.E.PorSemana)}}, cuando se concentran los casos
+  graves, mientras que el riesgo por caso es mayor en las semanas {{semanas (picosRiesgo .M.E.PorSemana)}}.
 - **Verificar antes de implementar evitó dos errores.** El modelo Promela del protocolo del clúster encontró
   un bloqueo del coordinador al enviar a un nodo caído y un ciclo de *timeouts* al reasignar shards,
   ambos corregidos en el diseño antes de escribir el código de PC4.
@@ -194,8 +197,73 @@ func init() {
 		return strings.Join(partes[:len(partes)-1], ", ") + " y " + partes[len(partes)-1]
 	}
 	funciones["etapa"] = func(g string) string { return nombreEtapa(g) }
+	funciones["picosCasos"] = func(gs []grupoRiesgo) []int {
+		return topSemanas(gs, 5, func(g grupoRiesgo) float64 { return float64(g.Casos) * g.Obs })
+	}
+	funciones["picosRiesgo"] = func(gs []grupoRiesgo) []int {
+		return topSemanas(gs, 5, func(g grupoRiesgo) float64 { return g.Calib })
+	}
+	funciones["riesgoMax"] = func(gs []grupoRiesgo) float64 {
+		m := 0.0
+		for _, g := range gs {
+			m = max(m, g.Calib)
+		}
+		return m
+	}
+	funciones["riesgoMin"] = func(gs []grupoRiesgo) float64 {
+		m := 1.0
+		for _, g := range gs {
+			m = min(m, g.Calib)
+		}
+		return m
+	}
+	funciones["semanas"] = func(s []int) string { return rangosSemanas(s) }
 	// num escribe un número suelto (λ, tasa, umbral) con coma decimal.
 	funciones["num"] = func(x float64) string { return strings.Replace(fmt.Sprintf("%g", x), ".", ",", 1) }
+}
+
+// topSemanas devuelve, en orden de semana, las k semanas con mayor valor.
+func topSemanas(gs []grupoRiesgo, k int, valor func(grupoRiesgo) float64) []int {
+	orden := slices.Clone(gs)
+	slices.SortStableFunc(orden, func(a, b grupoRiesgo) int {
+		switch va, vb := valor(a), valor(b); {
+		case va > vb:
+			return -1
+		case va < vb:
+			return 1
+		}
+		return 0
+	})
+	var s []int
+	for _, g := range orden[:min(k, len(orden))] {
+		s = append(s, g.Semana)
+	}
+	slices.Sort(s)
+	return s
+}
+
+// rangosSemanas escribe [1 2 46 47 48] como "1–2 y 46–48".
+func rangosSemanas(s []int) string {
+	var partes []string
+	for i := 0; i < len(s); {
+		j := i
+		for j+1 < len(s) && s[j+1] == s[j]+1 {
+			j++
+		}
+		if j > i {
+			partes = append(partes, fmt.Sprintf("%d–%d", s[i], s[j]))
+		} else {
+			partes = append(partes, fmt.Sprint(s[i]))
+		}
+		i = j + 1
+	}
+	switch len(partes) {
+	case 0:
+		return ""
+	case 1:
+		return partes[0]
+	}
+	return strings.Join(partes[:len(partes)-1], ", ") + " y " + partes[len(partes)-1]
 }
 
 // conTilde corrige los nombres de departamento que el dataset trae sin tilde.

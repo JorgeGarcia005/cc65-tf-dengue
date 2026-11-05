@@ -264,6 +264,80 @@ func figuraRiesgoDepto(e entrenamiento) string {
 	return l.cerrar()
 }
 
+// figuraRiesgoSemana: dos paneles con el mismo eje de semanas, porque son dos
+// medidas en escalas distintas (nunca un gráfico con dos ejes y): arriba los
+// casos con signos de alarma o grave, abajo el riesgo calibrado y la tasa
+// observada.
+func figuraRiesgoSemana(e entrenamiento) string {
+	gs := e.PorSemana
+	l := nuevoLienzo(760, 470, "Casos graves y riesgo por semana epidemiológica")
+	x0, x1 := 70.0, 740.0
+	banda := (x1 - x0) / 52
+	xSem := func(s int) float64 { return x0 + banda*(float64(s)-0.5) }
+
+	// Panel superior: casos con signos de alarma o grave.
+	a0, a1 := 50.0, 200.0
+	maxC := 0.0
+	for _, g := range gs {
+		maxC = max(maxC, float64(g.Casos)*g.Obs)
+	}
+	paso := pasoEje(maxC)
+	tope := math.Ceil(maxC/paso) * paso
+	yA := func(v float64) float64 { return a1 - (a1-a0)*v/tope }
+	for v := 0.0; v <= tope+1e-9; v += paso {
+		l.linea(x0, yA(v), x1, yA(v), rejilla, 1, "")
+		l.texto(x0-8, yA(v)+4, miles(int(v)), 11, tintaSec, "end", "")
+	}
+	for _, g := range gs {
+		v := float64(g.Casos) * g.Obs
+		fmt.Fprintf(&l.b, `<rect x="%.1f" y="%.1f" width="%.1f" height="%.1f" fill="%s"/>`+"\n",
+			xSem(g.Semana)-banda*0.38, yA(v), banda*0.76, a1-yA(v), serie[0])
+	}
+	l.linea(x0, a1, x1, a1, tintaSec, 1, "")
+	fmt.Fprintf(&l.b, `<rect x="%.1f" y="%.1f" width="12" height="12" rx="2" fill="%s"/>`+"\n", x0, 18.0, serie[0])
+	l.texto(x0+18, 28, "Casos con signos de alarma o grave (conjunto de prueba)", 12, tinta, "start", "")
+
+	// Panel inferior: riesgo calibrado y tasa observada (%).
+	b0, b1 := 260.0, 410.0
+	maxR := 0.0
+	for _, g := range gs {
+		maxR = max(maxR, g.Calib, g.Obs)
+	}
+	pasoR := pasoEje(maxR * 100)
+	topeR := math.Ceil(maxR*100/pasoR) * pasoR
+	yB := func(v float64) float64 { return b1 - (b1-b0)*v*100/topeR }
+	for v := 0.0; v <= topeR+1e-9; v += pasoR {
+		y := b1 - (b1-b0)*v/topeR
+		l.linea(x0, y, x1, y, rejilla, 1, "")
+		l.texto(x0-8, y+4, strings.Replace(fmt.Sprintf("%g %%", v), ".", ",", 1), 11, tintaSec, "end", "")
+	}
+	for k, campo := range []func(grupoRiesgo) float64{
+		func(g grupoRiesgo) float64 { return g.Calib },
+		func(g grupoRiesgo) float64 { return g.Obs },
+	} {
+		var pts []string
+		for _, g := range gs {
+			pts = append(pts, fmt.Sprintf("%.1f,%.1f", xSem(g.Semana), yB(campo(g))))
+		}
+		fmt.Fprintf(&l.b, `<polyline points="%s" fill="none" stroke="%s" stroke-width="2" stroke-linejoin="round"/>`+"\n", strings.Join(pts, " "), serie[k+1])
+	}
+	l.linea(x0, b1, x1, b1, tintaSec, 1, "")
+	for s := 1; s <= 52; s++ {
+		if s == 1 || s%4 == 0 {
+			l.linea(xSem(s), b1, xSem(s), b1+4, tintaSec, 1, "")
+			l.texto(xSem(s), b1+18, fmt.Sprint(s), 11, tintaSec, "middle", "")
+		}
+	}
+	l.texto((x0+x1)/2, b1+38, "Semana epidemiológica", 12, tintaSec, "middle", "")
+	for k, n := range []string{"Riesgo calibrado medio (modelo)", "Tasa observada"} {
+		x := x0 + 260*float64(k)
+		l.linea(x, 232, x+18, 232, serie[k+1], 2, "")
+		l.texto(x+24, 236, n, 12, tinta, "start", "")
+	}
+	l.texto(x0, 462, "Fuente: reports/entrenamiento.json.", 11, tintaSec, "start", "")
+	return l.cerrar()
+}
+
 func escribirFigura(ruta, svg string) {
 	if err := os.MkdirAll(filepath.Dir(ruta), 0o755); err != nil {
 		log.Fatal(err)
