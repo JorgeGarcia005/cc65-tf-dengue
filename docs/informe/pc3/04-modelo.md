@@ -127,7 +127,7 @@ efecto de los pesos por clase (corrección de prior, King y Zeng, 2001) para que
 
 ## 4.7 Speedup del cálculo del gradiente
 
-**Intel(R) Xeon(R) Processor @ 2.10GHz** · 2 CPU lógicas (`bench_gradiente_ci-2vcpu.json`; sintetico(filas=1000000, features=40, semilla=2026))
+**Intel(R) Xeon(R) Processor @ 2.10GHz** · 2 CPU lógicas · linux (`bench_gradiente_ci-2vcpu.json`; sintetico(filas=1000000, features=40, semilla=2026))
 
 | Configuración | Workers | Media recortada (ms) | IC 95 % (ms) | Speedup | Eficiencia | Bit a bit |
 |---|---:|---:|---|---:|---:|:---:|
@@ -148,7 +148,54 @@ Punto de equilibrio con 2 workers: la concurrencia conviene desde **10 000 fil
 | 300 000 | 74 | 34,2 | 23,9 | 1,43× |
 | 1 000 000 | 245 | 121,3 | 96,8 | 1,25× |
 
-**AMD Ryzen 7 5800X 8-Core Processor** · 16 CPU lógicas (`bench_gradiente_deez.json`; sintetico(filas=1000000, features=40, semilla=2026))
+**AMD Ryzen 7 5800X 8-Core Processor** · 16 CPU lógicas · linux (`bench_gradiente_deez-wsl-debian.json`; sintetico(filas=1000000, features=40, semilla=2026))
+
+| Configuración | Workers | Media recortada (ms) | IC 95 % (ms) | Speedup | Eficiencia | Bit a bit |
+|---|---:|---:|---|---:|---:|:---:|
+| secuencial | 1 | 97,6 | [96,8, 98,9] | 1,00× | 100,00 % | ✔ |
+| pool-01 | 1 | 100,7 | [99,5, 102,0] | 0,97× | 96,98 % | ✔ |
+| pool-02 | 2 | 52,9 | [52,5, 53,3] | 1,85× | 92,30 % | ✔ |
+| pool-04 | 4 | 27,4 | [27,1, 27,6] | 3,57× | 89,20 % | ✔ |
+| pool-08 | 8 | 15,0 | [14,9, 15,3] | 6,52× | 81,50 % | ✔ |
+| pool-16 | 16 | 9,9 | [9,8, 10,0] | 9,88× | 61,76 % | ✔ |
+| pool-32 | 32 | 9,3 | [9,2, 9,4] | 10,52× | 32,87 % | ✔ |
+
+Punto de equilibrio con 16 workers: la concurrencia conviene desde **10 000 filas**.
+
+| Filas | Bloques | Secuencial (ms) | Concurrente (ms) | Speedup |
+|---:|---:|---:|---:|---:|
+| 1 000 | 1 | 0,1 | 0,1 | 0,90× |
+| 4 096 | 1 | 0,4 | 0,4 | 0,97× |
+| 10 000 | 3 | 1,0 | 0,5 | 2,10× |
+| 30 000 | 8 | 3,0 | 0,6 | 4,93× |
+| 100 000 | 25 | 10,0 | 1,3 | 7,81× |
+| 300 000 | 74 | 31,5 | 3,2 | 9,92× |
+| 1 000 000 | 245 | 100,2 | 9,9 | 10,14× |
+
+**AMD Ryzen 7 5800X 8-Core Processor** · 16 CPU lógicas · linux (`bench_gradiente_deez-wsl-debian_gold.json`; gold(data/gold/train.bin, filas=765297, features=31))
+
+| Configuración | Workers | Media recortada (ms) | IC 95 % (ms) | Speedup | Eficiencia | Bit a bit |
+|---|---:|---:|---|---:|---:|:---:|
+| secuencial | 1 | 67,7 | [66,7, 68,9] | 1,00× | 100,00 % | ✔ |
+| pool-01 | 1 | 69,3 | [68,6, 69,9] | 0,98× | 97,75 % | ✔ |
+| pool-02 | 2 | 35,2 | [34,9, 35,4] | 1,92× | 96,22 % | ✔ |
+| pool-04 | 4 | 18,1 | [18,0, 18,3] | 3,74× | 93,38 % | ✔ |
+| pool-08 | 8 | 10,2 | [10,1, 10,2] | 6,66× | 83,29 % | ✔ |
+| pool-16 | 16 | 6,7 | [6,7, 6,8] | 10,10× | 63,13 % | ✔ |
+| pool-32 | 32 | 6,2 | [6,1, 6,2] | 10,96× | 34,25 % | ✔ |
+
+Punto de equilibrio con 16 workers: la concurrencia conviene desde **10 000 filas**.
+
+| Filas | Bloques | Secuencial (ms) | Concurrente (ms) | Speedup |
+|---:|---:|---:|---:|---:|
+| 1 000 | 1 | 0,1 | 0,1 | 0,91× |
+| 4 096 | 1 | 0,4 | 0,4 | 0,98× |
+| 10 000 | 3 | 0,9 | 0,4 | 2,13× |
+| 30 000 | 8 | 2,7 | 0,5 | 5,14× |
+| 100 000 | 25 | 8,8 | 1,2 | 7,68× |
+| 300 000 | 74 | 27,0 | 2,9 | 9,45× |
+
+**AMD Ryzen 7 5800X 8-Core Processor** · 16 CPU lógicas · windows (`bench_gradiente_deez.json`; sintetico(filas=1000000, features=40, semilla=2026))
 
 | Configuración | Workers | Media recortada (ms) | IC 95 % (ms) | Speedup | Eficiencia | Bit a bit |
 |---|---:|---:|---|---:|---:|:---:|
@@ -172,7 +219,7 @@ Punto de equilibrio con 16 workers: la concurrencia conviene desde **10 000 fi
 | 300 000 | 74 | 29,9 | 3,1 | 9,63× |
 | 1 000 000 | 245 | 99,8 | 10,0 | 10,01× |
 
-**AMD Ryzen 7 5800X 8-Core Processor** · 16 CPU lógicas (`bench_gradiente_deez_gold.json`; gold(data/gold/train.bin, filas=765297, features=31))
+**AMD Ryzen 7 5800X 8-Core Processor** · 16 CPU lógicas · windows (`bench_gradiente_deez_gold.json`; gold(data/gold/train.bin, filas=765297, features=31))
 
 | Configuración | Workers | Media recortada (ms) | IC 95 % (ms) | Speedup | Eficiencia | Bit a bit |
 |---|---:|---:|---|---:|---:|:---:|
