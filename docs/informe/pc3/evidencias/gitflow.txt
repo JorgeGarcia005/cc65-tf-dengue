@@ -1,0 +1,46 @@
+$ git log --graph --oneline --decorate --all
+* 384f332 (origin/feature/9-protocolo-tcp, feature/9-protocolo-tcp) docs(spin): verifica la barrera con Spin y corrige el envío bloqueante (#9)
+* cf95e82 docs(decisiones): propuesta del protocolo coordinador–nodos por TCP (#9)
+| * 3977e8e (HEAD -> feature/10-informe-pc3, origin/feature/17-bench-gold-real, feature/17-bench-gold-real) docs(informe): speedup en Debian (WSL2) en la misma PC (#17)
+| * 68646ab docs(informe): speedup medido en Ryzen 7 5800X con 16 hilos (#17)
+| * 7c72fd4 feat(benchmark): mide sobre el gold real y agrupa pasadas cortas (#17)
+| * 269b3ee refactor(maquina): describe la CPU también en Windows (#17)
+| * f4cdd06 fix(gold): rechaza archivos con tamaño de bloque cero (#17)
+|/  
+* 736f4dd (origin/develop, origin/HEAD, develop) feat(features): variables, gold, shards y entrenamiento con datos reales (#6) (#16)
+| * 14daca5 (origin/revision/PR-16) docs(revision): veredicto PR-16 ronda 1
+| * 48186a9 feat(features): variables, split determinista, gold binario, shards y entrenamiento real
+|/  
+* b0d880b feat(ingest): loader concurrente con limpieza y benchmark (#5) (#15)
+| * 5e412a2 (origin/revision/PR-15) docs(revision): veredicto PR-15 ronda 2
+| * 589fca8 docs(revision): respuesta PR-15 ronda 1
+| * c29d964 fix(ingest): responde hallazgos de la ronda 1 del PR-15
+| * f86c90e docs(revision): veredicto PR-15 ronda 1
+| * 66c96f9 feat(ingest): loader concurrente con reparación de comillas y benchmark
+| * abb9edb feat(ingest): limpieza concurrente con reglas y conteo por regla (WIP)
+|/  
+* c583ed5 feat(ingest): lectura concurrente y perfil del dataset real (#4) (#14)
+| * a135515 (origin/revision/PR-14) docs(revision): veredicto PR-14 ronda 2
+| * 42be54c docs(revision): respuesta PR-14 ronda 1
+| * e94ec50 fix(ingest): responde hallazgos de la ronda 1 del PR-14
+| * 66a96fe docs(revision): veredicto PR-14 ronda 1
+| * 4b7fa61 docs(decisiones): entrenamiento desde 2011 en ADR-0003
+| * 01227ae docs(informe): sección 2 (datos) generada desde el perfil real
+| * 25ebf81 docs(decisiones): ADR-0003 con la validación del caso por el profesor
+| * 20dd445 docs(datos): perfil del dataset real de dengue y su checksum
+| * b3de6a6 feat(ingest): lectura concurrente por bloques y perfil del dataset
+|/  
+* 6a09c67 feat(ml): gradiente concurrente con worker pool y benchmark (#8) (#12)
+| * 7e52423 (origin/revision/PR-12) docs(revision): veredicto PR-12 ronda 2
+| * 4211458 docs(revision): respuesta PR-12 ronda 1
+| * 48d3d69 fix(ml): responde hallazgos de la ronda 1 del PR-12
+| * 497dd9c docs(revision): veredicto PR-12 ronda 1
+| * 6642a95 feat(ml): gradiente concurrente con worker pool y benchmark
+|/  
+* 125237a feat(ml): regresión logística secuencial de referencia (#7) (#11)
+* 8a03dd3 chore(agentes): verificación del juez sin make para Windows (#13)
+| * 77b8c25 (origin/revision/PR-11, origin/feature/7-rl-secuencial) docs(revision): veredicto PR-11 ronda 2
+| * 502e7d7 docs(revision): respuesta PR-11 ronda 1
+| * 5ca64f5 fix(ml): responde hallazgos de la ronda 1 del PR-11
+| * 7333ec9 docs(revision): veredicto PR-11 ronda 1
+| * 133662c feat(ml): regresión logística secuencial por bloques con métricas

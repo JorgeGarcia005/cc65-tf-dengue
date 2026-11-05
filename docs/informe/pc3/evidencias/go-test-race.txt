@@ -1,0 +1,10 @@
+$ go test -race -count=1 ./...   # go1.26.10 windows/amd64
+ok  	github.com/JorgeGarcia005/cc65-tf-dengue/cmd/benchmark	1.611s
+ok  	github.com/JorgeGarcia005/cc65-tf-dengue/cmd/entrenar	1.537s
+ok  	github.com/JorgeGarcia005/cc65-tf-dengue/cmd/word	1.611s
+ok  	github.com/JorgeGarcia005/cc65-tf-dengue/internal/estadistica	1.407s
+ok  	github.com/JorgeGarcia005/cc65-tf-dengue/internal/features	1.584s
+ok  	github.com/JorgeGarcia005/cc65-tf-dengue/internal/gold	1.582s
+ok  	github.com/JorgeGarcia005/cc65-tf-dengue/internal/ingest	3.166s
+ok  	github.com/JorgeGarcia005/cc65-tf-dengue/internal/maquina	1.385s
+ok  	github.com/JorgeGarcia005/cc65-tf-dengue/internal/ml	7.220s
