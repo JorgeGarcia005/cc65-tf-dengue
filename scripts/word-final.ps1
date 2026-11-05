@@ -15,9 +15,16 @@ Add-Type -AssemblyName System.IO.Compression, System.IO.Compression.FileSystem
 
 $archivos = Get-ChildItem -Path $Carpeta -Filter '1ACC0065_*_Informe_*.docx'
 if (-not $archivos) { throw "No hay informes 1ACC0065_*_Informe_*.docx en $Carpeta (corre go run ./cmd/word)" }
+foreach ($a in $archivos) {
+    try { $f = [IO.File]::Open($a.FullName, 'Open', 'ReadWrite', 'None'); $f.Close() }
+    catch { throw "$($a.Name) está abierto (¿en Word?). Ciérralo y vuelve a correr el script." }
+}
 
 $word = New-Object -ComObject Word.Application
-$word.Visible = $false
+# Si la automatización se conectó a un Word que ya tenía documentos abiertos,
+# no hay que cerrarlo al final: se perderían los documentos del usuario.
+$propio = $word.Documents.Count -eq 0
+if ($propio) { $word.Visible = $false }
 $word.DisplayAlerts = 0
 try {
     foreach ($a in $archivos) {
@@ -30,7 +37,7 @@ try {
         "$($a.Name): $paginas páginas"
     }
 } finally {
-    $word.Quit()
+    if ($propio) { $word.Quit() }
     [void][Runtime.InteropServices.Marshal]::ReleaseComObject($word)
 }
 
