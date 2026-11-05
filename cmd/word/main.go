@@ -268,8 +268,11 @@ func armar(p *paquete, dir string, secciones []string, cambios reemplazos) ([]by
 	num = strings.Replace(num, "</w:numbering>", nums.String()+"</w:numbering>", 1)
 	p.poner("word/numbering.xml", []byte(num))
 
-	// Ajustes: que Word actualice el índice al abrir el documento.
+	// Ajustes: que Word actualice el índice al abrir el documento, y sin
+	// incrustar fuentes estándar (Times New Roman) al guardar: eso multiplica
+	// el tamaño del archivo.
 	set := string(p.partes["word/settings.xml"])
+	set = regexp.MustCompile(`<w:embedTrueTypeFonts[^>]*/>`).ReplaceAllString(set, "")
 	if !strings.Contains(set, "<w:updateFields") {
 		if i := strings.Index(set, "<w:compat>"); i >= 0 {
 			set = set[:i] + `<w:updateFields w:val="true"/>` + set[i:]
