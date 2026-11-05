@@ -18,9 +18,11 @@
  * no determinista que puede dispararse en cualquier momento.
  *
  * Verificación:
- *   spin -a barrera.pml && gcc -O2 -o pan pan.c
- *   ./pan                 # deadlocks (estados finales inválidos) y asserts
- *   ./pan -a -N termina   # LTL: toda corrida termina
+ *   spin -a barrera.pml
+ *   gcc -O2 -DNOCLAIM -o pan-seg pan.c && ./pan-seg    # deadlocks y asserts
+ *   gcc -O2 -o pan pan.c && ./pan -a -N termina        # LTL: toda corrida termina
+ * (con el LTL incluido, pan desactiva la búsqueda de estados finales
+ * inválidos; por eso la seguridad se verifica aparte con -DNOCLAIM)
  */
 
 #define N         3   /* nodos = shards */
@@ -30,8 +32,14 @@
 
 mtype = { EPOCA, GRADIENTE, FIN };
 
-/* (tipo, época, shard) */
-chan aNodo[N] = [N] of { mtype, byte, byte };
+/* (tipo, época, shard)
+ * Enviar a un nodo no debe bloquear al coordinador aunque el nodo esté caído
+ * (en TCP el mensaje va al búfer del kernel, y la escritura real lleva plazo).
+ * Con capacidad N, Spin halló una corrida en que el coordinador quedaba
+ * bloqueado enviando a un nodo caído con el canal lleno. A un nodo le pueden
+ * quedar pendientes a lo sumo N mensajes de la época anterior más N de la
+ * actual (luego vence el plazo y se lo descarta): 2N basta. */
+chan aNodo[N] = [2*N] of { mtype, byte, byte };
 chan aCoord   = [2*N] of { mtype, byte, byte };
 
 byte caidas = 0;

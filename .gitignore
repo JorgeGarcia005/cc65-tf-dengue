@@ -12,6 +12,7 @@ coverage.*
 
 # Spin
 spin/pan
+spin/pan-seg
 spin/pan.*
 spin/*.trail
 spin/_spin_nvr.tmp

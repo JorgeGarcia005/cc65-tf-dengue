@@ -102,7 +102,10 @@ sequenceDiagram
 - Una goroutine **lectora por conexión** decodifica mensajes y los manda a un único canal
   `respuestas`. Nadie más lee de esa conexión.
 - La **escritura** a cada nodo la hace solo el bucle de épocas (una goroutine), así que no hay dos
-  escritores sobre el mismo `net.Conn`.
+  escritores sobre el mismo `net.Conn`. Toda escritura lleva plazo (`SetWriteDeadline`) y un error
+  de escritura cuenta como caída del nodo: **enviar nunca puede bloquear el bucle de épocas**. Spin
+  encontró una corrida en que el coordinador se quedaba bloqueado enviando a un nodo caído
+  (sección 9).
 - El **bucle de épocas** difunde `w`, recibe de `respuestas` con `select` y un temporizador de
   época, y guarda cada `gradiente` en el slot de su shard. Cuando están todos, reduce en orden.
   El estado de la época (slots, qué shard llegó) es local a esa goroutine: no hay mutex.
@@ -130,8 +133,8 @@ reducirlos; hoy `Pool.Gradiente` los reduce y finaliza.
 los dueños de shards que no llegaron y recién después reasigna esos shards a nodos sanos. En una
 sola pasada, un shard podía reasignarse a un nodo caído que todavía no se había descartado; como
 después ese dueño figuraba como descartado, el shard no se volvía a reasignar y el coordinador
-quedaba en un ciclo de timeouts sin avanzar. El error apareció al escribir el modelo Promela
-(sección 9).
+quedaba en un ciclo de timeouts sin avanzar. El error apareció al escribir el modelo Promela y Spin
+lo confirma con un contraejemplo (sección 9, mutante 2).
 
 **Por qué reasignar no rompe el determinismo:** los shards son archivos deterministas en un
 volumen compartido (de solo lectura), y la reducción depende solo del índice global de bloque, no
@@ -168,18 +171,31 @@ arreglo `parciales[0..186]` es el mismo y el gradiente sale con los mismos bits.
 4. **Modelo formal (plus):** `spin/barrera.pml` modela la barrera con caída y sospecha de nodos;
    Spin verifica ausencia de deadlock y que toda corrida termina (sección 9).
 
-## 9. Modelo Promela (borrador)
+## 9. Modelo Promela
 
-`spin/barrera.pml` modela un coordinador y N = 3 nodos con canales con búfer, hasta una caída de
-nodo y una sospecha falsa (timeout de un nodo que estaba vivo). Propiedades:
+`spin/barrera.pml` modela un coordinador y N = 3 nodos durante 3 épocas, con canales con búfer,
+hasta una caída de nodo y una sospecha falsa (timeout de un nodo que estaba vivo). Propiedades:
 
 - **Ausencia de deadlock:** ningún estado final inválido (los nodos esperan en una etiqueta `end`).
 - **Barrera:** `assert` de que una época avanza solo con los N shards recibidos.
 - **Terminación:** `ltl termina { <> terminado }`.
 - **Sin pérdida de shards:** si el entrenamiento no se abortó, se completaron todas las épocas.
 
-Comando: `spin -a spin/barrera.pml && gcc -O2 -o pan pan.c && ./pan -a`. Sigue sin verificar:
-falta instalar Spin en el entorno.
+**Resultado** (Spin 6.5.2, gcc 14.2, Debian 13; comandos en `spin/README.md`):
+
+| Verificación | Estados | Errores |
+|---|---:|---:|
+| Seguridad: deadlocks y `assert` (`-DNOCLAIM`) | 87 711 almacenados | 0 |
+| LTL `termina` (`-a`) | 171 332 visitados | 0 |
+| Mutante 1: canal de nodo con capacidad N (envío que bloquea) | — | 1 (ciclo de aceptación) |
+| Mutante 2: `reasignar` en una sola pasada | — | 1 (ciclo de aceptación) |
+
+Los mutantes muestran que el modelo sí distingue el diseño correcto de los dos errores encontrados:
+el envío que bloquea al coordinador (sección 5) y la reasignación en una pasada (sección 6).
+
+**Límites del modelo:** N, épocas y fallos son pequeños (3, 3, 1 + 1) para que la exploración sea
+exhaustiva; no modela el contenido numérico (eso lo cubre el test de equivalencia) ni la
+reconexión de un nodo descartado.
 
 ## 10. Preguntas para el juez
 
