@@ -1,8 +1,8 @@
 <!-- Generado por cmd/informe desde reports/perfil_bronze.json. No editar a mano. -->
 
-# 2. Datos: perfil del dataset original (capa bronze)
+# 5. Datos: perfil del dataset original (capa bronze)
 
-## 2.1 Fuente
+## 5.1 Fuente
 
 - **Dataset:** Vigilancia epidemiológica de dengue, MINSA / CDC Perú, Plataforma Nacional de
   Datos Abiertos (<https://www.datosabiertos.gob.pe/dataset/vigilancia-epidemiol%C3%B3gica-de-dengue>).
@@ -11,7 +11,7 @@
 - **Filas:** 1 065 274 (85 mal formadas: 85 por comillas y
   0 por número de columnas).
 
-## 2.2 Variables
+## 5.2 Variables
 
 | Columna | Vacíos | Valores distintos | Valores más frecuentes |
 |---|---:|---:|---|
@@ -31,7 +31,7 @@
 | `tipo_edad` | 0 | 3 | A (1058214); M (6644); D (331) |
 | `sexo` | 0 | 2 | F (572164); M (493025) |
 
-## 2.3 Variable objetivo
+## 5.3 Variable objetivo
 
 El objetivo es **1** si el caso es *dengue con signos de alarma* (CIE-10 A97.1) o *dengue grave*
 (A97.2) y **0** si es *dengue sin signos de alarma* (A97.0). Según la guía clínica, los casos
@@ -70,13 +70,15 @@ de **necesidad de hospitalización** (validado con el profesor, ADR-0003).
 | 2024 | 244 743 | 26 052 | 736 | 9,9 |
 | 2025 | 29 425 | 6 241 | 185 | 17,9 |
 
+![Casos de dengue notificados por año y clasificación clínica](fig/casos_por_ano.svg)
+
 **Hallazgo:** la categoría *con signos de alarma* aparece de forma marginal en 2010 y se usa
 de forma sistemática desde 2011, tras la adopción de la clasificación de la OMS de 2009. Antes
 los casos se registran casi todos como *sin signos*, así que esos años no sirven para aprender
 el objetivo: **el modelo se entrena con los años desde 2011**, mientras que la carga y la
 limpieza procesan todas las filas.
 
-## 2.4 Edad por etapa de vida (MINSA)
+## 5.4 Edad por etapa de vida (MINSA)
 
 | Etapa | Casos |
 |---|---:|
@@ -88,7 +90,7 @@ limpieza procesan todas las filas.
 
 Filas con edad no numérica o `tipo_edad` desconocido: **0**.
 
-## 2.5 Procesamiento concurrente del perfil
+## 5.5 Procesamiento concurrente del perfil
 
 El archivo se lee en memoria y se divide en **113 bloques** de ~1 MiB alineados a fin
 de línea. Un *worker pool* procesa los bloques y cada uno deja su resultado en un slot propio;

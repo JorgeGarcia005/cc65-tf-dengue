@@ -1,11 +1,11 @@
 <!-- Generado por cmd/informe desde reports/split.json, reports/entrenamiento.json y reports/bench_gradiente_*.json. No editar a mano. -->
 
-# 4. Modelo de ML distribuido y paralelización del cálculo (Parte B)
+# 7. Modelo de ML distribuido y paralelización del cálculo (Parte B)
 
-## 4.1 Datos de entrenamiento
+## 7.1 Datos de entrenamiento
 
 - Se usan los casos desde **2011** (la categoría *con signos de alarma* se aplica de forma
-  sistemática desde ese año, ver §2.3). Quedan fuera 109 144 de las
+  sistemática desde ese año, ver §5.3). Quedan fuera 109 144 de las
   1 065 260 filas del silver.
 - **Split determinista** 20,00 % prueba: cada fila va a prueba según un hash (splitmix64)
   de su posición en el silver, así que el split no depende del número de workers ni de nodos.
@@ -22,14 +22,14 @@
 una fuga de información del objetivo (ADR-0004). La media y desviación de edad y año se calculan
 **solo con el entrenamiento**.
 
-## 4.2 Modelo: regresión logística con pesos por clase
+## 7.2 Modelo: regresión logística con pesos por clase
 
 $$L(w) = \frac{1}{S}\sum_i s_i\,\big[\log(1+e^{z_i}) - y_i z_i\big] + \frac{\lambda}{2}\lVert w\rVert^2,\qquad z_i = x_i^\top w + b$$
 
 $$\nabla_w L = \frac{1}{S}\sum_i s_i\,(\sigma(z_i) - y_i)\,x_i + \lambda w,\qquad S = \sum_i s_i$$
 
 Los pesos por clase ($s_i$ = 3,985 para positivos y 0,572 para negativos)
-igualan el aporte de ambas clases ante el desbalance. λ = 0.0001.
+igualan el aporte de ambas clases ante el desbalance. λ = 0,0001.
 
 **Por qué se puede distribuir:** el gradiente es una **suma sobre filas**. Si las filas se parten en
 bloques $B_1,\dots,B_K$, cada bloque aporta su suma parcial $g_k$ y el gradiente total es
@@ -37,7 +37,7 @@ $\frac{1}{S}\sum_k g_k + \lambda w$. Un worker, un hilo o un nodo puede calcular
 solo hace falta **sumar los parciales siempre en el mismo orden de bloque** para que el resultado sea
 idéntico bit a bit (la suma en punto flotante no es asociativa).
 
-## 4.3 Paralelización en Go dentro de un nodo
+## 7.3 Paralelización en Go dentro de un nodo
 
 | Patrón | Dónde | Para qué |
 |---|---|---|
@@ -47,10 +47,12 @@ idéntico bit a bit (la suma en punto flotante no es asociativa).
 | Barrera | `sync.WaitGroup` | Espera los 187 bloques de la época antes de reducir |
 | *Fan-in* ordenado | `ml.ReducirEnOrden` | Un solo goroutine suma en orden de bloque → determinismo |
 
+![Worker pool del gradiente: reparto de bloques, acumuladores privados y reducción en orden](fig/worker_pool.svg)
+
 El gradiente del pool es **idéntico bit a bit** al secuencial
 sobre los datos reales (verificado por `cmd/entrenar`); `TestEquivalencia` lo exige con 1 a 64 workers.
 
-## 4.4 Distribución en el clúster (diseño para PC4)
+## 7.4 Distribución en el clúster (diseño para PC4)
 
 El entrenamiento de 765 297 filas se reparte en **3 shards** de bloques
 contiguos (4096 filas por bloque, 187 bloques):
@@ -65,15 +67,15 @@ En cada época el coordinador (parameter server) envía los pesos a los nodos po
 con su worker pool los parciales de sus bloques y los devuelve; el coordinador los concatena **en orden
 de shard** (que es el orden global de bloque), aplica `Finalizar` y actualiza los pesos. El test
 `TestShardsReproducenElGradienteGlobal` comprueba que con 1, 2, 3, 5 u 8 shards el gradiente es
-idéntico bit a bit al secuencial. El protocolo TCP se define en #9 (ADR pendiente).
+idéntico bit a bit al secuencial. El protocolo TCP y su verificación formal se describen en la sección 8.
 
-## 4.5 Resultados del entrenamiento
+## 7.5 Resultados del entrenamiento
 
 Descenso de gradiente *full-batch*: 600 épocas, tasa 2, 2 workers,
 36,92 s (61,5 ms por época). Pérdida: 0,6931 →
 0,6701.
 
-| Métrica (prueba, umbral 0.5) | Valor |
+| Métrica (prueba, umbral 0,5) | Valor |
 |---|---:|
 | AUC-ROC | 0,6221 |
 | Recall (sensibilidad) | 0,619 |
@@ -101,7 +103,7 @@ datos abiertos disponibles, declarada y aceptada (ADR-0003).
 | `depto_ancash` | -0,310 | 0,73 |
 | `depto_la_libertad` | -0,301 | 0,74 |
 
-## 4.6 Primera respuesta a la pregunta de impacto social
+## 7.6 Primera respuesta a la pregunta de impacto social
 
 Riesgo de dengue con signos de alarma o grave en el conjunto de prueba. El riesgo calibrado corrige el
 efecto de los pesos por clase (corrección de prior, King y Zeng, 2001) para que esté en la escala real.
@@ -117,6 +119,8 @@ efecto de los pesos por clase (corrección de prior, King y Zeng, 2001) para que
 | huanuco | 2 148 | 13,59 % | 13,36 % |
 | piura | 41 319 | 13,37 % | 13,34 % |
 
+![Riesgo calibrado y tasa observada por departamento (conjunto de prueba)](fig/riesgo_departamento.svg)
+
 | Etapa de vida | Casos (prueba) | Tasa observada | Riesgo calibrado |
 |---|---:|---:|---:|
 | nino_0_11 | 32 078 | 14,66 % | 14,79 % |
@@ -125,7 +129,7 @@ efecto de los pesos por clase (corrección de prior, King y Zeng, 2001) para que
 | adulto_mayor_60_mas | 17 313 | 12,66 % | 12,52 % |
 | adulto_30_59 | 71 864 | 11,11 % | 11,08 % |
 
-## 4.7 Speedup del cálculo del gradiente
+## 7.7 Speedup del cálculo del gradiente
 
 **Intel(R) Xeon(R) Processor @ 2.10GHz** · 2 CPU lógicas · linux (`bench_gradiente_ci-2vcpu.json`; sintetico(filas=1000000, features=40, semilla=2026))
 
@@ -242,3 +246,4 @@ Punto de equilibrio con 16 workers: la concurrencia conviene desde **10 000 fi
 | 100 000 | 25 | 8,7 | 1,0 | 8,33× |
 | 300 000 | 74 | 26,9 | 2,8 | 9,60× |
 
+![Speedup del cálculo del gradiente según el número de workers](fig/speedup_gradiente.svg)
