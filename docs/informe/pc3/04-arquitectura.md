@@ -31,3 +31,15 @@ Estas reglas son comunes a todo el código y las revisa el agente juez en cada P
    los reportes JSON que producen los propios programas.
 5. **Datos no versionados:** el CSV no se sube al repositorio; se versiona el script que lo descarga y su
    checksum SHA-256, que fija el archivo exacto usado en los resultados.
+
+## 4.2 Dónde está cada punto del Entregable 1
+
+| Punto del Entregable 1 (enunciado) | Dónde está en este informe |
+|---|---|
+| Presentación del caso: problema, motivación y pregunta de impacto social | Secciones 2.1 a 2.5 |
+| Limpieza y análisis de datos: procedimiento y evidencias | Sección 5 (perfil del dataset) y sección 6 (reglas, resultado y rendimiento de la limpieza) |
+| Diseño del modelo ML distribuido: explicación del algoritmo | Secciones 7.1, 7.2 y 7.4 (ecuaciones del gradiente y de la agregación) y sección 8 (clúster y protocolo) |
+| Paralelización del cálculo: justificación, técnicas y patrones en Go | Secciones 5.5, 6.1 y 7.3, y la tabla de componentes y patrones del inicio de esta sección |
+| Evidencias de la implementación: código en Go y pruebas | Sección 9 y secciones 6.3 y 7.7 (*speedup* medido) |
+| Cambios subidos a GitHub y tablero Kanban | Secciones 9.5 y 9.6, y Anexos |
+| Reporte de participación | Archivo aparte en el Aula Virtual (formato del docente) |

@@ -12,5 +12,13 @@
 | Modelo Promela y cómo verificarlo | `spin/barrera.pml`, `spin/README.md` |
 | Reportes con todas las cifras del informe | `reports/*.json` |
 | Fuente de este informe | `docs/informe/pc3/` (se genera con `go run ./cmd/informe` y `go run ./cmd/word`) |
-| Reporte de participación | Se entrega por separado en el Aula Virtual |
+| Versión entregada | Rama `main`, tag `pc3` (release desde `develop`) |
+| Código fuente (además del repositorio) | `1ACC0065_PC3_UXXXXXXXX.zip`, generado con `git archive` desde el tag `pc3` |
+| Reporte de participación | `1ACC0065-202620_Participación_PC3.docx`, en el formato del docente, en el Aula Virtual |
 | Video | No corresponde a esta entrega (TB2) |
+
+**Uso de inteligencia artificial.** El código, las pruebas y este informe se produjeron con un
+ecosistema de agentes (`docs/agentes/PROTOCOLO.md`): Claude Code implementó y orquestó, y Antigravity
+(Gemini) revisó cada *pull request* contra la rúbrica y dejó su veredicto con evidencia en
+`docs/agentes/revisiones/`. Ningún cambio entró a `develop` sin el veredicto `APROBADO` del juez, el CI en
+verde y la aprobación de un integrante del equipo, que revisó y es responsable de cada parte.
