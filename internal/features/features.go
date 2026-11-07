@@ -125,6 +125,22 @@ func (e *Esquema) Llenar(r ingest.Registro, x []float64) {
 	x[j+4+k] = 1
 }
 
+// Indice devuelve la columna de la variable con ese nombre, o -1 si no existe.
+func (e *Esquema) Indice(nombre string) int {
+	return slices.Index(e.Nombres, nombre)
+}
+
+// SemanaDeAngulo recupera la semana epidemiológica (1–52) desde su
+// codificación (semana_sin, semana_cos) de Llenar. La codificación es periódica
+// en 52, así que la semana 53 de los años que la tienen vuelve como 1.
+func SemanaDeAngulo(seno, coseno float64) int {
+	angulo := math.Atan2(seno, coseno)
+	if angulo < 0 {
+		angulo += 2 * math.Pi
+	}
+	return int(math.Round(angulo*52/(2*math.Pi)))%52 + 1
+}
+
 // EsTest decide, de forma determinista y sin depender del orden de proceso, si
 // la fila con índice global i va al conjunto de prueba. Usa un hash (splitmix64)
 // del índice: así el split no cambia con el número de workers ni de nodos.

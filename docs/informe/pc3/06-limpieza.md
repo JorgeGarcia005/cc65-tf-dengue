@@ -1,8 +1,8 @@
 <!-- Generado por cmd/informe desde reports/limpieza.json y reports/bench_loader_*.json. No editar a mano. -->
 
-# 3. Limpieza y carga concurrente (Parte A)
+# 6. Limpieza y carga concurrente (Parte A)
 
-## 3.1 Procedimiento
+## 6.1 Procedimiento
 
 El loader (`cmd/loader`) lee el CSV original completo en memoria, lo divide en
 **113 bloques** de ~1 MiB que siempre terminan en un salto de línea y los reparte a un
@@ -40,7 +40,7 @@ Además de descartar, el loader **repara** sin perder filas:
 dataset no tiene identificador de paciente, y dos casos reales pueden coincidir en todos los
 campos (misma localidad, semana, edad y sexo). Eliminarlas borraría casos verdaderos.
 
-## 3.2 Resultado
+## 6.2 Resultado
 
 | | Filas |
 |---|---:|
@@ -49,7 +49,7 @@ campos (misma localidad, semana, edad y sexo). Eliminarlas borraría casos verda
 | **Salida (silver)** | **1 065 260** |
 | Positivos (con signos o grave) | 120 601 (11,32 %) |
 
-## 3.3 Rendimiento de la carga concurrente
+## 6.3 Rendimiento de la carga concurrente
 
 **Intel(R) Xeon(R) Processor @ 2.10GHz** · 2 CPU lógicas · linux (`bench_loader_ci-2vcpu.json`)
 
@@ -80,6 +80,8 @@ campos (misma localidad, semana, edad y sexo). Eliminarlas borraría casos verda
 | 8 | 188,3 | [182,7, 195,0] | 2,96× | 37,06 % | 5 656 414 | ✔ |
 | 16 | 160,5 | [152,9, 171,6] | 3,48× | 21,74 % | 6 636 323 | ✔ |
 | 32 | 157,6 | [149,7, 168,4] | 3,54× | 11,07 % | 6 759 067 | ✔ |
+
+![Speedup de la limpieza concurrente según el número de workers](fig/speedup_loader.svg)
 
 Protocolo: limpieza completa en memoria (sin lectura de disco), un calentamiento, repeticiones
 en orden barajado, `runtime.GC()` antes de cada medición, media recortada al 10 % e intervalo

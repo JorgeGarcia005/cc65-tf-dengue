@@ -60,9 +60,9 @@ type perfil struct {
 
 const plantillaDatos = `<!-- Generado por cmd/informe desde reports/perfil_bronze.json. No editar a mano. -->
 
-# 2. Datos: perfil del dataset original (capa bronze)
+# 5. Datos: perfil del dataset original (capa bronze)
 
-## 2.1 Fuente
+## 5.1 Fuente
 
 - **Dataset:** Vigilancia epidemiológica de dengue, MINSA / CDC Perú, Plataforma Nacional de
   Datos Abiertos (<https://www.datosabiertos.gob.pe/dataset/vigilancia-epidemiol%C3%B3gica-de-dengue>).
@@ -71,7 +71,7 @@ const plantillaDatos = `<!-- Generado por cmd/informe desde reports/perfil_bronz
 - **Filas:** {{miles .Perfil.Filas}} ({{miles .Perfil.FilasMalas}} mal formadas: {{.Perfil.ErrComill}} por comillas y
   {{.Perfil.ErrColum}} por número de columnas).
 
-## 2.2 Variables
+## 5.2 Variables
 
 | Columna | Vacíos | Valores distintos | Valores más frecuentes |
 |---|---:|---:|---|
@@ -79,12 +79,12 @@ const plantillaDatos = `<!-- Generado por cmd/informe desde reports/perfil_bronz
 | ` + "`{{.Nombre}}`" + ` | {{miles .Vacios}} | {{miles .Distintos}} | {{top .Top}} |
 {{- end}}
 
-## 2.3 Variable objetivo
+## 5.3 Variable objetivo
 
 El objetivo es **1** si el caso es *dengue con signos de alarma* (CIE-10 A97.1) o *dengue grave*
 (A97.2) y **0** si es *dengue sin signos de alarma* (A97.0). Según la guía clínica, los casos
 con signos de alarma requieren hospitalización, por lo que el objetivo funciona como indicador
-de **necesidad de hospitalización** (validado con el profesor, ADR-0003).
+de **necesidad de hospitalización** (ADR-0003).
 
 - Sin signos (0): **{{miles .Neg}}** · Con signos o grave (1): **{{miles .Pos}}** · Proporción de positivos:
   **{{pct .Tasa}} %**. Hay desbalance de clases, que se trata con pesos por clase.
@@ -95,13 +95,15 @@ de **necesidad de hospitalización** (validado con el profesor, ADR-0003).
 | {{$a}} | {{miles (index . 0)}} | {{miles (index . 1)}} | {{miles (index . 2)}} | {{tasaAno .}} |
 {{- end}}{{end}}
 
+![Casos de dengue notificados por año y clasificación clínica](fig/casos_por_ano.svg)
+
 **Hallazgo:** la categoría *con signos de alarma* aparece de forma marginal en 2010 y se usa
 de forma sistemática desde 2011, tras la adopción de la clasificación de la OMS de 2009. Antes
 los casos se registran casi todos como *sin signos*, así que esos años no sirven para aprender
 el objetivo: **el modelo se entrena con los años desde 2011**, mientras que la carga y la
 limpieza procesan todas las filas.
 
-## 2.4 Edad por etapa de vida (MINSA)
+## 5.4 Edad por etapa de vida (MINSA)
 
 | Etapa | Casos |
 |---|---:|
@@ -111,7 +113,7 @@ limpieza procesan todas las filas.
 
 Filas con edad no numérica o ` + "`tipo_edad`" + ` desconocido: **{{miles .Perfil.Edad.NoNum}}**.
 
-## 2.5 Procesamiento concurrente del perfil
+## 5.5 Procesamiento concurrente del perfil
 
 El archivo se lee en memoria y se divide en **{{.Bloques}} bloques** de ~1 MiB alineados a fin
 de línea. Un *worker pool* procesa los bloques y cada uno deja su resultado en un slot propio;
@@ -167,9 +169,9 @@ type benchLoader struct {
 
 const plantillaLimpieza = `<!-- Generado por cmd/informe desde reports/limpieza.json y reports/bench_loader_*.json. No editar a mano. -->
 
-# 3. Limpieza y carga concurrente (Parte A)
+# 6. Limpieza y carga concurrente (Parte A)
 
-## 3.1 Procedimiento
+## 6.1 Procedimiento
 
 El loader (` + "`cmd/loader`" + `) lee el CSV original completo en memoria, lo divide en
 **{{.Bloques}} bloques** de ~1 MiB que siempre terminan en un salto de línea y los reparte a un
@@ -199,7 +201,7 @@ Además de descartar, el loader **repara** sin perder filas:
 dataset no tiene identificador de paciente, y dos casos reales pueden coincidir en todos los
 campos (misma localidad, semana, edad y sexo). Eliminarlas borraría casos verdaderos.
 
-## 3.2 Resultado
+## 6.2 Resultado
 
 | | Filas |
 |---|---:|
@@ -208,7 +210,7 @@ campos (misma localidad, semana, edad y sexo). Eliminarlas borraría casos verda
 | **Salida (silver)** | **{{miles .L.Salidas}}** |
 | Positivos (con signos o grave) | {{miles .L.Positivos}} ({{pct .L.Tasa}} %) |
 
-## 3.3 Rendimiento de la carga concurrente
+## 6.3 Rendimiento de la carga concurrente
 {{range .Bench}}
 **{{.Maquina.CPU}}** · {{.Maquina.NumCPU}} CPU lógicas · {{.Maquina.SO}} (` + "`{{.Archivo}}`" + `)
 
@@ -218,6 +220,8 @@ campos (misma localidad, semana, edad y sexo). Eliminarlas borraría casos verda
 | {{.Workers}} | {{ms .Segundos.Media}} | [{{ms .Segundos.Inf}}, {{ms .Segundos.Sup}}] | {{dos .Speedup}}× | {{pct .Eficiencia}} % | {{miles (entero .FilasPorS)}} | {{if .Equivale}}✔{{else}}✘{{end}} |
 {{- end}}
 {{end}}
+![Speedup de la limpieza concurrente según el número de workers](fig/speedup_loader.svg)
+
 Protocolo: limpieza completa en memoria (sin lectura de disco), un calentamiento, repeticiones
 en orden barajado, ` + "`runtime.GC()`" + ` antes de cada medición, media recortada al 10 % e intervalo
 de confianza por bootstrap.
@@ -245,10 +249,11 @@ type split struct {
 }
 
 type grupoRiesgo struct {
-	Grupo string  `json:"grupo"`
-	Casos int     `json:"casos_test"`
-	Obs   float64 `json:"tasa_observada"`
-	Calib float64 `json:"riesgo_calibrado_medio"`
+	Grupo  string  `json:"grupo"`
+	Semana int     `json:"semana"`
+	Casos  int     `json:"casos_test"`
+	Obs    float64 `json:"tasa_observada"`
+	Calib  float64 `json:"riesgo_calibrado_medio"`
 }
 
 type entrenamiento struct {
@@ -274,8 +279,9 @@ type entrenamiento struct {
 		Peso      float64 `json:"peso"`
 		RazonOdds float64 `json:"razon_de_odds"`
 	} `json:"coeficientes_por_magnitud"`
-	PorDepto []grupoRiesgo `json:"riesgo_por_departamento"`
-	PorEtapa []grupoRiesgo `json:"riesgo_por_etapa_de_vida"`
+	PorDepto  []grupoRiesgo `json:"riesgo_por_departamento"`
+	PorEtapa  []grupoRiesgo `json:"riesgo_por_etapa_de_vida"`
+	PorSemana []grupoRiesgo `json:"riesgo_por_semana_epidemiologica"`
 }
 
 type benchGrad struct {
@@ -317,12 +323,12 @@ type modelo struct {
 
 const plantillaModelo = `<!-- Generado por cmd/informe desde reports/split.json, reports/entrenamiento.json y reports/bench_gradiente_*.json. No editar a mano. -->
 
-# 4. Modelo de ML distribuido y paralelización del cálculo (Parte B)
+# 7. Modelo de ML distribuido y paralelización del cálculo (Parte B)
 
-## 4.1 Datos de entrenamiento
+## 7.1 Datos de entrenamiento
 
 - Se usan los casos desde **{{.S.AnoMin}}** (la categoría *con signos de alarma* se aplica de forma
-  sistemática desde ese año, ver §2.3). Quedan fuera {{miles .S.FilasExcluidas}} de las
+  sistemática desde ese año, ver §5.3). Quedan fuera {{miles .S.FilasExcluidas}} de las
   {{miles .S.FilasSilver}} filas del silver.
 - **Split determinista** {{pct .S.FracTest}} % prueba: cada fila va a prueba según un hash (splitmix64)
   de su posición en el silver, así que el split no depende del número de workers ni de nodos.
@@ -339,14 +345,14 @@ const plantillaModelo = `<!-- Generado por cmd/informe desde reports/split.json,
 una fuga de información del objetivo (ADR-0004). La media y desviación de edad y año se calculan
 **solo con el entrenamiento**.
 
-## 4.2 Modelo: regresión logística con pesos por clase
+## 7.2 Modelo: regresión logística con pesos por clase
 
 $$L(w) = \frac{1}{S}\sum_i s_i\,\big[\log(1+e^{z_i}) - y_i z_i\big] + \frac{\lambda}{2}\lVert w\rVert^2,\qquad z_i = x_i^\top w + b$$
 
 $$\nabla_w L = \frac{1}{S}\sum_i s_i\,(\sigma(z_i) - y_i)\,x_i + \lambda w,\qquad S = \sum_i s_i$$
 
 Los pesos por clase ($s_i$ = {{tres .E.PesoPos}} para positivos y {{tres .E.PesoNeg}} para negativos)
-igualan el aporte de ambas clases ante el desbalance. λ = {{.E.Lambda}}.
+igualan el aporte de ambas clases ante el desbalance. λ = {{num .E.Lambda}}.
 
 **Por qué se puede distribuir:** el gradiente es una **suma sobre filas**. Si las filas se parten en
 bloques $B_1,\dots,B_K$, cada bloque aporta su suma parcial $g_k$ y el gradiente total es
@@ -354,7 +360,7 @@ $\frac{1}{S}\sum_k g_k + \lambda w$. Un worker, un hilo o un nodo puede calcular
 solo hace falta **sumar los parciales siempre en el mismo orden de bloque** para que el resultado sea
 idéntico bit a bit (la suma en punto flotante no es asociativa).
 
-## 4.3 Paralelización en Go dentro de un nodo
+## 7.3 Paralelización en Go dentro de un nodo
 
 | Patrón | Dónde | Para qué |
 |---|---|---|
@@ -364,10 +370,12 @@ idéntico bit a bit (la suma en punto flotante no es asociativa).
 | Barrera | ` + "`sync.WaitGroup`" + ` | Espera los {{.S.Bloques}} bloques de la época antes de reducir |
 | *Fan-in* ordenado | ` + "`ml.ReducirEnOrden`" + ` | Un solo goroutine suma en orden de bloque → determinismo |
 
+![Worker pool del gradiente: reparto de bloques, acumuladores privados y reducción en orden](fig/worker_pool.svg)
+
 El gradiente del pool es **{{if .E.Equivale}}idéntico{{else}}DISTINTO{{end}} bit a bit** al secuencial
 sobre los datos reales (verificado por ` + "`cmd/entrenar`" + `); ` + "`TestEquivalencia`" + ` lo exige con 1 a 64 workers.
 
-## 4.4 Distribución en el clúster (diseño para PC4)
+## 7.4 Distribución en el clúster (diseño para PC4)
 
 El entrenamiento de {{miles .S.Train.Filas}} filas se reparte en **{{len .S.Shards}} shards** de bloques
 contiguos ({{.S.TamBloque}} filas por bloque, {{.S.Bloques}} bloques):
@@ -382,15 +390,15 @@ En cada época el coordinador (parameter server) envía los pesos a los nodos po
 con su worker pool los parciales de sus bloques y los devuelve; el coordinador los concatena **en orden
 de shard** (que es el orden global de bloque), aplica ` + "`Finalizar`" + ` y actualiza los pesos. El test
 ` + "`TestShardsReproducenElGradienteGlobal`" + ` comprueba que con 1, 2, 3, 5 u 8 shards el gradiente es
-idéntico bit a bit al secuencial. El protocolo TCP se define en #9 (ADR pendiente).
+idéntico bit a bit al secuencial. El protocolo TCP y su verificación formal se describen en la sección 8.
 
-## 4.5 Resultados del entrenamiento
+## 7.5 Resultados del entrenamiento
 
-Descenso de gradiente *full-batch*: {{.E.Epocas}} épocas, tasa {{.E.Tasa}}, {{.E.Workers}} workers,
+Descenso de gradiente *full-batch*: {{.E.Epocas}} épocas, tasa {{num .E.Tasa}}, {{.E.Workers}} workers,
 {{dos .E.SegTotal}} s ({{ms .E.SegEpoca}} ms por época). Pérdida: {{cuatro (index .E.Historia 0)}} →
 {{cuatro (ultimo .E.Historia)}}.
 
-| Métrica (prueba, umbral {{.E.Test.Umbral}}) | Valor |
+| Métrica (prueba, umbral {{num .E.Test.Umbral}}) | Valor |
 |---|---:|
 | AUC-ROC | {{cuatro .E.Test.AUC}} |
 | Recall (sensibilidad) | {{tres .E.Test.Recall}} |
@@ -411,7 +419,7 @@ datos abiertos disponibles, declarada y aceptada (ADR-0003).
 | ` + "`{{$c.Variable}}`" + ` | {{signo $c.Peso}} | {{dos $c.RazonOdds}} |
 {{- end}}{{end}}
 
-## 4.6 Primera respuesta a la pregunta de impacto social
+## 7.6 Primera respuesta a la pregunta de impacto social
 
 Riesgo de dengue con signos de alarma o grave en el conjunto de prueba. El riesgo calibrado corrige el
 efecto de los pesos por clase (corrección de prior, King y Zeng, 2001) para que esté en la escala real.
@@ -422,13 +430,26 @@ efecto de los pesos por clase (corrección de prior, King y Zeng, 2001) para que
 | {{$g.Grupo}} | {{miles $g.Casos}} | {{pct $g.Obs}} % | {{pct $g.Calib}} % |
 {{- end}}{{end}}
 
+![Riesgo calibrado y tasa observada por departamento (conjunto de prueba)](fig/riesgo_departamento.svg)
+
 | Etapa de vida | Casos (prueba) | Tasa observada | Riesgo calibrado |
 |---|---:|---:|---:|
 {{- range .E.PorEtapa}}
-| {{.Grupo}} | {{miles .Casos}} | {{pct .Obs}} % | {{pct .Calib}} % |
+| {{etapa .Grupo}} | {{miles .Casos}} | {{pct .Obs}} % | {{pct .Calib}} % |
 {{- end}}
 
-## 4.7 Speedup del cálculo del gradiente
+**Por semana epidemiológica**, el volumen y el riesgo por caso no coinciden en el tiempo. Los casos con
+signos de alarma o grave se concentran en las semanas {{semanas (picosCasos .E.PorSemana)}}, que es
+cuando más camas se necesitan. En cambio, la proporción de casos que se agravan es mayor fuera de esa
+temporada: el riesgo calibrado más alto se da en las semanas {{semanas (picosRiesgo .E.PorSemana)}}
+({{pct (riesgoMax .E.PorSemana)}} % frente a {{pct (riesgoMin .E.PorSemana)}} % en la semana de menor
+riesgo), así que la vigilancia clínica debe mantenerse activa también al inicio y al final de la
+temporada. Parte de esta diferencia puede deberse a que, fuera de la temporada alta, se notifican sobre
+todo los casos más evidentes. La semana 53, que existe en algunos años, se cuenta junto con la semana 1.
+
+![Casos con signos de alarma o grave y riesgo por semana epidemiológica (conjunto de prueba)](fig/riesgo_semana.svg)
+
+## 7.7 Speedup del cálculo del gradiente
 {{range .Bench}}
 **{{.Maquina.CPU}}** · {{.Maquina.NumCPU}} CPU lógicas · {{.Maquina.SO}} (` + "`{{.Archivo}}`" + `; {{.Fuente}})
 
@@ -446,13 +467,14 @@ Punto de equilibrio con {{.WorkersEq}} workers{{if .FilasEq}}: la concurrencia c
 | {{miles .Filas}} | {{.Bloques}} | {{ms .Sec}} | {{ms .Conc}} | {{dos .Speedup}}× |
 {{- end}}
 {{end}}
+![Speedup del cálculo del gradiente según el número de workers](fig/speedup_gradiente.svg)
 `
 
 func main() {
 	var p perfil
 	leer("reports/perfil_bronze.json", &p)
 	slices.Sort(p.Anos)
-	escribir("docs/informe/pc3/02-datos.md", plantillaDatos, p)
+	escribir("docs/informe/pc3/05-datos.md", plantillaDatos, p)
 
 	var l limpieza
 	leer("reports/limpieza.json", &l)
@@ -464,7 +486,7 @@ func main() {
 		b.Archivo = filepath.Base(a)
 		l.Bench = append(l.Bench, b)
 	}
-	escribir("docs/informe/pc3/03-limpieza.md", plantillaLimpieza, l)
+	escribir("docs/informe/pc3/06-limpieza.md", plantillaLimpieza, l)
 
 	var m modelo
 	leer("reports/split.json", &m.S)
@@ -477,7 +499,67 @@ func main() {
 		b.Archivo = filepath.Base(a)
 		m.Bench = append(m.Bench, b)
 	}
-	escribir("docs/informe/pc3/04-modelo.md", plantillaModelo, m)
+	escribir("docs/informe/pc3/07-modelo.md", plantillaModelo, m)
+
+	s := calcularSintesis(p, l, m)
+	escribir("docs/informe/pc3/01-resumen.md", plantillaResumen, s)
+	escribir("docs/informe/pc3/10-conclusiones.md", plantillaConclusiones, s)
+
+	escribirFigura("docs/informe/pc3/fig/casos_por_ano.svg", figuraCasosPorAno(p))
+	escribirFigura("docs/informe/pc3/fig/riesgo_departamento.svg", figuraRiesgoDepto(m.E))
+	escribirFigura("docs/informe/pc3/fig/riesgo_semana.svg", figuraRiesgoSemana(m.E))
+	escribirFigura("docs/informe/pc3/fig/speedup_gradiente.svg",
+		figuraSpeedup("Speedup del cálculo del gradiente", curvasGradiente(m.Bench)))
+	escribirFigura("docs/informe/pc3/fig/speedup_loader.svg",
+		figuraSpeedup("Speedup de la limpieza concurrente", curvasLoader(l.Bench)))
+}
+
+// curvasGradiente toma, por máquina y sistema operativo, la medición sobre el
+// gold real si existe (si no, la del sintético), en orden de archivo.
+func curvasGradiente(bs []benchGrad) []curvaSpeedup {
+	elegido := map[string]benchGrad{}
+	var orden []string
+	for _, b := range bs {
+		k := b.Maquina.CPU + "|" + b.Maquina.SO + "|" + fmt.Sprint(b.Maquina.NumCPU)
+		previo, ok := elegido[k]
+		if !ok {
+			orden = append(orden, k)
+		}
+		if !ok || (strings.HasPrefix(b.Fuente, "gold") && !strings.HasPrefix(previo.Fuente, "gold")) {
+			elegido[k] = b
+		}
+	}
+	var cs []curvaSpeedup
+	for _, k := range orden {
+		b := elegido[k]
+		datos := "sintético"
+		if strings.HasPrefix(b.Fuente, "gold") {
+			datos = "gold real"
+		}
+		c := curvaSpeedup{Nombre: nombreMaquina(b.Maquina.CPU, b.Maquina.NumCPU, b.Maquina.SO) + " · " + datos}
+		for _, x := range b.Mediciones {
+			if x.Config == "secuencial" {
+				continue
+			}
+			c.Workers = append(c.Workers, x.Workers)
+			c.Speedup = append(c.Speedup, x.Speedup)
+		}
+		cs = append(cs, c)
+	}
+	return cs
+}
+
+func curvasLoader(bs []benchLoader) []curvaSpeedup {
+	var cs []curvaSpeedup
+	for _, b := range bs {
+		c := curvaSpeedup{Nombre: nombreMaquina(b.Maquina.CPU, b.Maquina.NumCPU, b.Maquina.SO)}
+		for _, x := range b.Mediciones {
+			c.Workers = append(c.Workers, x.Workers)
+			c.Speedup = append(c.Speedup, x.Speedup)
+		}
+		cs = append(cs, c)
+	}
+	return cs
 }
 
 var funciones = template.FuncMap{

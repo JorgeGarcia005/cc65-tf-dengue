@@ -1,0 +1,81 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="800" height="340" viewBox="0 0 800 340" font-family="Arial, Helvetica, sans-serif">
+<title>Worker pool del gradiente dentro de un nodo</title>
+<defs>
+  <marker id="f" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+    <path d="M0,0 L10,5 L0,10 z" fill="#52514e"/>
+  </marker>
+</defs>
+<rect width="800" height="340" fill="#ffffff"/>
+
+<g font-size="12" fill="#0b0b0b" text-anchor="middle">
+  <!-- Bloques -->
+  <text x="70" y="28" font-weight="bold">Bloques del shard</text>
+  <text x="70" y="44" font-size="11" fill="#52514e">límites fijos</text>
+  <g fill="#f0efec" stroke="#52514e" stroke-width="1">
+    <rect x="40" y="56" width="60" height="26" rx="3"/>
+    <rect x="40" y="88" width="60" height="26" rx="3"/>
+    <rect x="40" y="120" width="60" height="26" rx="3"/>
+    <rect x="40" y="152" width="60" height="26" rx="3"/>
+    <rect x="40" y="216" width="60" height="26" rx="3"/>
+  </g>
+  <text x="70" y="74">0</text><text x="70" y="106">1</text><text x="70" y="138">2</text><text x="70" y="170">3</text>
+  <text x="70" y="200" fill="#52514e">⋮</text><text x="70" y="234">K−1</text>
+
+  <!-- Canal -->
+  <rect x="140" y="120" width="120" height="44" rx="22" fill="#ffffff" stroke="#52514e" stroke-width="1.5"/>
+  <text x="200" y="139" font-weight="bold">tareas</text>
+  <text x="200" y="155" font-size="11">chan int (fan-out)</text>
+
+  <!-- Workers -->
+  <g>
+    <rect x="300" y="40" width="150" height="50" rx="6" fill="#cde2fb" stroke="#2a78d6" stroke-width="2"/>
+    <text x="375" y="61" font-weight="bold">worker 1</text><text x="375" y="78" font-size="11">búfer privado</text>
+    <rect x="300" y="104" width="150" height="50" rx="6" fill="#cde2fb" stroke="#2a78d6" stroke-width="2"/>
+    <text x="375" y="125" font-weight="bold">worker 2</text><text x="375" y="142" font-size="11">búfer privado</text>
+    <text x="375" y="180" fill="#52514e">⋮</text>
+    <rect x="300" y="196" width="150" height="50" rx="6" fill="#cde2fb" stroke="#2a78d6" stroke-width="2"/>
+    <text x="375" y="217" font-weight="bold">worker W</text><text x="375" y="234" font-size="11">búfer privado</text>
+  </g>
+
+  <!-- Slots -->
+  <text x="555" y="28" font-weight="bold">parciales[k]</text>
+  <text x="555" y="44" font-size="11" fill="#52514e">un slot por bloque</text>
+  <g fill="#ffffff" stroke="#2a78d6" stroke-width="1.5">
+    <rect x="510" y="56" width="90" height="26" rx="3"/>
+    <rect x="510" y="88" width="90" height="26" rx="3"/>
+    <rect x="510" y="120" width="90" height="26" rx="3"/>
+    <rect x="510" y="152" width="90" height="26" rx="3"/>
+    <rect x="510" y="216" width="90" height="26" rx="3"/>
+  </g>
+  <text x="555" y="74">g₀</text><text x="555" y="106">g₁</text><text x="555" y="138">g₂</text><text x="555" y="170">g₃</text>
+  <text x="555" y="200" fill="#52514e">⋮</text><text x="555" y="234">g_K−1</text>
+
+  <!-- Reducción -->
+  <rect x="640" y="104" width="145" height="76" rx="6" fill="#cde2fb" stroke="#2a78d6" stroke-width="2"/>
+  <text x="712" y="128" font-weight="bold">ReducirEnOrden</text>
+  <text x="712" y="145" font-size="11">((g₀+g₁)+g₂)+…</text>
+  <text x="712" y="162" font-size="11">1 goroutine (fan-in)</text>
+  <rect x="640" y="214" width="145" height="40" rx="6" fill="#f0efec" stroke="#52514e" stroke-width="1.5"/>
+  <text x="712" y="239">Finalizar → ∇L(w)</text>
+</g>
+
+<g stroke="#52514e" stroke-width="1.5" fill="none">
+  <line x1="100" y1="142" x2="138" y2="142" marker-end="url(#f)"/>
+  <line x1="260" y1="134" x2="298" y2="68" marker-end="url(#f)"/>
+  <line x1="260" y1="142" x2="298" y2="130" marker-end="url(#f)"/>
+  <line x1="260" y1="150" x2="298" y2="218" marker-end="url(#f)"/>
+  <line x1="450" y1="65" x2="508" y2="69" marker-end="url(#f)"/>
+  <line x1="450" y1="129" x2="508" y2="133" marker-end="url(#f)"/>
+  <line x1="450" y1="221" x2="508" y2="229" marker-end="url(#f)"/>
+  <line x1="600" y1="142" x2="638" y2="142" marker-end="url(#f)"/>
+  <line x1="712" y1="180" x2="712" y2="212" marker-end="url(#f)"/>
+</g>
+
+<!-- Barrera -->
+<line x1="480" y1="36" x2="480" y2="262" stroke="#eb6834" stroke-width="2" stroke-dasharray="6 4"/>
+<g font-size="11" fill="#0b0b0b">
+  <text x="420" y="282" text-anchor="middle">sync.WaitGroup: barrera de fin de época</text>
+  <text x="20" y="312">Cada bloque lo procesa un solo worker y escribe solo en su slot: no hay estado compartido mutable ni mutex en la parte</text>
+  <text x="20" y="328">caliente. La suma en orden de índice de bloque hace que el resultado sea idéntico bit a bit con cualquier número de workers.</text>
+</g>
+</svg>

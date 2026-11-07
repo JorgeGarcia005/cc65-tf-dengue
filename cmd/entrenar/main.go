@@ -32,6 +32,7 @@ type coeficiente struct {
 
 type grupo struct {
 	Grupo         string  `json:"grupo"`
+	Semana        int     `json:"semana,omitempty"`
 	Casos         int     `json:"casos_test"`
 	TasaObservada float64 `json:"tasa_observada"`
 	RiesgoMedio   float64 `json:"riesgo_predicho_medio"`
@@ -60,6 +61,7 @@ type reporte struct {
 	Coeficientes []coeficiente     `json:"coeficientes_por_magnitud"`
 	PorDepto     []grupo           `json:"riesgo_por_departamento"`
 	PorEtapa     []grupo           `json:"riesgo_por_etapa_de_vida"`
+	PorSemana    []grupo           `json:"riesgo_por_semana_epidemiologica"`
 	AjustePrior  float64           `json:"ajuste_prior_ln_pesopos_sobre_pesoneg"`
 	Esquema      *features.Esquema `json:"esquema"`
 }
@@ -130,6 +132,7 @@ func main() {
 	rep.AjustePrior = ajuste
 	rep.PorDepto = agrupar(test.Dataset, test.Y, pTest, esq, "depto_", ajuste)
 	rep.PorEtapa = agrupar(test.Dataset, test.Y, pTest, esq, "etapa_", ajuste)
+	rep.PorSemana = agruparPorSemana(test.Dataset, test.Y, pTest, esq.Indice("semana_sin"), esq.Indice("semana_cos"), ajuste)
 
 	escribirJSON(*salida, rep)
 	escribirJSON(*modelo, map[string]any{"pesos": res.W, "esquema": &esq, "umbral": *umbral,
@@ -185,6 +188,34 @@ func agrupar(ds *ml.Dataset, y, p []float64, esq features.Esquema, prefijo strin
 		out = append(out, g)
 	}
 	slices.SortFunc(out, func(a, b grupo) int { return cmp.Compare(b.RiesgoMedio, a.RiesgoMedio) })
+	return out
+}
+
+// agruparPorSemana resume riesgo observado y predicho por semana epidemiológica.
+// La semana no es one-hot sino (seno, coseno), así que se recupera de esas dos
+// columnas. Devuelve solo las semanas con casos, en orden 1..52.
+func agruparPorSemana(ds *ml.Dataset, y, p []float64, jSin, jCos int, ajuste float64) []grupo {
+	var casos [53]int
+	var obs, pred, cal [53]float64
+	for i := 0; i < ds.N; i++ {
+		x := ds.Fila(i)
+		s := features.SemanaDeAngulo(x[jSin], x[jCos])
+		casos[s]++
+		obs[s] += y[i]
+		pred[s] += p[i]
+		cal[s] += Calibrar(p[i], ajuste)
+	}
+	var out []grupo
+	for s := 1; s <= 52; s++ {
+		if casos[s] == 0 {
+			continue
+		}
+		n := float64(casos[s])
+		out = append(out, grupo{
+			Grupo: fmt.Sprintf("semana_%02d", s), Semana: s, Casos: casos[s],
+			TasaObservada: obs[s] / n, RiesgoMedio: pred[s] / n, RiesgoCalib: cal[s] / n,
+		})
+	}
 	return out
 }
 

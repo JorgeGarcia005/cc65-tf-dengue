@@ -3,7 +3,7 @@ SHELL := /bin/bash
 
 GO_FILES := $(shell find . -name '*.go' -not -path './web/*' -not -path './.git/*' 2>/dev/null)
 
-.PHONY: check fmt vet test skills data bench bench-api
+.PHONY: check fmt vet test skills data bench bench-api informe
 
 ## check: todo lo que el CI exige antes de abrir un PR
 check: skills fmt vet test
@@ -36,3 +36,9 @@ bench:
 
 bench-api:
 	@go run ./cmd/benchapi
+
+## informe: secciones con cifras, figuras y el Word (requiere entregables/plantilla.docx)
+informe:
+	@go run ./cmd/informe
+	@go run ./cmd/word
+	@echo "Con Word instalado: powershell -ExecutionPolicy Bypass -File scripts/word-final.ps1"

@@ -34,3 +34,6 @@ Thumbs.db
 
 # Informe: borradores temporales de Word
 ~$*.docx
+
+# Informes en Word generados por cmd/word (y su plantilla): se entregan por el Aula Virtual
+entregables/

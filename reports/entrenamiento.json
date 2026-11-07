@@ -1,6 +1,6 @@
 {
-  "generado": "2026-10-24T16:10:58-05:00",
-  "workers": 2,
+  "generado": "2026-11-05T03:44:39-05:00",
+  "workers": 16,
   "epocas": 600,
   "tasa_aprendizaje": 2,
   "lambda": 0.0001,
@@ -10,8 +10,8 @@
   "filas_test": 190819,
   "variables": 31,
   "gradiente_pool_igual_al_secuencial": true,
-  "seg_entrenamiento": 36.916598259,
-  "seg_por_epoca": 0.061527663765,
+  "seg_entrenamiento": 3.8333456999999997,
+  "seg_por_epoca": 0.0063889095,
   "perdida_por_epoca": [
     0.6931471805600504,
     0.6863137620874651,
@@ -1013,6 +1013,424 @@
       "tasa_observada": 0.11107091172214183,
       "riesgo_predicho_medio": 0.4502812819844824,
       "riesgo_calibrado_medio": 0.11080968633413081
+    }
+  ],
+  "riesgo_por_semana_epidemiologica": [
+    {
+      "grupo": "semana_01",
+      "semana": 1,
+      "casos_test": 2580,
+      "tasa_observada": 0.18410852713178294,
+      "riesgo_predicho_medio": 0.5555892591745227,
+      "riesgo_calibrado_medio": 0.1599950136207928
+    },
+    {
+      "grupo": "semana_02",
+      "semana": 2,
+      "casos_test": 2397,
+      "tasa_observada": 0.164372131831456,
+      "riesgo_predicho_medio": 0.5583775099447457,
+      "riesgo_calibrado_medio": 0.16196364808212363
+    },
+    {
+      "grupo": "semana_03",
+      "semana": 3,
+      "casos_test": 2894,
+      "tasa_observada": 0.14236351071181755,
+      "riesgo_predicho_medio": 0.5517317057484741,
+      "riesgo_calibrado_medio": 0.15902203783625676
+    },
+    {
+      "grupo": "semana_04",
+      "semana": 4,
+      "casos_test": 2786,
+      "tasa_observada": 0.17336683417085427,
+      "riesgo_predicho_medio": 0.5404732344540325,
+      "riesgo_calibrado_medio": 0.1533832285242506
+    },
+    {
+      "grupo": "semana_05",
+      "semana": 5,
+      "casos_test": 3085,
+      "tasa_observada": 0.15915721231766614,
+      "riesgo_predicho_medio": 0.5289107544977496,
+      "riesgo_calibrado_medio": 0.14755982635380335
+    },
+    {
+      "grupo": "semana_06",
+      "semana": 6,
+      "casos_test": 3692,
+      "tasa_observada": 0.14653304442036835,
+      "riesgo_predicho_medio": 0.5094701508550179,
+      "riesgo_calibrado_medio": 0.138997449642254
+    },
+    {
+      "grupo": "semana_07",
+      "semana": 7,
+      "casos_test": 3889,
+      "tasa_observada": 0.1396245821547956,
+      "riesgo_predicho_medio": 0.4820920778103161,
+      "riesgo_calibrado_medio": 0.12650359658251145
+    },
+    {
+      "grupo": "semana_08",
+      "semana": 8,
+      "casos_test": 4518,
+      "tasa_observada": 0.1341301460823373,
+      "riesgo_predicho_medio": 0.4713470532160208,
+      "riesgo_calibrado_medio": 0.12161968277709445
+    },
+    {
+      "grupo": "semana_09",
+      "semana": 9,
+      "casos_test": 5210,
+      "tasa_observada": 0.13128598848368522,
+      "riesgo_predicho_medio": 0.4525228637283725,
+      "riesgo_calibrado_medio": 0.1130713491403802
+    },
+    {
+      "grupo": "semana_10",
+      "semana": 10,
+      "casos_test": 5740,
+      "tasa_observada": 0.12020905923344948,
+      "riesgo_predicho_medio": 0.44826379121483534,
+      "riesgo_calibrado_medio": 0.11106875120339342
+    },
+    {
+      "grupo": "semana_11",
+      "semana": 11,
+      "casos_test": 6545,
+      "tasa_observada": 0.11428571428571428,
+      "riesgo_predicho_medio": 0.4426967126658427,
+      "riesgo_calibrado_medio": 0.10810087640164338
+    },
+    {
+      "grupo": "semana_12",
+      "semana": 12,
+      "casos_test": 6675,
+      "tasa_observada": 0.10651685393258427,
+      "riesgo_predicho_medio": 0.44050599447973143,
+      "riesgo_calibrado_medio": 0.10686102672987233
+    },
+    {
+      "grupo": "semana_13",
+      "semana": 13,
+      "casos_test": 6659,
+      "tasa_observada": 0.10497071632377233,
+      "riesgo_predicho_medio": 0.43778106640905734,
+      "riesgo_calibrado_medio": 0.10561869984993126
+    },
+    {
+      "grupo": "semana_14",
+      "semana": 14,
+      "casos_test": 8040,
+      "tasa_observada": 0.09925373134328358,
+      "riesgo_predicho_medio": 0.43510833560274476,
+      "riesgo_calibrado_medio": 0.10398496221115705
+    },
+    {
+      "grupo": "semana_15",
+      "semana": 15,
+      "casos_test": 8689,
+      "tasa_observada": 0.10323397399010242,
+      "riesgo_predicho_medio": 0.43802486964581505,
+      "riesgo_calibrado_medio": 0.10508499940430666
+    },
+    {
+      "grupo": "semana_16",
+      "semana": 16,
+      "casos_test": 9405,
+      "tasa_observada": 0.09984051036682616,
+      "riesgo_predicho_medio": 0.43993905583594833,
+      "riesgo_calibrado_medio": 0.10564384326760097
+    },
+    {
+      "grupo": "semana_17",
+      "semana": 17,
+      "casos_test": 8422,
+      "tasa_observada": 0.09665162669199714,
+      "riesgo_predicho_medio": 0.4427904305394677,
+      "riesgo_calibrado_medio": 0.10659581409741316
+    },
+    {
+      "grupo": "semana_18",
+      "semana": 18,
+      "casos_test": 8670,
+      "tasa_observada": 0.1041522491349481,
+      "riesgo_predicho_medio": 0.44916307786373544,
+      "riesgo_calibrado_medio": 0.10899997352929355
+    },
+    {
+      "grupo": "semana_19",
+      "semana": 19,
+      "casos_test": 8690,
+      "tasa_observada": 0.1042577675489068,
+      "riesgo_predicho_medio": 0.4544030222005473,
+      "riesgo_calibrado_medio": 0.11099320758012175
+    },
+    {
+      "grupo": "semana_20",
+      "semana": 20,
+      "casos_test": 8764,
+      "tasa_observada": 0.10429027841168416,
+      "riesgo_predicho_medio": 0.46411850791934334,
+      "riesgo_calibrado_medio": 0.11454936129608727
+    },
+    {
+      "grupo": "semana_21",
+      "semana": 21,
+      "casos_test": 7191,
+      "tasa_observada": 0.114726741760534,
+      "riesgo_predicho_medio": 0.46952217517763883,
+      "riesgo_calibrado_medio": 0.11681630194926616
+    },
+    {
+      "grupo": "semana_22",
+      "semana": 22,
+      "casos_test": 6481,
+      "tasa_observada": 0.11618577380033945,
+      "riesgo_predicho_medio": 0.4773521428467971,
+      "riesgo_calibrado_medio": 0.11997200306264588
+    },
+    {
+      "grupo": "semana_23",
+      "semana": 23,
+      "casos_test": 5505,
+      "tasa_observada": 0.13823796548592188,
+      "riesgo_predicho_medio": 0.48286726284908627,
+      "riesgo_calibrado_medio": 0.12226759902296705
+    },
+    {
+      "grupo": "semana_24",
+      "semana": 24,
+      "casos_test": 4472,
+      "tasa_observada": 0.13774597495527727,
+      "riesgo_predicho_medio": 0.48407981489072427,
+      "riesgo_calibrado_medio": 0.12282563258204302
+    },
+    {
+      "grupo": "semana_25",
+      "semana": 25,
+      "casos_test": 3714,
+      "tasa_observada": 0.14243403338718363,
+      "riesgo_predicho_medio": 0.49193485576347323,
+      "riesgo_calibrado_medio": 0.12634546789786913
+    },
+    {
+      "grupo": "semana_26",
+      "semana": 26,
+      "casos_test": 2965,
+      "tasa_observada": 0.14536256323777402,
+      "riesgo_predicho_medio": 0.5010095669398694,
+      "riesgo_calibrado_medio": 0.13119933973238265
+    },
+    {
+      "grupo": "semana_27",
+      "semana": 27,
+      "casos_test": 2703,
+      "tasa_observada": 0.13947465778764337,
+      "riesgo_predicho_medio": 0.5020828032315906,
+      "riesgo_calibrado_medio": 0.13140412412361663
+    },
+    {
+      "grupo": "semana_28",
+      "semana": 28,
+      "casos_test": 2414,
+      "tasa_observada": 0.1491300745650373,
+      "riesgo_predicho_medio": 0.5006593877620745,
+      "riesgo_calibrado_medio": 0.1312072385555712
+    },
+    {
+      "grupo": "semana_29",
+      "semana": 29,
+      "casos_test": 2127,
+      "tasa_observada": 0.14339445228020686,
+      "riesgo_predicho_medio": 0.5067230290230839,
+      "riesgo_calibrado_medio": 0.1339069438756139
+    },
+    {
+      "grupo": "semana_30",
+      "semana": 30,
+      "casos_test": 1529,
+      "tasa_observada": 0.14650098103335513,
+      "riesgo_predicho_medio": 0.5146778018859202,
+      "riesgo_calibrado_medio": 0.13812907965993965
+    },
+    {
+      "grupo": "semana_31",
+      "semana": 31,
+      "casos_test": 1692,
+      "tasa_observada": 0.1453900709219858,
+      "riesgo_predicho_medio": 0.5176686198243553,
+      "riesgo_calibrado_medio": 0.1397983800424719
+    },
+    {
+      "grupo": "semana_32",
+      "semana": 32,
+      "casos_test": 1540,
+      "tasa_observada": 0.1487012987012987,
+      "riesgo_predicho_medio": 0.514586015350108,
+      "riesgo_calibrado_medio": 0.13816737647290744
+    },
+    {
+      "grupo": "semana_33",
+      "semana": 33,
+      "casos_test": 1554,
+      "tasa_observada": 0.15444015444015444,
+      "riesgo_predicho_medio": 0.5303344025283196,
+      "riesgo_calibrado_medio": 0.14590293762011253
+    },
+    {
+      "grupo": "semana_34",
+      "semana": 34,
+      "casos_test": 1420,
+      "tasa_observada": 0.14788732394366197,
+      "riesgo_predicho_medio": 0.5326854204739636,
+      "riesgo_calibrado_medio": 0.14759741629798653
+    },
+    {
+      "grupo": "semana_35",
+      "semana": 35,
+      "casos_test": 1214,
+      "tasa_observada": 0.14909390444810544,
+      "riesgo_predicho_medio": 0.5300976547493714,
+      "riesgo_calibrado_medio": 0.1463102990697877
+    },
+    {
+      "grupo": "semana_36",
+      "semana": 36,
+      "casos_test": 1233,
+      "tasa_observada": 0.13381995133819952,
+      "riesgo_predicho_medio": 0.537673280383786,
+      "riesgo_calibrado_medio": 0.15059342698436665
+    },
+    {
+      "grupo": "semana_37",
+      "semana": 37,
+      "casos_test": 1173,
+      "tasa_observada": 0.15515771526001704,
+      "riesgo_predicho_medio": 0.5443215242590406,
+      "riesgo_calibrado_medio": 0.1543008979734481
+    },
+    {
+      "grupo": "semana_38",
+      "semana": 38,
+      "casos_test": 1124,
+      "tasa_observada": 0.15658362989323843,
+      "riesgo_predicho_medio": 0.5481952510644958,
+      "riesgo_calibrado_medio": 0.15612945091576172
+    },
+    {
+      "grupo": "semana_39",
+      "semana": 39,
+      "casos_test": 1134,
+      "tasa_observada": 0.12874779541446207,
+      "riesgo_predicho_medio": 0.5552077356487772,
+      "riesgo_calibrado_medio": 0.16027131911640322
+    },
+    {
+      "grupo": "semana_40",
+      "semana": 40,
+      "casos_test": 1150,
+      "tasa_observada": 0.13826086956521738,
+      "riesgo_predicho_medio": 0.5503908854770734,
+      "riesgo_calibrado_medio": 0.15824885554435456
+    },
+    {
+      "grupo": "semana_41",
+      "semana": 41,
+      "casos_test": 1195,
+      "tasa_observada": 0.1489539748953975,
+      "riesgo_predicho_medio": 0.5478193518721242,
+      "riesgo_calibrado_medio": 0.15799475093619406
+    },
+    {
+      "grupo": "semana_42",
+      "semana": 42,
+      "casos_test": 1279,
+      "tasa_observada": 0.12587959343236904,
+      "riesgo_predicho_medio": 0.5534232038091498,
+      "riesgo_calibrado_medio": 0.1608298470474099
+    },
+    {
+      "grupo": "semana_43",
+      "semana": 43,
+      "casos_test": 1295,
+      "tasa_observada": 0.13667953667953667,
+      "riesgo_predicho_medio": 0.5543980408433352,
+      "riesgo_calibrado_medio": 0.16144501826616445
+    },
+    {
+      "grupo": "semana_44",
+      "semana": 44,
+      "casos_test": 1424,
+      "tasa_observada": 0.14957865168539325,
+      "riesgo_predicho_medio": 0.5619884372100888,
+      "riesgo_calibrado_medio": 0.164430767576969
+    },
+    {
+      "grupo": "semana_45",
+      "semana": 45,
+      "casos_test": 1944,
+      "tasa_observada": 0.15637860082304528,
+      "riesgo_predicho_medio": 0.5699142265738556,
+      "riesgo_calibrado_medio": 0.1686958137416482
+    },
+    {
+      "grupo": "semana_46",
+      "semana": 46,
+      "casos_test": 2251,
+      "tasa_observada": 0.16126166148378498,
+      "riesgo_predicho_medio": 0.5760092144041831,
+      "riesgo_calibrado_medio": 0.17180208441468434
+    },
+    {
+      "grupo": "semana_47",
+      "semana": 47,
+      "casos_test": 2247,
+      "tasa_observada": 0.14419225634178906,
+      "riesgo_predicho_medio": 0.5662167572479494,
+      "riesgo_calibrado_medio": 0.16681420045977136
+    },
+    {
+      "grupo": "semana_48",
+      "semana": 48,
+      "casos_test": 2292,
+      "tasa_observada": 0.16143106457242584,
+      "riesgo_predicho_medio": 0.5682833710176313,
+      "riesgo_calibrado_medio": 0.16755327142306703
+    },
+    {
+      "grupo": "semana_49",
+      "semana": 49,
+      "casos_test": 1961,
+      "tasa_observada": 0.1611422743498215,
+      "riesgo_predicho_medio": 0.5646490642156091,
+      "riesgo_calibrado_medio": 0.16575142103816745
+    },
+    {
+      "grupo": "semana_50",
+      "semana": 50,
+      "casos_test": 1881,
+      "tasa_observada": 0.14619883040935672,
+      "riesgo_predicho_medio": 0.560935591995282,
+      "riesgo_calibrado_medio": 0.16318506930499227
+    },
+    {
+      "grupo": "semana_51",
+      "semana": 51,
+      "casos_test": 1759,
+      "tasa_observada": 0.15974985787379192,
+      "riesgo_predicho_medio": 0.5555155856744943,
+      "riesgo_calibrado_medio": 0.1603788024434572
+    },
+    {
+      "grupo": "semana_52",
+      "semana": 52,
+      "casos_test": 1606,
+      "tasa_observada": 0.17247820672478206,
+      "riesgo_predicho_medio": 0.5527936065116797,
+      "riesgo_calibrado_medio": 0.15860869617059797
     }
   ],
   "ajuste_prior_ln_pesopos_sobre_pesoneg": 1.9417367947247934,
