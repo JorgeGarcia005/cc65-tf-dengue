@@ -28,6 +28,7 @@ import (
 
 	"github.com/JorgeGarcia005/cc65-tf-dengue/internal/estadistica"
 	"github.com/JorgeGarcia005/cc65-tf-dengue/internal/ingest"
+	"github.com/JorgeGarcia005/cc65-tf-dengue/internal/maquina"
 )
 
 func main() {
@@ -168,7 +169,7 @@ func medir(cuerpo []byte, tam, reps int, recorte float64, workers []int) {
 		}
 	}
 	rep := repBench{
-		Generado: time.Now().Format(time.RFC3339), Maquina: maquina(), Filas: l.Entradas,
+		Generado: time.Now().Format(time.RFC3339), Maquina: maquina.Describir(), Filas: l.Entradas,
 		Bloques: len(ingest.PartirEnBloques(cuerpo, tam)),
 		Protocolo: map[string]any{
 			"medida":        "limpieza completa en memoria (parseo + reglas + silver), sin lectura de disco",
@@ -188,7 +189,7 @@ func medir(cuerpo []byte, tam, reps int, recorte float64, workers []int) {
 		fmt.Printf("%8d %10.1fms   [%7.1f, %7.1f]ms %8.2fx %9.0f%% %14.0f\n", w, res.MediaRecortada*1e3,
 			res.IC95Inf*1e3, res.IC95Sup*1e3, m.Speedup, 100*m.Eficiencia, m.FilasPorS)
 	}
-	escribirJSON(filepath.Join("reports", "bench_loader_"+host()+".json"), rep)
+	escribirJSON(filepath.Join("reports", "bench_loader_"+maquina.Host()+".json"), rep)
 }
 
 func parsearLista(s string) []int {
@@ -204,30 +205,6 @@ func parsearLista(s string) []int {
 		out = append(out, v)
 	}
 	return out
-}
-
-func maquina() map[string]any {
-	m := map[string]any{"so": runtime.GOOS, "arquitectura": runtime.GOARCH, "go": runtime.Version(),
-		"num_cpu": runtime.NumCPU(), "gomaxprocs": runtime.GOMAXPROCS(0)}
-	if b, err := os.ReadFile("/proc/cpuinfo"); err == nil {
-		for _, l := range strings.Split(string(b), "\n") {
-			if strings.HasPrefix(l, "model name") {
-				m["cpu"] = strings.TrimSpace(strings.SplitN(l, ":", 2)[1])
-				break
-			}
-		}
-	}
-	return m
-}
-
-func host() string {
-	h, _ := os.Hostname()
-	return strings.Map(func(r rune) rune {
-		if r == '-' || r == '_' || (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') {
-			return r
-		}
-		return '-'
-	}, strings.ToLower(h))
 }
 
 func escribirArchivo(ruta string, b []byte) {

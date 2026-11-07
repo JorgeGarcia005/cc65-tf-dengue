@@ -283,6 +283,7 @@ type benchGrad struct {
 	Maquina struct {
 		CPU    string `json:"cpu"`
 		NumCPU int    `json:"num_cpu"`
+		SO     string `json:"so"`
 	} `json:"maquina"`
 	Fuente     string `json:"fuente"`
 	Mediciones []struct {
@@ -429,7 +430,7 @@ efecto de los pesos por clase (corrección de prior, King y Zeng, 2001) para que
 
 ## 4.7 Speedup del cálculo del gradiente
 {{range .Bench}}
-**{{.Maquina.CPU}}** · {{.Maquina.NumCPU}} CPU lógicas (` + "`{{.Archivo}}`" + `; {{.Fuente}})
+**{{.Maquina.CPU}}** · {{.Maquina.NumCPU}} CPU lógicas · {{.Maquina.SO}} (` + "`{{.Archivo}}`" + `; {{.Fuente}})
 
 | Configuración | Workers | Media recortada (ms) | IC 95 % (ms) | Speedup | Eficiencia | Bit a bit |
 |---|---:|---:|---|---:|---:|:---:|

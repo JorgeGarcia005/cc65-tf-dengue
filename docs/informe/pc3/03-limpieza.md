@@ -59,6 +59,28 @@ campos (misma localidad, semana, edad y sexo). Eliminarlas borraría casos verda
 | 2 | 450,8 | [440,7, 461,6] | 1,67× | 83,37 % | 2 363 204 | ✔ |
 | 4 | 447,0 | [437,6, 457,8] | 1,68× | 42,04 % | 2 383 232 | ✔ |
 
+**AMD Ryzen 7 5800X 8-Core Processor** · 16 CPU lógicas · linux (`bench_loader_deez-wsl-debian.json`)
+
+| Workers | Media recortada (ms) | IC 95 % (ms) | Speedup | Eficiencia | Filas/s | Silver = secuencial |
+|---:|---:|---|---:|---:|---:|:---:|
+| 1 | 546,5 | [541,6, 551,8] | 1,00× | 100,00 % | 1 949 330 | ✔ |
+| 2 | 335,6 | [332,2, 340,8] | 1,63× | 81,41 % | 3 173 906 | ✔ |
+| 4 | 229,8 | [227,4, 232,2] | 2,38× | 59,46 % | 4 636 178 | ✔ |
+| 8 | 181,4 | [179,7, 182,9] | 3,01× | 37,67 % | 5 874 015 | ✔ |
+| 16 | 168,4 | [167,2, 169,8] | 3,25× | 20,28 % | 6 326 025 | ✔ |
+| 32 | 168,5 | [166,8, 170,4] | 3,24× | 10,14 % | 6 323 930 | ✔ |
+
+**AMD Ryzen 7 5800X 8-Core Processor** · 16 CPU lógicas · windows (`bench_loader_deez.json`)
+
+| Workers | Media recortada (ms) | IC 95 % (ms) | Speedup | Eficiencia | Filas/s | Silver = secuencial |
+|---:|---:|---|---:|---:|---:|:---:|
+| 1 | 558,3 | [545,6, 574,3] | 1,00× | 100,00 % | 1 907 933 | ✔ |
+| 2 | 390,1 | [381,4, 406,9] | 1,43× | 71,56 % | 2 730 632 | ✔ |
+| 4 | 256,9 | [250,4, 265,5] | 2,17× | 54,33 % | 4 146 622 | ✔ |
+| 8 | 188,3 | [182,7, 195,0] | 2,96× | 37,06 % | 5 656 414 | ✔ |
+| 16 | 160,5 | [152,9, 171,6] | 3,48× | 21,74 % | 6 636 323 | ✔ |
+| 32 | 157,6 | [149,7, 168,4] | 3,54× | 11,07 % | 6 759 067 | ✔ |
+
 Protocolo: limpieza completa en memoria (sin lectura de disco), un calentamiento, repeticiones
 en orden barajado, `runtime.GC()` antes de cada medición, media recortada al 10 % e intervalo
 de confianza por bootstrap.
