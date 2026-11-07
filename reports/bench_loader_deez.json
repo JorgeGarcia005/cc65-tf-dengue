@@ -1,0 +1,131 @@
+{
+  "generado": "2026-11-05T00:02:24-05:00",
+  "maquina": {
+    "arquitectura": "amd64",
+    "cpu": "AMD Ryzen 7 5800X 8-Core Processor",
+    "go": "go1.26.10",
+    "gomaxprocs": 16,
+    "num_cpu": 16,
+    "so": "windows"
+  },
+  "protocolo": {
+    "calentamiento": 1,
+    "estimador": "media recortada 10 % + IC95 bootstrap",
+    "gc": "runtime.GC() antes de cada medición",
+    "medida": "limpieza completa en memoria (parseo + reglas + silver), sin lectura de disco",
+    "orden": "barajado por repetición",
+    "repeticiones": 20
+  },
+  "filas": 1065274,
+  "bloques": 113,
+  "mediciones": [
+    {
+      "workers": 1,
+      "segundos": {
+        "n": 20,
+        "media_recortada": 0.5583391875,
+        "recorte": 0.1,
+        "mediana": 0.55084015,
+        "desviacion": 0.03032718350551982,
+        "min": 0.5275462,
+        "max": 0.6239074,
+        "ic95_inf": 0.5455720275,
+        "ic95_sup": 0.5742564674999998
+      },
+      "speedup": 1,
+      "eficiencia": 1,
+      "filas_por_segundo": 1907933.428011445,
+      "silver_igual_al_secuencial": true
+    },
+    {
+      "workers": 2,
+      "segundos": {
+        "n": 20,
+        "media_recortada": 0.39011988124999997,
+        "recorte": 0.1,
+        "mediana": 0.38791355,
+        "desviacion": 0.03938530021427945,
+        "min": 0.3600269,
+        "max": 0.5438132,
+        "ic95_inf": 0.38143590671875005,
+        "ic95_sup": 0.40690548609375
+      },
+      "speedup": 1.4311990091635456,
+      "eficiencia": 0.7155995045817728,
+      "filas_por_segundo": 2730632.431719987,
+      "silver_igual_al_secuencial": true
+    },
+    {
+      "workers": 4,
+      "segundos": {
+        "n": 20,
+        "media_recortada": 0.25690165625,
+        "recorte": 0.1,
+        "mediana": 0.25398509999999996,
+        "desviacion": 0.01775043795573196,
+        "min": 0.2360297,
+        "max": 0.3085608,
+        "ic95_inf": 0.25037900531249996,
+        "ic95_sup": 0.26552336515624997
+      },
+      "speedup": 2.1733576795497984,
+      "eficiencia": 0.5433394198874496,
+      "filas_por_segundo": 4146621.767838447,
+      "silver_igual_al_secuencial": true
+    },
+    {
+      "workers": 8,
+      "segundos": {
+        "n": 20,
+        "media_recortada": 0.18833026874999997,
+        "recorte": 0.1,
+        "mediana": 0.19162915,
+        "desviacion": 0.014261798914531304,
+        "min": 0.1670804,
+        "max": 0.2262784,
+        "ic95_inf": 0.18268762953124998,
+        "ic95_sup": 0.19503121328124998
+      },
+      "speedup": 2.9646810956403953,
+      "eficiencia": 0.3705851369550494,
+      "filas_por_segundo": 5656414.165765906,
+      "silver_igual_al_secuencial": true
+    },
+    {
+      "workers": 16,
+      "segundos": {
+        "n": 20,
+        "media_recortada": 0.16052171875,
+        "recorte": 0.1,
+        "mediana": 0.16065574999999999,
+        "desviacion": 0.020957184249232756,
+        "min": 0.1370863,
+        "max": 0.2150978,
+        "ic95_inf": 0.15292651234375002,
+        "ic95_sup": 0.17159814625000003
+      },
+      "speedup": 3.478278153559828,
+      "eficiencia": 0.21739238459748925,
+      "filas_por_segundo": 6636323.161098722,
+      "silver_igual_al_secuencial": true
+    },
+    {
+      "workers": 32,
+      "segundos": {
+        "n": 20,
+        "media_recortada": 0.15760667500000003,
+        "recorte": 0.1,
+        "mediana": 0.15551715,
+        "desviacion": 0.020395947908431404,
+        "min": 0.139347,
+        "max": 0.212443,
+        "ic95_inf": 0.1497323775,
+        "ic95_sup": 0.16838273046875002
+      },
+      "speedup": 3.5426112980303652,
+      "eficiencia": 0.11070660306344891,
+      "filas_por_segundo": 6759066.51796315,
+      "silver_igual_al_secuencial": true
+    }
+  ]
+}

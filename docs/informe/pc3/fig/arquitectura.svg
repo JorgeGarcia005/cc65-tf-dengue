@@ -1,0 +1,91 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="800" height="440" viewBox="0 0 800 440" font-family="Arial, Helvetica, sans-serif">
+<title>Arquitectura de la solución</title>
+<defs>
+  <marker id="f" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+    <path d="M0,0 L10,5 L0,10 z" fill="#52514e"/>
+  </marker>
+</defs>
+<rect width="800" height="440" fill="#ffffff"/>
+
+<!-- Implementado en PC3: borde azul, relleno claro. Planificado: borde gris discontinuo. -->
+<g font-size="12" fill="#0b0b0b" text-anchor="middle">
+  <!-- Fila de datos -->
+  <rect x="20" y="40" width="130" height="62" rx="6" fill="#f0efec" stroke="#52514e" stroke-width="1.5"/>
+  <text x="85" y="66" font-weight="bold">CSV MINSA</text>
+  <text x="85" y="84">capa bronze</text>
+
+  <rect x="190" y="40" width="170" height="62" rx="6" fill="#cde2fb" stroke="#2a78d6" stroke-width="2"/>
+  <text x="275" y="62" font-weight="bold">A · Loader</text>
+  <text x="275" y="79">worker pool sobre</text>
+  <text x="275" y="94">bloques de bytes</text>
+
+  <rect x="400" y="40" width="140" height="62" rx="6" fill="#f0efec" stroke="#52514e" stroke-width="1.5"/>
+  <text x="470" y="66" font-weight="bold">Silver</text>
+  <text x="470" y="84">CSV limpio y validado</text>
+
+  <rect x="580" y="40" width="190" height="62" rx="6" fill="#cde2fb" stroke="#2a78d6" stroke-width="2"/>
+  <text x="675" y="62" font-weight="bold">Gold + shards</text>
+  <text x="675" y="79">variables, split 80/20,</text>
+  <text x="675" y="94">bloques fijos por shard</text>
+
+  <!-- Nodos ML (cálculo implementado; red en PC4) -->
+  <rect x="598" y="212" width="180" height="76" rx="6" fill="#ffffff" stroke="#2a78d6" stroke-width="1.5"/>
+  <rect x="589" y="204" width="180" height="76" rx="6" fill="#ffffff" stroke="#2a78d6" stroke-width="1.5"/>
+  <rect x="580" y="196" width="180" height="76" rx="6" fill="#cde2fb" stroke="#2a78d6" stroke-width="2"/>
+  <text x="670" y="218" font-weight="bold">B · Nodos ML × N</text>
+  <text x="670" y="235">worker pool del gradiente</text>
+  <text x="670" y="250">+ reducción en orden</text>
+  <text x="670" y="265" font-size="11" fill="#52514e">(cálculo en PC3, red en PC4)</text>
+
+  <!-- Coordinador -->
+  <rect x="270" y="196" width="190" height="76" rx="6" fill="#ffffff" stroke="#8a8984" stroke-width="1.5" stroke-dasharray="6 4"/>
+  <text x="365" y="220" font-weight="bold">C · Coordinador</text>
+  <text x="365" y="237">API REST / WebSocket + JWT</text>
+  <text x="365" y="253">parameter server síncrono</text>
+  <text x="365" y="266" font-size="11" fill="#52514e">(PC4)</text>
+
+  <!-- SPA -->
+  <rect x="20" y="196" width="190" height="76" rx="6" fill="#ffffff" stroke="#8a8984" stroke-width="1.5" stroke-dasharray="6 4"/>
+  <text x="115" y="222" font-weight="bold">D · SPA (React)</text>
+  <text x="115" y="239">dashboard, entrenamiento</text>
+  <text x="115" y="254">en vivo, mapa de riesgo</text>
+  <text x="115" y="267" font-size="11" fill="#52514e">(TB2)</text>
+
+  <!-- Bases de datos -->
+  <rect x="240" y="330" width="130" height="56" rx="6" fill="#ffffff" stroke="#8a8984" stroke-width="1.5" stroke-dasharray="6 4"/>
+  <text x="305" y="353" font-weight="bold">MongoDB</text>
+  <text x="305" y="370" font-size="11">persistente (PC4)</text>
+  <rect x="430" y="330" width="130" height="56" rx="6" fill="#ffffff" stroke="#8a8984" stroke-width="1.5" stroke-dasharray="6 4"/>
+  <text x="495" y="353" font-weight="bold">Redis</text>
+  <text x="495" y="370" font-size="11">caché (PC4)</text>
+</g>
+
+<!-- Flechas -->
+<g stroke="#52514e" stroke-width="1.5" fill="none">
+  <line x1="150" y1="71" x2="188" y2="71" marker-end="url(#f)"/>
+  <line x1="360" y1="71" x2="398" y2="71" marker-end="url(#f)"/>
+  <line x1="540" y1="71" x2="578" y2="71" marker-end="url(#f)"/>
+  <line x1="670" y1="102" x2="670" y2="194" marker-end="url(#f)"/>
+  <line x1="462" y1="232" x2="578" y2="232" marker-start="url(#f)" marker-end="url(#f)"/>
+  <line x1="212" y1="234" x2="268" y2="234" marker-start="url(#f)" marker-end="url(#f)"/>
+  <line x1="330" y1="272" x2="310" y2="328" marker-end="url(#f)"/>
+  <line x1="410" y1="272" x2="480" y2="328" marker-end="url(#f)"/>
+</g>
+<g font-size="11" fill="#52514e" text-anchor="middle">
+  <text x="725" y="150">shard por nodo</text>
+  <text x="725" y="164">(volumen compartido)</text>
+  <text x="520" y="224">TCP · JSON</text>
+  <text x="520" y="248">pesos ⇄ parciales</text>
+  <text x="240" y="226">REST/WS</text>
+</g>
+
+<!-- Leyenda -->
+<g font-size="12" fill="#0b0b0b">
+  <rect x="20" y="408" width="28" height="16" rx="3" fill="#cde2fb" stroke="#2a78d6" stroke-width="2"/>
+  <text x="56" y="421">Implementado en PC3</text>
+  <rect x="220" y="408" width="28" height="16" rx="3" fill="#ffffff" stroke="#8a8984" stroke-width="1.5" stroke-dasharray="6 4"/>
+  <text x="256" y="421">Planificado (PC4 / TB2)</text>
+  <rect x="450" y="408" width="28" height="16" rx="3" fill="#f0efec" stroke="#52514e" stroke-width="1.5"/>
+  <text x="486" y="421">Datos</text>
+</g>
+</svg>

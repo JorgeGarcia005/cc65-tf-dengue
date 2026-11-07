@@ -18,11 +18,18 @@ Número de PR `<n>` y rama `<rama>`. Si te dan solo uno, deduce el otro con
 1. **Contexto.** Lee `AGENTS.md`, el issue enlazado en el PR y, si existe, la ronda anterior
    en `docs/agentes/revisiones/PR-<n>/` junto con la `respuesta-<k>.md` del implementador.
 2. **Checkout limpio.** `git fetch origin && git switch --detach origin/<rama>`.
-3. **Verificación automática.** Ejecuta y guarda la salida:
-   - `make check` (gofmt, vet, `go test -race ./...`)
+3. **Verificación automática.** Ejecuta y guarda la salida. Son comandos de Go puros, así
+   que funcionan igual en Windows (PowerShell), Linux y macOS; **no dependas de `make`**:
+   - `gofmt -l .` → la salida debe estar vacía
+   - `go vet ./...`
+   - `go test -race -count=1 ./...`
    - si el PR toca `internal/ml` o `internal/cluster`: el test de equivalencia
-     (`go test -race -run Equivalencia ./...`)
-   - si toca la API: `make bench-api` y revisa que p95 < 100 ms
+     (`go test -race -count=1 -run Equivalencia -v ./...`)
+   - si toca la API: `go run ./cmd/benchapi` y revisa que p95 < 100 ms
+   - si `-race` falla al **enlazar** (error de `gcc`/`ld`, no de un test), repórtalo como
+     limitación del entorno, corre `go test -count=1 ./...` sin `-race` y apóyate en el CI
+     de GitHub, que sí corre `-race`. Una carrera detectada (`WARNING: DATA RACE`) siempre
+     es BLOQUEANTE.
 4. **Revisión del diff** (`git diff origin/develop...origin/<rama>`) con la lista de abajo.
 5. **Veredicto.** Copia `docs/agentes/revisiones/VEREDICTO.md` a
    `docs/agentes/revisiones/PR-<n>/ronda-<k>.md` y llénala. `k` = 1 + rondas existentes.
@@ -68,7 +75,8 @@ Número de PR `<n>` y rama `<rama>`. Si te dan solo uno, deduce el otro con
 
 - Cada hallazgo: severidad (BLOQUEANTE / MAYOR / MENOR), ubicación `archivo:línea`,
   evidencia (salida de comando o cita), corrección sugerida.
-- `APROBADO` solo sin BLOQUEANTES abiertos y con `make check` verde.
+- `APROBADO` solo sin BLOQUEANTES abiertos, con `gofmt`, `go vet` y `go test -race` en verde
+  y con el CI del PR en verde.
 - En rondas 2 y 3: marca cada hallazgo previo como `RESUELTO`, `SE MANTIENE` (con nueva
   evidencia) o `RETIRADO` (si el rebate del implementador te convenció; dilo explícitamente).
 - No repitas hallazgos ya retirados. No agregues hallazgos MENORES nuevos en la ronda 3.

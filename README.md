@@ -11,7 +11,7 @@ Trabajo Final · Programación Concurrente y Distribuida (CC65) · UPC 2026-20 �
 
 ## La pregunta
 
-> ¿En qué distritos, semanas epidemiológicas y grupos de edad conviene reforzar camas,
+> ¿En qué departamentos, semanas epidemiológicas y grupos de edad conviene reforzar camas,
 > vigilancia y cerco epidemiológico por **dengue con signos de alarma o grave**?
 
 Perú vivió en 2023 y 2024 epidemias de dengue de magnitud histórica. Anticipar dónde

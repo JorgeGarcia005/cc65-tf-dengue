@@ -1,0 +1,154 @@
+{
+  "generado": "2026-10-24T14:25:16-05:00",
+  "fuente": "sintetico(filas=1000000, features=40, semilla=2026)",
+  "maquina": {
+    "arquitectura": "amd64",
+    "cpu": "Intel(R) Xeon(R) Processor @ 2.10GHz",
+    "go": "go1.24.7",
+    "gomaxprocs": 2,
+    "num_cpu": 2,
+    "so": "linux"
+  },
+  "protocolo": {
+    "calentamiento": 2,
+    "estimador": "media recortada 10 % + IC95 bootstrap (2000)",
+    "medida": "una pasada de gradiente completa (= una época)",
+    "orden": "barajado por repetición",
+    "repeticiones": 20,
+    "tam_bloque": 4096
+  },
+  "mediciones": [
+    {
+      "config": "secuencial",
+      "workers": 1,
+      "segundos": {
+        "n": 20,
+        "media_recortada": 0.12721250531250003,
+        "recorte": 0.1,
+        "mediana": 0.1266771005,
+        "desviacion": 0.01609005251289696,
+        "min": 0.111804348,
+        "max": 0.16524422,
+        "ic95_inf": 0.12098466102812501,
+        "ic95_sup": 0.1363123798953125
+      },
+      "speedup": 1,
+      "eficiencia": 1,
+      "equivalente_bit_a_bit": true
+    },
+    {
+      "config": "pool-01",
+      "workers": 1,
+      "segundos": {
+        "n": 20,
+        "media_recortada": 0.12699632950000003,
+        "recorte": 0.1,
+        "mediana": 0.1238323635,
+        "desviacion": 0.015171107977549362,
+        "min": 0.11594467,
+        "max": 0.168957683,
+        "ic95_inf": 0.12150669662968752,
+        "ic95_sup": 0.134510561709375
+      },
+      "speedup": 1.0017022209488347,
+      "eficiencia": 1.0017022209488347,
+      "equivalente_bit_a_bit": true
+    },
+    {
+      "config": "pool-02",
+      "workers": 2,
+      "segundos": {
+        "n": 20,
+        "media_recortada": 0.08751266987500002,
+        "recorte": 0.1,
+        "mediana": 0.08344699950000001,
+        "desviacion": 0.013745775185814551,
+        "min": 0.070716158,
+        "max": 0.122490986,
+        "ic95_inf": 0.08184351850468749,
+        "ic95_sup": 0.09420418264843752
+      },
+      "speedup": 1.4536467176033578,
+      "eficiencia": 0.7268233588016789,
+      "equivalente_bit_a_bit": true
+    },
+    {
+      "config": "pool-04",
+      "workers": 4,
+      "segundos": {
+        "n": 20,
+        "media_recortada": 0.0773849434375,
+        "recorte": 0.1,
+        "mediana": 0.07764579199999999,
+        "desviacion": 0.00723300999338604,
+        "min": 0.067501425,
+        "max": 0.094592238,
+        "ic95_inf": 0.07408368228593751,
+        "ic95_sup": 0.08076439171718748
+      },
+      "speedup": 1.643892205145091,
+      "eficiencia": 0.41097305128627276,
+      "equivalente_bit_a_bit": true
+    }
+  ],
+  "punto_equilibrio": [
+    {
+      "filas": 1000,
+      "bloques": 1,
+      "seg_secuencial": 0.0001305655625,
+      "seg_concurrente": 0.0001394938125,
+      "speedup": 0.9359953689702186,
+      "conviene_concurrente": false
+    },
+    {
+      "filas": 4096,
+      "bloques": 1,
+      "seg_secuencial": 0.0006966860000000001,
+      "seg_concurrente": 0.0007215578749999999,
+      "speedup": 0.9655303117577368,
+      "conviene_concurrente": false
+    },
+    {
+      "filas": 10000,
+      "bloques": 3,
+      "seg_secuencial": 0.0012319060624999998,
+      "seg_concurrente": 0.0009287220625000001,
+      "speedup": 1.3264528885895825,
+      "conviene_concurrente": true
+    },
+    {
+      "filas": 30000,
+      "bloques": 8,
+      "seg_secuencial": 0.0037040330000000002,
+      "seg_concurrente": 0.0027097051250000006,
+      "speedup": 1.36695058286093,
+      "conviene_concurrente": true
+    },
+    {
+      "filas": 100000,
+      "bloques": 25,
+      "seg_secuencial": 0.0111565421875,
+      "seg_concurrente": 0.007641649812500001,
+      "speedup": 1.4599651202611292,
+      "conviene_concurrente": true
+    },
+    {
+      "filas": 300000,
+      "bloques": 74,
+      "seg_secuencial": 0.0342092425625,
+      "seg_concurrente": 0.023853791562500004,
+      "speedup": 1.4341218029371716,
+      "conviene_concurrente": true
+    },
+    {
+      "filas": 1000000,
+      "bloques": 245,
+      "seg_secuencial": 0.12129500643749999,
+      "seg_concurrente": 0.096753756875,
+      "speedup": 1.2536464769446194,
+      "conviene_concurrente": true
+    }
+  ],
+  "filas_equilibrio": 10000,
+  "workers_equilibrio": 2
+}
