@@ -38,7 +38,9 @@ func main() {
 	fuentes := flag.String("fuentes", "docs/informe/pc3", "carpeta con las secciones Markdown")
 	salida := flag.String("salida", "entregables", "carpeta de salida")
 	entregable := flag.String("entregable", "PC3", "código del entregable (PC3, PC4, TB2)")
-	ciclo := flag.String("ciclo", "202620", "ciclo académico para el nombre del archivo")
+	// El enunciado (CC65-TB2-1ACC0065_202620, "Detalle de Entrega") fija el nombre
+	// 1ACC0065_YYY_202610_Informe_UXXXXXXXX aunque el ciclo sea 2026-20: se respeta tal cual.
+	ciclo := flag.String("ciclo", "202610", "código del nombre de archivo que exige el enunciado")
 	titulo := flag.String("titulo", "Riesgo de dengue con signos de alarma: regresión logística distribuida en Go", "título de la carátula")
 	tituloViejo := flag.String("titulo-plantilla", "SmartTransit: Predicción Concurrente de Demanda de Transporte", "título de la carátula de la plantilla")
 	entregableViejo := flag.String("entregable-plantilla", "TB1", "código de entregable que figura en la plantilla")

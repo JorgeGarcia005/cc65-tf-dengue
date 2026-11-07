@@ -26,6 +26,11 @@ nodo devuelve **un parcial por bloque**, sin reducirlos, y el coordinador los co
 
 ## 8.3 Protocolo
 
+Una época es un ***fan-out* distribuido** (*scatter*: el coordinador reparte los pesos a los nodos)
+seguido de un ***fan-in* distribuido** (*gather*: el coordinador recoge y agrega los parciales), los dos
+patrones de la guía de algoritmos distribuidos del curso (semana 11), con la diferencia de que aquí la
+agregación respeta el orden de bloque. Como en esa guía, los mensajes son JSON con un campo `tipo`.
+
 TCP con una conexión persistente por nodo (el nodo se conecta al coordinador) y mensajes **JSON
 delimitados por salto de línea**, leídos con `json.Decoder`. `encoding/json` escribe cada `float64` con la
 representación más corta que vuelve exactamente al mismo valor, así que los bits se conservan en la red.
