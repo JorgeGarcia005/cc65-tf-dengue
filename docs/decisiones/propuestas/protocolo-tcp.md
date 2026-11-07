@@ -1,7 +1,8 @@
 # Propuesta — Protocolo coordinador–nodos por TCP
 
 - **Issue:** #9 · **Autor:** Claude Code (implementador) · **Fecha:** 05/11/2026
-- **Estado:** propuesta, espera la contrapropuesta del juez (`/debate protocolo-tcp`)
+- **Estado:** debatida; decisión final en
+  [`ADR-0005-protocolo-tcp.md`](../ADR-0005-protocolo-tcp.md) (incorpora las 4 objeciones del juez)
 - **Se implementa en:** PC4 (`cmd/coordinator`, `cmd/node`, `internal/cluster`)
 - **ADR resultante:** `docs/decisiones/ADR-0005-protocolo-tcp.md` (el número 0002 que cita el
   issue ya lo usa `ADR-0002-worker-pool-gradiente.md`)
