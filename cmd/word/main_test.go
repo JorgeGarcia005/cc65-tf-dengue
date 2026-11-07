@@ -3,6 +3,7 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -168,5 +169,25 @@ func TestReemplazarParrafoUneCorridas(t *testing.T) {
 	}
 	if _, ok := reemplazarParrafo(y, "no existe", "x"); ok {
 		t.Error("informó un reemplazo que no hizo")
+	}
+}
+
+// TestLeerCodigos: los códigos salen del flag o del archivo ignorado por git,
+// nunca de un valor por defecto en el código (el repositorio es público).
+func TestLeerCodigos(t *testing.T) {
+	archivo := filepath.Join(t.TempDir(), "codigos.txt")
+	if _, err := leerCodigos("", archivo); err == nil {
+		t.Error("sin flag ni archivo debe fallar")
+	}
+	got, err := leerCodigos(" A1 , B2 ", archivo)
+	if err != nil || !slices.Equal(got, []string{"A1", "B2"}) {
+		t.Fatalf("flag: %v, %v", got, err)
+	}
+	if err := os.WriteFile(archivo, []byte("# integrantes\nA1\n\n B2 \n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	got, err = leerCodigos("", archivo)
+	if err != nil || !slices.Equal(got, []string{"A1", "B2"}) {
+		t.Fatalf("archivo: %v, %v", got, err)
 	}
 }

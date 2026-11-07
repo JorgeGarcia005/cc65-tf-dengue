@@ -8,8 +8,11 @@
 //
 // Uso:
 //
-//	go run ./cmd/word -plantilla entregables/plantilla.docx \
-//	    -codigos U202211490,U202311894
+//	go run ./cmd/word -plantilla entregables/plantilla.docx
+//
+// Los códigos de alumno (un .docx por integrante) se leen de
+// entregables/codigos.txt (uno por línea; la carpeta está en .gitignore) o de
+// -codigos U20XXXXXXX,U20YYYYYYY. No se versionan: el repositorio es público.
 package main
 
 import (
@@ -39,7 +42,7 @@ func main() {
 	titulo := flag.String("titulo", "Riesgo de dengue con signos de alarma: regresión logística distribuida en Go", "título de la carátula")
 	tituloViejo := flag.String("titulo-plantilla", "SmartTransit: Predicción Concurrente de Demanda de Transporte", "título de la carátula de la plantilla")
 	entregableViejo := flag.String("entregable-plantilla", "TB1", "código de entregable que figura en la plantilla")
-	codigos := flag.String("codigos", "U202211490,U202311894", "códigos de alumno: un archivo por integrante")
+	codigos := flag.String("codigos", "", "códigos de alumno separados por coma (por defecto, <salida>/codigos.txt)")
 	flag.Parse()
 
 	secciones, err := filepath.Glob(filepath.Join(*fuentes, "[0-9][0-9]-*.md"))
@@ -65,8 +68,12 @@ func main() {
 	if err := os.MkdirAll(*salida, 0o755); err != nil {
 		log.Fatal(err)
 	}
-	for _, c := range strings.Split(*codigos, ",") {
-		nombre := fmt.Sprintf("1ACC0065_%s_%s_Informe_%s.docx", *entregable, *ciclo, strings.TrimSpace(c))
+	lista, err := leerCodigos(*codigos, filepath.Join(*salida, "codigos.txt"))
+	if err != nil {
+		log.Fatal(err)
+	}
+	for _, c := range lista {
+		nombre := fmt.Sprintf("1ACC0065_%s_%s_Informe_%s.docx", *entregable, *ciclo, c)
 		ruta := filepath.Join(*salida, nombre)
 		if err := os.WriteFile(ruta, docx, 0o644); err != nil {
 			log.Fatal(err)
@@ -385,4 +392,28 @@ func xmlBienFormado(s string) error {
 			return err
 		}
 	}
+}
+
+// leerCodigos devuelve los códigos de alumno del flag (separados por coma) o,
+// si viene vacío, del archivo (uno por línea; ignora líneas vacías y las que
+// empiezan con #). Sin códigos no hay a quién nombrar el .docx: es un error.
+func leerCodigos(flagCodigos, archivo string) ([]string, error) {
+	texto := strings.ReplaceAll(flagCodigos, ",", "\n")
+	if strings.TrimSpace(texto) == "" {
+		b, err := os.ReadFile(archivo)
+		if err != nil {
+			return nil, fmt.Errorf("faltan los códigos de alumno: usa -codigos o crea %s (uno por línea): %w", archivo, err)
+		}
+		texto = string(b)
+	}
+	var out []string
+	for _, l := range strings.Split(texto, "\n") {
+		if l = strings.TrimSpace(l); l != "" && !strings.HasPrefix(l, "#") {
+			out = append(out, l)
+		}
+	}
+	if len(out) == 0 {
+		return nil, fmt.Errorf("faltan los códigos de alumno en -codigos o en %s", archivo)
+	}
+	return out, nil
 }

@@ -2,8 +2,10 @@
 
 La sección 7.4 mostró que el gradiente se puede repartir por shards sin cambiar el resultado. Esta sección
 define **cómo** se comunican el coordinador y los nodos, decisión que se implementa en PC4. Por ser cara
-de revertir, pasó por un debate de diseño entre agentes antes de escribir código
-(`docs/decisiones/propuestas/protocolo-tcp.md`).
+de revertir, pasó por un debate de diseño entre agentes antes de escribir código: el implementador
+propuso el protocolo (`docs/decisiones/propuestas/protocolo-tcp.md`), el juez respondió con cuatro
+objeciones (`protocolo-tcp-juez.md`) y la decisión final quedó en `docs/decisiones/ADR-0005-protocolo-tcp.md`
+(sección 8.5).
 
 ## 8.1 Topología: estrella con *parameter server* síncrono
 
@@ -76,3 +78,21 @@ El modelo encontró **dos errores de diseño** antes de escribir el código, y a
 
 Para comprobar que el modelo distingue el diseño correcto de los errores, se verificaron dos **mutantes**
 que reintroducen cada error: los dos fallan con un ciclo de aceptación, y el modelo corregido no.
+
+## 8.5 Resultado del debate de diseño
+
+El juez aceptó la arquitectura (estrella síncrona, un parcial por bloque, JSON por línea, reasignación en
+dos pasadas) y señaló cuatro escenarios de fallo que el modelo de la sección 8.4 no cubría. El orquestador
+aceptó los cuatro y la decisión quedó en el ADR-0005:
+
+| Objeción del juez | Escenario de fallo | Decisión |
+|---|---|---|
+| Descarte de un nodo sano | Un nodo cae por EOF poco antes de que venza el plazo de la época; su shard se reasigna a un nodo sano, que es descartado al vencer el plazo sin haber tenido tiempo de calcularlo | **Plazo por shard:** cada envío de `epoca` fija el vencimiento de ese shard; al vencer el plazo solo se descarta al dueño de un shard cuyo propio plazo venció. Si un nodo cae, se reasignan **todos** sus shards pendientes |
+| Error al enviar | Falla el envío de la época o de una reasignación y el shard queda asignado a un nodo muerto | `asignarA(s)` prueba los nodos sanos uno por uno hasta que un envío funcione; si no queda ninguno, el entrenamiento aborta |
+| Varios shards en un nodo | Un nodo que recibe un segundo shard pierde el primero o crea un segundo *worker pool* que compite por los mismos núcleos | Cada nodo guarda sus shards en un mapa y usa **un único** `ml.Pool`; el coordinador recuerda qué shards cargó cada nodo y no los vuelve a enviar |
+| Desbalance | Todos los shards huérfanos caen en el nodo 0, que dicta la duración de cada época | Se reasigna al nodo sano **con menos shards**; en empate, al de menor índice |
+
+Ninguno de los ajustes cambia el gradiente: la reducción depende solo del índice global de bloque, no de
+qué nodo calculó cada bloque. En PC4 se agregan los dos tests que propuso el juez (caída escalonada con
+EOF y plazo, y balanceo tras una doble caída) y el modelo Promela se extiende con envío no bloqueante,
+elección por menor carga y caída por EOF separada del plazo.
