@@ -126,6 +126,12 @@ func (m *Mensaje) Validar() error {
 		if m.Ruta == "" || m.NumBloques == 0 || m.TamBloque == 0 || m.D == 0 || m.Config == nil {
 			return mal("faltan ruta, num_bloques, tam_bloque, d o config")
 		}
+		// Un hiperparámetro negativo haría entrar en pánico a ml.NuevoPool en el
+		// nodo; se rechaza aquí como mensaje inválido (PR-35 H1).
+		if m.Config.Lambda < 0 || m.Config.PesoPos < 0 || m.Config.PesoNeg < 0 {
+			return mal("config con un valor negativo (lambda %v, peso_pos %v, peso_neg %v)",
+				m.Config.Lambda, m.Config.PesoPos, m.Config.PesoNeg)
+		}
 	case Listo:
 		if m.NumBloques == 0 || m.N == 0 || m.D == 0 {
 			return mal("faltan num_bloques, n o d")
@@ -145,6 +151,12 @@ func (m *Mensaje) Validar() error {
 		for k := range m.Parciales {
 			if len(m.Parciales[k].Grad) != d {
 				return mal("el parcial %d tiene %d sumas y el primero %d", k, len(m.Parciales[k].Grad), d)
+			}
+			// Todo bloque tiene al menos una fila y los pesos por clase son
+			// positivos: un peso ≤ 0 es un parcial corrupto, y con todos en
+			// cero ml.Finalizar dividiría entre cero (PR-35 H1).
+			if m.Parciales[k].Peso <= 0 {
+				return mal("el parcial %d tiene peso %v (debe ser > 0)", k, m.Parciales[k].Peso)
 			}
 		}
 	case Error:

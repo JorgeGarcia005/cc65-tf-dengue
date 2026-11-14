@@ -138,7 +138,7 @@ func TestParcialYPesosHacenIdaYVueltaBitABit(t *testing.T) {
 		for i, v := range valoresDificiles {
 			envio := []Mensaje{
 				{Tipo: Gradiente, Epoca: 1, Shard: 1, Parciales: []ml.Parcial{
-					{Grad: grad, Perdida: v, Peso: valoresDificiles[len(valoresDificiles)-1-i]}}},
+					{Grad: grad, Perdida: v, Peso: math.Abs(valoresDificiles[len(valoresDificiles)-1-i]) + math.SmallestNonzeroFloat64}}},
 				{Tipo: Epoca, Epoca: 1, Shard: 1, W: grad},
 			}
 			for _, m := range envio {
@@ -345,18 +345,22 @@ func TestRegistroConVersionDistintaSeRechaza(t *testing.T) {
 
 func TestMensajeDeTipoDesconocidoOIncompletoSeRechaza(t *testing.T) {
 	casos := map[string]string{
-		"tipo desconocido":        `{"tipo":"saludo"}`,
-		"sin tipo":                `{"epoca":1}`,
-		"registro sin nombre":     `{"tipo":"registro","version":1}`,
-		"asignación sin ruta":     `{"tipo":"asignacion","shard":1,"num_bloques":3,"tam_bloque":8,"d":2,"config":{}}`,
-		"asignación sin config":   `{"tipo":"asignacion","ruta":"x","num_bloques":3,"tam_bloque":8,"d":2}`,
-		"listo sin filas":         `{"tipo":"listo","num_bloques":3,"d":2}`,
-		"época sin pesos":         `{"tipo":"epoca","epoca":1}`,
-		"gradiente sin parciales": `{"tipo":"gradiente","epoca":1}`,
-		"parciales desiguales":    `{"tipo":"gradiente","parciales":[{"grad":[1,2],"perdida":0,"peso":1},{"grad":[1,2,3],"perdida":0,"peso":1}]}`,
-		"época negativa":          `{"tipo":"epoca","epoca":-1,"w":[0,0]}`,
-		"error sin texto":         `{"tipo":"error","epoca":1}`,
-		"fin sin motivo":          `{"tipo":"fin"}`,
+		"tipo desconocido":           `{"tipo":"saludo"}`,
+		"sin tipo":                   `{"epoca":1}`,
+		"registro sin nombre":        `{"tipo":"registro","version":1}`,
+		"asignación sin ruta":        `{"tipo":"asignacion","shard":1,"num_bloques":3,"tam_bloque":8,"d":2,"config":{}}`,
+		"asignación sin config":      `{"tipo":"asignacion","ruta":"x","num_bloques":3,"tam_bloque":8,"d":2}`,
+		"listo sin filas":            `{"tipo":"listo","num_bloques":3,"d":2}`,
+		"época sin pesos":            `{"tipo":"epoca","epoca":1}`,
+		"gradiente sin parciales":    `{"tipo":"gradiente","epoca":1}`,
+		"parciales desiguales":       `{"tipo":"gradiente","parciales":[{"grad":[1,2],"perdida":0,"peso":1},{"grad":[1,2,3],"perdida":0,"peso":1}]}`,
+		"época negativa":             `{"tipo":"epoca","epoca":-1,"w":[0,0]}`,
+		"config con lambda negativo": `{"tipo":"asignacion","ruta":"x","num_bloques":3,"tam_bloque":8,"d":2,"config":{"lambda":-0.1,"peso_pos":1,"peso_neg":1}}`,
+		"config con peso negativo":   `{"tipo":"asignacion","ruta":"x","num_bloques":3,"tam_bloque":8,"d":2,"config":{"lambda":0,"peso_pos":-1,"peso_neg":1}}`,
+		"parcial con peso cero":      `{"tipo":"gradiente","parciales":[{"grad":[1,2],"perdida":0,"peso":0}]}`,
+		"parcial con peso negativo":  `{"tipo":"gradiente","parciales":[{"grad":[1,2],"perdida":0,"peso":1},{"grad":[1,2],"perdida":0,"peso":-3}]}`,
+		"error sin texto":            `{"tipo":"error","epoca":1}`,
+		"fin sin motivo":             `{"tipo":"fin"}`,
 	}
 	for nombre, linea := range casos {
 		t.Run(nombre, func(t *testing.T) {
