@@ -98,10 +98,11 @@ func LimitesBloque(k, n, tam int) (ini, fin int) {
 }
 
 // Parcial son las sumas sin normalizar de un bloque (o de varios ya reducidos).
+// Las etiquetas JSON son su forma en el mensaje `gradiente` del clúster (ADR-0005).
 type Parcial struct {
-	Grad    []float64 // D+1 sumas: Σ sᵢ(σ(zᵢ)−yᵢ)xᵢⱼ y, al final, la del sesgo
-	Perdida float64   // Σ sᵢ·ℓ(zᵢ, yᵢ)
-	Peso    float64   // Σ sᵢ
+	Grad    []float64 `json:"grad"`    // D+1 sumas: Σ sᵢ(σ(zᵢ)−yᵢ)xᵢⱼ y, al final, la del sesgo
+	Perdida float64   `json:"perdida"` // Σ sᵢ·ℓ(zᵢ, yᵢ)
+	Peso    float64   `json:"peso"`    // Σ sᵢ
 }
 
 // NuevoParcial reserva un Parcial para d features.

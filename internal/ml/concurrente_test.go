@@ -177,3 +177,91 @@ func TestPesosDeLargoIncorrectoEntranEnPanico(t *testing.T) {
 		}
 	}
 }
+
+// ADR-0005: Parciales devuelve un parcial por bloque, sin reducir, idéntico bit
+// a bit al de ParcialBloque. Es lo que cada nodo del clúster envía al coordinador.
+func TestParcialesDevuelveUnParcialPorBloqueIgualAlSecuencial(t *testing.T) {
+	ds, _ := datasetSintetico(t, 5_003, 5, 11)
+	pos, neg := PesosBalanceados(ds.Y)
+	cfg := Config{TamBloque: 256, Lambda: 1e-3, PesoPos: pos, PesoNeg: neg}
+	w := pesosAleatorios(ds.D, 3)
+	for _, workers := range []int{1, 3, 8} {
+		p := NuevoPool(nil, cfg, workers)
+		parciales := p.Parciales(ds, w)
+		p.Cerrar()
+		if want := NumBloques(ds.N, cfg.TamBloque); len(parciales) != want {
+			t.Fatalf("workers=%d: %d parciales, quiere %d", workers, len(parciales), want)
+		}
+		ref := NuevoParcial(ds.D)
+		for k := range parciales {
+			ParcialBloque(ds, cfg, w, k, &ref)
+			ctx := fmt.Sprintf("workers=%d bloque %d", workers, k)
+			mismosBits(t, ctx+" grad", ref.Grad, parciales[k].Grad)
+			mismosBits(t, ctx+" pérdida y peso", []float64{ref.Perdida, ref.Peso},
+				[]float64{parciales[k].Perdida, parciales[k].Peso})
+		}
+	}
+}
+
+// ADR-0005 (objeción 3 del juez): un nodo con varios shards usa un único Pool.
+// Los mismos workers atienden datasets distintos, incluso con otro D, y cada
+// llamada devuelve memoria propia que la siguiente no pisa.
+func TestParcialesReutilizaLosWorkersConDatasetsDistintos(t *testing.T) {
+	a, _ := datasetSintetico(t, 2_000, 4, 1)
+	b, _ := datasetSintetico(t, 1_300, 7, 2)
+	cfg := Config{TamBloque: 128}
+	p := NuevoPool(nil, cfg, 4)
+	defer p.Cerrar()
+	wa, wb := pesosAleatorios(a.D, 5), pesosAleatorios(b.D, 6)
+
+	pa := p.Parciales(a, wa)
+	pb := p.Parciales(b, wb)
+	pa2 := p.Parciales(a, wa)
+
+	ga := Finalizar(ReducirEnOrden(pa, a.D), cfg.normalizada(), wa)
+	gb := Finalizar(ReducirEnOrden(pb, b.D), cfg.normalizada(), wb)
+	mismosBits(t, "dataset a", NuevoSecuencial(a, cfg).Gradiente(wa).Grad, ga.Grad)
+	mismosBits(t, "dataset b", NuevoSecuencial(b, cfg).Gradiente(wb).Grad, gb.Grad)
+	for k := range pa {
+		mismosBits(t, fmt.Sprintf("a repetido, bloque %d", k), pa[k].Grad, pa2[k].Grad)
+		if &pa[k].Grad[0] == &pa2[k].Grad[0] {
+			t.Fatalf("bloque %d: dos llamadas comparten memoria", k)
+		}
+	}
+}
+
+// Gradiente y Parciales se pueden intercalar sobre el mismo Pool.
+func TestGradienteYParcialesConvivenEnElMismoPool(t *testing.T) {
+	ds, _ := datasetSintetico(t, 3_000, 4, 8)
+	otro, _ := datasetSintetico(t, 900, 4, 9)
+	cfg := Config{TamBloque: 200, Lambda: 1e-2}
+	p := NuevoPool(ds, cfg, 4)
+	defer p.Cerrar()
+	w := pesosAleatorios(ds.D, 1)
+	ref := NuevoSecuencial(ds, cfg).Gradiente(w)
+
+	var wg sync.WaitGroup
+	for i := range 6 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			if i%2 == 0 {
+				mismosBits(t, "gradiente", ref.Grad, p.Gradiente(w).Grad)
+			} else {
+				p.Parciales(otro, w)
+			}
+		}()
+	}
+	wg.Wait()
+}
+
+func TestGradienteSinDatasetBaseEntraEnPanico(t *testing.T) {
+	p := NuevoPool(nil, Config{}, 2)
+	defer p.Cerrar()
+	defer func() {
+		if recover() == nil {
+			t.Error("esperaba pánico: el pool no tiene dataset base")
+		}
+	}()
+	p.Gradiente(make([]float64, 3))
+}
