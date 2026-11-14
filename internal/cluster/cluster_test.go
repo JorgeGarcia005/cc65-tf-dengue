@@ -434,9 +434,10 @@ func TestNodoFalsoConGradienteDeFormaIncorrectaSeDescarta(t *testing.T) {
 					return
 				}
 				if m.Tipo == protocolo.Epoca {
+					corto := ml.NuevoParcial(e.ds.D) // un solo bloque: válido como mensaje, no para el shard
+					corto.Peso = 1
 					pc.Enviar(protocolo.Mensaje{Tipo: protocolo.Gradiente, Epoca: m.Epoca, Shard: m.Shard,
-						BloqueInicial: e.shards[m.Shard].BloqueInicial,
-						Parciales:     []ml.Parcial{ml.NuevoParcial(e.ds.D)}}, 0)
+						BloqueInicial: e.shards[m.Shard].BloqueInicial, Parciales: []ml.Parcial{corto}}, 0)
 				}
 			}
 		}()
