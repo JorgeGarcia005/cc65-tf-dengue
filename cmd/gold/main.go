@@ -6,6 +6,10 @@
 // Uso:
 //
 //	go run ./cmd/gold -shards 3
+//
+// Con -sintetico N no lee el silver: genera N filas sintéticas con la misma
+// forma (31 variables) para probar el clúster y Docker sin el CSV del MINSA.
+// Los resultados del informe sobre el modelo salen siempre del gold real.
 package main
 
 import (
@@ -55,9 +59,16 @@ func main() {
 	shards := flag.Int("shards", 3, "shards de entrenamiento para los nodos")
 	tam := flag.Int("bloque", ml.TamBloquePorDefecto, "filas por bloque")
 	workers := flag.Int("workers", runtime.NumCPU(), "workers para leer el silver")
+	sintetico := flag.Int("sintetico", 0, "genera esta cantidad de filas sintéticas en vez de leer el silver (pruebas del clúster)")
 	flag.Parse()
 	if *fracTest <= 0 || *fracTest >= 1 || *shards < 1 || *tam < 1 {
 		log.Fatal("-test debe estar en (0,1); -shards y -bloque ≥ 1")
+	}
+	if *sintetico > 0 {
+		if err := generarSintetico(*salida, *sintetico, *shards, *tam, *fracTest); err != nil {
+			log.Fatal(err)
+		}
+		return
 	}
 
 	ini := time.Now()
@@ -167,4 +178,35 @@ func escribirJSON(ruta string, v any) {
 	if err := os.WriteFile(ruta, append(b, '\n'), 0o644); err != nil {
 		log.Fatal(err)
 	}
+}
+
+// variablesSintetico es el número de variables del gold real, para que el
+// tráfico y el cómputo de la prueba se parezcan a los del entrenamiento real.
+const variablesSintetico = 31
+
+// generarSintetico escribe train.bin, test.bin y los shards con datos
+// sintéticos deterministas. No toca reports/split.json ni esquema.json.
+func generarSintetico(salida string, filas, shards, tam int, fracTest float64) error {
+	if err := os.MkdirAll(salida, 0o755); err != nil {
+		return err
+	}
+	train, _ := ml.Sintetico(filas, variablesSintetico, 65)
+	test, _ := ml.Sintetico(max(int(float64(filas)*fracTest), 1), variablesSintetico, 66)
+	aTrain := gold.Archivo{Dataset: train, TamBloque: tam}
+	partes, err := gold.Particionar(aTrain, shards)
+	if err != nil {
+		return err
+	}
+	archivos := map[string]gold.Archivo{"train.bin": aTrain, "test.bin": {Dataset: test, TamBloque: tam}}
+	for s, p := range partes {
+		archivos[fmt.Sprintf("shard_%d.bin", s)] = p
+	}
+	for nombre, a := range archivos {
+		if err := gold.Escribir(filepath.Join(salida, nombre), a); err != nil {
+			return err
+		}
+	}
+	fmt.Printf("gold sintético: %d filas, %d variables, %d bloques de %d filas, %d shards en %s\n",
+		filas, variablesSintetico, ml.NumBloques(filas, tam), tam, shards, salida)
+	return nil
 }
