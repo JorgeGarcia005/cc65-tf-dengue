@@ -124,7 +124,8 @@ type Gradiente struct {
 }
 
 // Calculador calcula el gradiente completo para unos pesos dados.
-// Lo implementan la versión secuencial, el worker pool y el coordinador del clúster.
+// Lo implementan la versión secuencial y el worker pool. El coordinador del
+// clúster implementa CalculadorFalible, porque puede quedarse sin nodos.
 type Calculador interface {
 	Gradiente(w []float64) Gradiente
 }
@@ -275,19 +276,43 @@ type Resultado struct {
 	Historia []float64
 }
 
+// CalculadorFalible es un Calculador cuyo cálculo puede fallar. Lo implementa
+// el coordinador del clúster: si se queda sin nodos sanos, la época no tiene
+// gradiente y el entrenamiento debe detenerse con un error.
+type CalculadorFalible interface {
+	GradienteErr(w []float64) (Gradiente, error)
+}
+
+type infalible struct{ Calculador }
+
+func (c infalible) GradienteErr(w []float64) (Gradiente, error) { return c.Gradiente(w), nil }
+
 // Entrenar ejecuta descenso de gradiente full-batch desde w = 0.
 // No sabe si el gradiente se calcula en uno, varios hilos o varios nodos.
 func Entrenar(calc Calculador, d int, e Entrenamiento) Resultado {
+	r, _ := EntrenarFalible(infalible{calc}, d, e)
+	return r
+}
+
+// EntrenarFalible es Entrenar para un calculador que puede fallar. Es el único
+// bucle de entrenamiento del proyecto: secuencial, worker pool y clúster
+// actualizan los pesos con exactamente las mismas operaciones. Si una época
+// falla devuelve el error junto con los pesos y la historia hasta la época
+// anterior.
+func EntrenarFalible(calc CalculadorFalible, d int, e Entrenamiento) (Resultado, error) {
 	w := make([]float64, d+1)
 	historia := make([]float64, 0, e.Epocas)
-	for range e.Epocas {
-		g := calc.Gradiente(w)
+	for epoca := range e.Epocas {
+		g, err := calc.GradienteErr(w)
+		if err != nil {
+			return Resultado{W: w, Historia: historia}, fmt.Errorf("ml: época %d: %w", epoca, err)
+		}
 		historia = append(historia, g.Perdida)
 		for j := range w {
 			w[j] -= e.Tasa * g.Grad[j]
 		}
 	}
-	return Resultado{W: w, Historia: historia}
+	return Resultado{W: w, Historia: historia}, nil
 }
 
 // Probabilidad es σ(xᵀw + b) para una fila.
