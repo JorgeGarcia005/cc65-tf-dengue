@@ -28,7 +28,8 @@ echo "== Levantando el coordinador y $NODOS nodos ($EPOCAS épocas)"
 coordinador="$("${dc[@]}" ps -aq coordinator)"
 echo "== Esperando a la época $matar_en"
 for _ in $(seq 1 600); do
-  if "${dc[@]}" logs coordinator 2>&1 | grep -q "época $matar_en:"; then break; fi
+  avance="$("${dc[@]}" logs coordinator 2>&1 || true)"
+  if grep -q "época $matar_en:" <<<"$avance"; then break; fi
   if [ "$(docker inspect -f '{{.State.Running}}' "$coordinador")" != "true" ]; then
     "${dc[@]}" logs coordinator | tail -20
     echo "ERROR: el coordinador terminó antes de la época $matar_en"; exit 1
@@ -36,7 +37,8 @@ for _ in $(seq 1 600); do
   sleep 0.5
 done
 
-victima="$("${dc[@]}" ps -q node | head -1)"
+nodos_vivos="$("${dc[@]}" ps -q node)"
+victima="$(head -1 <<<"$nodos_vivos")"
 nombre="$(docker inspect -f '{{.Name}}' "$victima")"
 echo "== docker kill $nombre"
 docker kill "$victima" >/dev/null
@@ -44,10 +46,10 @@ docker kill "$victima" >/dev/null
 echo "== Esperando al coordinador"
 codigo="$(docker wait "$coordinador")"
 registro="$("${dc[@]}" logs --no-log-prefix coordinator 2>&1)"
-echo "$registro" | grep -E "registrado|descartado|reasignado|entrenamiento|verificado|abortado|escrito" || true
+grep -E "registrado|descartado|reasignado|entrenamiento|verificado|abortado|escrito" <<<"$registro" || true
 
 fallo=0
-exigir() { echo "$registro" | grep -q "$1" || { echo "ERROR: falta en el log del coordinador: $2"; fallo=1; }; }
+exigir() { grep -q "$1" <<<"$registro" || { echo "ERROR: falta en el log del coordinador: $2"; fallo=1; }; }
 [ "$codigo" = "0" ] || { echo "ERROR: el coordinador salió con código $codigo"; fallo=1; }
 exigir "descartado: conexión perdida" "el descarte del nodo caído (¿terminó el entrenamiento antes de la caída? Sube EPOCAS)"
 exigir "reasignado a" "la reasignación del shard del nodo caído"

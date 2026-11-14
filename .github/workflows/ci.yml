@@ -56,3 +56,39 @@ jobs:
       - name: go test -race
         if: steps.hay.outputs.go == 'true'
         run: go test -race -count=1 ./...
+
+  docker:
+    name: Docker (imagen, clúster y caída de un nodo)
+    runs-on: ubuntu-24.04
+    needs: go
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Imagen única, sin privilegios y menor de 40 MB
+        run: |
+          docker build -f deploy/Dockerfile -t cc65-tf .
+          docker image inspect cc65-tf --format 'usuario={{.Config.User}} bytes={{.Size}}'
+          test "$(docker image inspect cc65-tf --format '{{.Config.User}}')" = "nonroot:nonroot"
+          test "$(docker image inspect cc65-tf --format '{{.Size}}')" -lt 40000000
+      - name: Gold sintético con 3 shards (el CSV del MINSA no se versiona)
+        run: go run ./cmd/gold -sintetico 400000 -shards 3 -salida "$RUNNER_TEMP/gold"
+      - name: Entrenamiento en el clúster (coordinador + 3 nodos) igual al secuencial
+        env:
+          EPOCAS: "60"
+          VERIFICAR: "true"
+        run: |
+          export GOLD="$RUNNER_TEMP/gold" USUARIO="$(id -u):$(id -g)"
+          mkdir -p reports
+          docker compose -f deploy/docker-compose.yml up --exit-code-from coordinator
+          python3 -c "import json; r = json.load(open('reports/entrenamiento_cluster.json')); assert r['igual_al_secuencial'] is True and r['epocas'] == 60 and len(r['cluster']['nodos']) == 3, r['cluster']; print('nodos:', [n['nombre'] for n in r['cluster']['nodos']], '· ms/época:', round(1000 * r['seg_por_epoca'], 1))"
+          docker compose -f deploy/docker-compose.yml down
+      - name: Caída de un nodo a mitad del entrenamiento
+        env:
+          EPOCAS: "1000"
+          MATAR_EN: "20"
+        run: |
+          export GOLD="$RUNNER_TEMP/gold" USUARIO="$(id -u):$(id -g)"
+          bash scripts/prueba-caida.sh
+          python3 -c "import json; r = json.load(open('reports/entrenamiento_cluster.json')); c = r['cluster']; assert r['igual_al_secuencial'] is True and c['reasignaciones'] >= 1 and sum(not n['sano'] for n in c['nodos']) >= 1, c; print('reasignaciones:', c['reasignaciones'])"
