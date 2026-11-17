@@ -1,0 +1,218 @@
+openapi: 3.0.3
+info:
+  title: API de riesgo de dengue con signos de alarma (CC65 TF)
+  version: 1.0.0
+  description: |
+    API del coordinador del clúster (Parte C). Predice el riesgo de que un caso
+    notificado de dengue sea **con signos de alarma o grave**, con la regresión
+    logística entrenada de forma distribuida sobre los datos abiertos del
+    MINSA / CDC Perú (2000-2025). También expone el modelo publicado, el estado
+    del clúster y permite lanzar entrenamientos.
+
+    Implementada solo con `net/http` de la biblioteca estándar de Go. JWT y
+    CORS se agregan en TB2 como middleware, sin cambiar estas rutas.
+servers:
+  - url: http://localhost:8080
+    description: docker compose (deploy/docker-compose.yml)
+tags:
+  - name: prediccion
+  - name: modelo
+  - name: cluster
+  - name: sistema
+paths:
+  /healthz:
+    get:
+      tags: [sistema]
+      summary: Comprobación de vida
+      operationId: salud
+      responses:
+        "200":
+          description: El servidor atiende.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  estado: {type: string, example: ok}
+                  version_modelo: {type: string, example: 3f9a1c0b7d2e}
+  /api/v1/modelo:
+    get:
+      tags: [modelo]
+      summary: Modelo publicado (pesos por variable, umbral y versión)
+      operationId: verModelo
+      responses:
+        "200":
+          description: Modelo vigente.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Modelo"}
+  /api/v1/predicciones:
+    post:
+      tags: [prediccion]
+      summary: Riesgo de dengue con signos de alarma o grave para un caso
+      description: |
+        Valida la consulta con las mismas reglas de limpieza del loader
+        (semana 1–53, edad ≥ 0 y ≤ 110 años, tipo_edad A/M/D, sexo F/M) y la
+        transforma con el esquema de variables del entrenamiento. Un
+        departamento sin columna propia en el modelo se trata como OTROS.
+      operationId: predecir
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/Consulta"}
+            example: {departamento: LORETO, ano: 2024, semana: 10, edad: 34, tipo_edad: A, sexo: M}
+      responses:
+        "200":
+          description: Predicción.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Prediccion"}
+        "400": {$ref: "#/components/responses/Error"}
+        "413": {$ref: "#/components/responses/Error"}
+  /api/v1/cluster:
+    get:
+      tags: [cluster]
+      summary: Estado del clúster (nodos, carga, época y pérdida)
+      operationId: verCluster
+      responses:
+        "200":
+          description: Estado actual del coordinador.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/EstadoCluster"}
+        "503": {$ref: "#/components/responses/Error"}
+  /api/v1/entrenamientos:
+    post:
+      tags: [cluster]
+      summary: Lanza un entrenamiento distribuido
+      description: |
+        Responde 202 de inmediato; el progreso se consulta en
+        `GET /api/v1/entrenamientos/{id}`. Solo puede haber uno en curso. Al
+        terminar bien, el modelo nuevo se publica y cambia `version_modelo`.
+      operationId: crearEntrenamiento
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/ParametrosEntrenamiento"}
+      responses:
+        "202":
+          description: Entrenamiento aceptado.
+          headers:
+            Location:
+              schema: {type: string, example: /api/v1/entrenamientos/ent-1}
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Entrenamiento"}
+        "400": {$ref: "#/components/responses/Error"}
+        "409": {$ref: "#/components/responses/Error"}
+        "503": {$ref: "#/components/responses/Error"}
+  /api/v1/entrenamientos/{id}:
+    get:
+      tags: [cluster]
+      summary: Estado de un entrenamiento
+      operationId: verEntrenamiento
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: {type: string, example: ent-1}
+      responses:
+        "200":
+          description: Estado del entrenamiento.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Entrenamiento"}
+        "404": {$ref: "#/components/responses/Error"}
+components:
+  responses:
+    Error:
+      description: Error con mensaje en español.
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [error]
+            properties:
+              error: {type: string, example: "semana epidemiológica 54 fuera de 1–53"}
+  schemas:
+    Consulta:
+      type: object
+      additionalProperties: false
+      required: [departamento, ano, semana, edad, sexo]
+      properties:
+        departamento: {type: string, example: LORETO, description: Sin distinguir mayúsculas.}
+        ano: {type: integer, minimum: 2011, maximum: 2100, example: 2024, description: "Mínimo: ano_min del modelo."}
+        semana: {type: integer, minimum: 1, maximum: 53, example: 10}
+        edad: {type: integer, minimum: 0, example: 34}
+        tipo_edad: {type: string, enum: [A, M, D], default: A, description: Años, meses o días.}
+        sexo: {type: string, enum: [F, M]}
+    Prediccion:
+      type: object
+      properties:
+        riesgo: {type: number, format: double, description: Probabilidad calibrada a la tasa real.}
+        probabilidad_ponderada: {type: number, format: double, description: "σ(w·x+b) del modelo con pesos por clase; se compara con el umbral."}
+        clase: {type: integer, enum: [0, 1]}
+        etiqueta: {type: string, example: con signos de alarma o grave}
+        umbral: {type: number, format: double, example: 0.5}
+        departamento_modelo: {type: string, example: LORETO, description: Columna usada (OTROS si no tiene propia).}
+        version_modelo: {type: string, example: 3f9a1c0b7d2e}
+    Modelo:
+      type: object
+      properties:
+        version: {type: string}
+        generado: {type: string, format: date-time}
+        umbral: {type: number, format: double}
+        ajuste_prior: {type: number, format: double}
+        sesgo: {type: number, format: double}
+        ano_min: {type: integer}
+        departamentos:
+          type: array
+          items: {type: string}
+        variables:
+          type: array
+          items:
+            type: object
+            properties:
+              nombre: {type: string, example: depto_loreto}
+              peso: {type: number, format: double}
+    EstadoCluster:
+      type: object
+      properties:
+        epocas: {type: integer, description: Épocas completadas.}
+        perdida: {type: number, format: double}
+        reasignaciones: {type: integer}
+        error: {type: string}
+        nodos:
+          type: array
+          items:
+            type: object
+            properties:
+              nombre: {type: string}
+              remoto: {type: string}
+              workers: {type: integer}
+              sano: {type: boolean}
+              carga: {type: integer, description: Shards asignados.}
+              motivo: {type: string}
+    ParametrosEntrenamiento:
+      type: object
+      additionalProperties: false
+      properties:
+        epocas: {type: integer, minimum: 1, maximum: 100000, default: 600}
+        tasa: {type: number, format: double, default: 2}
+        lambda: {type: number, format: double, default: 0.0001}
+    Entrenamiento:
+      type: object
+      properties:
+        id: {type: string, example: ent-1}
+        estado: {type: string, enum: [en_curso, terminado, fallido]}
+        epocas: {type: integer}
+        tasa: {type: number, format: double}
+        lambda: {type: number, format: double}
+        epoca: {type: integer, description: Épocas completadas.}
+        perdida: {type: number, format: double}
+        inicio: {type: string, format: date-time}
+        fin: {type: string, format: date-time}
+        version_modelo: {type: string}
+        error: {type: string}
