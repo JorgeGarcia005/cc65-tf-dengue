@@ -142,21 +142,21 @@ components:
       additionalProperties: false
       required: [departamento, ano, semana, edad, sexo]
       properties:
-        departamento: {type: string, example: LORETO, description: Sin distinguir mayúsculas.}
+        departamento: {type: string, example: LORETO, description: "Sin distinguir mayúsculas."}
         ano: {type: integer, minimum: 2011, maximum: 2100, example: 2024, description: "Mínimo: ano_min del modelo."}
         semana: {type: integer, minimum: 1, maximum: 53, example: 10}
         edad: {type: integer, minimum: 0, example: 34}
-        tipo_edad: {type: string, enum: [A, M, D], default: A, description: Años, meses o días.}
+        tipo_edad: {type: string, enum: [A, M, D], default: A, description: "Años, meses o días."}
         sexo: {type: string, enum: [F, M]}
     Prediccion:
       type: object
       properties:
-        riesgo: {type: number, format: double, description: Probabilidad calibrada a la tasa real.}
+        riesgo: {type: number, format: double, description: "Probabilidad calibrada a la tasa real."}
         probabilidad_ponderada: {type: number, format: double, description: "σ(w·x+b) del modelo con pesos por clase; se compara con el umbral."}
         clase: {type: integer, enum: [0, 1]}
         etiqueta: {type: string, example: con signos de alarma o grave}
         umbral: {type: number, format: double, example: 0.5}
-        departamento_modelo: {type: string, example: LORETO, description: Columna usada (OTROS si no tiene propia).}
+        departamento_modelo: {type: string, example: LORETO, description: "Columna usada (OTROS si no tiene propia)."}
         version_modelo: {type: string, example: 3f9a1c0b7d2e}
     Modelo:
       type: object
@@ -180,7 +180,7 @@ components:
     EstadoCluster:
       type: object
       properties:
-        epocas: {type: integer, description: Épocas completadas.}
+        epocas: {type: integer, description: "Épocas completadas."}
         perdida: {type: number, format: double}
         reasignaciones: {type: integer}
         error: {type: string}
@@ -193,7 +193,7 @@ components:
               remoto: {type: string}
               workers: {type: integer}
               sano: {type: boolean}
-              carga: {type: integer, description: Shards asignados.}
+              carga: {type: integer, description: "Shards asignados."}
               motivo: {type: string}
     ParametrosEntrenamiento:
       type: object
@@ -210,7 +210,7 @@ components:
         epocas: {type: integer}
         tasa: {type: number, format: double}
         lambda: {type: number, format: double}
-        epoca: {type: integer, description: Épocas completadas.}
+        epoca: {type: integer, description: "Épocas completadas."}
         perdida: {type: number, format: double}
         inicio: {type: string, format: date-time}
         fin: {type: string, format: date-time}
