@@ -5,8 +5,10 @@ package contrato
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"slices"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -97,6 +99,62 @@ func Almacen(t *testing.T, a almacen.Almacen) {
 		again, _, _ := a.Entrenamiento(ctx, "ent-x-1")
 		if again.Historia[0] != 0.69 {
 			t.Fatal("el almacén comparte el slice de historia con quien lo lee")
+		}
+	})
+
+	// PR-40 H3: crear no sobrescribe un entrenamiento existente.
+	t.Run("CrearEntrenamientoNoSobrescribe", func(t *testing.T) {
+		ini := time.Date(2026, 11, 17, 13, 0, 0, 0, time.UTC)
+		e := almacen.Entrenamiento{ID: "ent-dup", Estado: almacen.EnCurso, Epocas: 3, Inicio: ini}
+		if err := a.CrearEntrenamiento(ctx, e); err != nil {
+			t.Fatal(err)
+		}
+		otro := e
+		otro.Epocas = 9
+		if err := a.CrearEntrenamiento(ctx, otro); !errors.Is(err, almacen.ErrDuplicado) {
+			t.Fatalf("segundo CrearEntrenamiento con el mismo id: %v, se esperaba ErrDuplicado", err)
+		}
+		got, _, _ := a.Entrenamiento(ctx, "ent-dup")
+		if got.Epocas != 3 {
+			t.Fatalf("la colisión alteró el existente: %d épocas", got.Epocas)
+		}
+	})
+
+	// PR-40 H1: lo necesario para reconciliar al arrancar.
+	t.Run("EnCursoYModeloDeEntrenamiento", func(t *testing.T) {
+		ini := time.Date(2026, 11, 17, 14, 0, 0, 0, time.UTC)
+		for i, est := range []string{almacen.EnCurso, almacen.Terminado, almacen.EnCurso} {
+			e := almacen.Entrenamiento{ID: fmt.Sprintf("ent-rec-%d", i), Estado: est, Inicio: ini}
+			if err := a.GuardarEntrenamiento(ctx, e); err != nil {
+				t.Fatal(err)
+			}
+		}
+		en, err := a.EntrenamientosEnCurso(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var ids []string
+		for _, e := range en {
+			if strings.HasPrefix(e.ID, "ent-rec-") {
+				ids = append(ids, e.ID)
+			}
+		}
+		slices.Sort(ids)
+		if !slices.Equal(ids, []string{"ent-rec-0", "ent-rec-2"}) {
+			t.Fatalf("en curso: %v", ids)
+		}
+		if _, ok, err := a.ModeloDeEntrenamiento(ctx, "ent-rec-0"); err != nil || ok {
+			t.Fatalf("sin modelo: ok=%v err=%v", ok, err)
+		}
+		esq := esquema(t)
+		m := almacen.Modelo{Version: "ffffffffffff", Pesos: make([]float64, esq.D()+1), Esquema: esq, Umbral: 0.5,
+			EntrenamientoID: "ent-rec-0", Publicado: ini}
+		if err := a.GuardarModelo(ctx, m); err != nil {
+			t.Fatal(err)
+		}
+		got, ok, err := a.ModeloDeEntrenamiento(ctx, "ent-rec-0")
+		if err != nil || !ok || got.Version != "ffffffffffff" {
+			t.Fatalf("modelo de ent-rec-0: %+v ok=%v err=%v", got, ok, err)
 		}
 	})
 

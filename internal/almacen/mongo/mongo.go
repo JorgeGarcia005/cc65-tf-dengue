@@ -58,7 +58,10 @@ func (a *Almacen) crearIndices(ctx context.Context) error {
 		col    *drv.Collection
 		models []drv.IndexModel
 	}{
-		{a.modelos, []drv.IndexModel{{Keys: bson.D{{Key: "publicado", Value: -1}}}}},
+		{a.modelos, []drv.IndexModel{
+			{Keys: bson.D{{Key: "publicado", Value: -1}}},
+			{Keys: bson.D{{Key: "entrenamiento_id", Value: 1}}},
+		}},
 		{a.entrenamientos, []drv.IndexModel{
 			{Keys: bson.D{{Key: "inicio", Value: -1}}},
 			{Keys: bson.D{{Key: "estado", Value: 1}}},
@@ -177,4 +180,42 @@ func limpiar(err error, uri string) error {
 		}
 	}
 	return errors.New(msg)
+}
+
+// ModeloDeEntrenamiento busca el modelo publicado por ese entrenamiento.
+func (a *Almacen) ModeloDeEntrenamiento(ctx context.Context, id string) (almacen.Modelo, bool, error) {
+	var m almacen.Modelo
+	err := a.modelos.FindOne(ctx, bson.D{{Key: "entrenamiento_id", Value: id}}).Decode(&m)
+	if errors.Is(err, drv.ErrNoDocuments) {
+		return almacen.Modelo{}, false, nil
+	}
+	if err != nil {
+		return almacen.Modelo{}, false, fmt.Errorf("mongo: modelos: %w", err)
+	}
+	return m, true, nil
+}
+
+// CrearEntrenamiento inserta; un _id repetido devuelve almacen.ErrDuplicado.
+func (a *Almacen) CrearEntrenamiento(ctx context.Context, e almacen.Entrenamiento) error {
+	_, err := a.entrenamientos.InsertOne(ctx, e)
+	if drv.IsDuplicateKeyError(err) {
+		return almacen.ErrDuplicado
+	}
+	if err != nil {
+		return fmt.Errorf("mongo: entrenamientos: %w", err)
+	}
+	return nil
+}
+
+// EntrenamientosEnCurso lista los que tienen estado en_curso.
+func (a *Almacen) EntrenamientosEnCurso(ctx context.Context) ([]almacen.Entrenamiento, error) {
+	cur, err := a.entrenamientos.Find(ctx, bson.D{{Key: "estado", Value: almacen.EnCurso}})
+	if err != nil {
+		return nil, fmt.Errorf("mongo: entrenamientos: %w", err)
+	}
+	var en []almacen.Entrenamiento
+	if err := cur.All(ctx, &en); err != nil {
+		return nil, fmt.Errorf("mongo: entrenamientos: %w", err)
+	}
+	return en, nil
 }

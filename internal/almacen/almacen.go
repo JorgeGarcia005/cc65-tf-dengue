@@ -7,6 +7,7 @@ package almacen
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strconv"
 	"time"
@@ -99,12 +100,23 @@ type Almacen interface {
 	GuardarModelo(ctx context.Context, m Modelo) error
 	// ModeloVigente devuelve el de Publicado más reciente; false si no hay.
 	ModeloVigente(ctx context.Context) (Modelo, bool, error)
-	// GuardarEntrenamiento inserta o reemplaza por ID.
+	// ModeloDeEntrenamiento devuelve el modelo que publicó ese entrenamiento.
+	ModeloDeEntrenamiento(ctx context.Context, id string) (Modelo, bool, error)
+	// CrearEntrenamiento solo inserta: si el ID ya existe devuelve
+	// ErrDuplicado y deja intacto el existente (PR-40 H3).
+	CrearEntrenamiento(ctx context.Context, e Entrenamiento) error
+	// GuardarEntrenamiento reemplaza por ID (progreso y estado final).
 	GuardarEntrenamiento(ctx context.Context, e Entrenamiento) error
 	Entrenamiento(ctx context.Context, id string) (Entrenamiento, bool, error)
+	// EntrenamientosEnCurso lista los que figuran en curso: al arrancar, son
+	// los que una ejecución anterior dejó sin cerrar (PR-40 H1).
+	EntrenamientosEnCurso(ctx context.Context) ([]Entrenamiento, error)
 	RegistrarPrediccion(ctx context.Context, r RegistroPrediccion) error
 	Cerrar(ctx context.Context) error
 }
+
+// ErrDuplicado: CrearEntrenamiento recibió un ID que ya existe.
+var ErrDuplicado = errors.New("almacen: ya existe un entrenamiento con ese id")
 
 // Cache guarda respuestas de predicción ya codificadas.
 type Cache interface {

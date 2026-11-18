@@ -130,3 +130,36 @@ func (c *CacheMemoria) Guardar(_ context.Context, clave string, valor []byte, tt
 	c.valores[clave] = entradaCache{valor: append([]byte(nil), valor...), expira: ahora.Add(ttl)}
 	return nil
 }
+
+func (m *Memoria) ModeloDeEntrenamiento(_ context.Context, id string) (Modelo, bool, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for _, mod := range m.modelos {
+		if mod.EntrenamientoID == id {
+			return mod.Copia(), true, nil
+		}
+	}
+	return Modelo{}, false, nil
+}
+
+func (m *Memoria) CrearEntrenamiento(_ context.Context, e Entrenamiento) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if _, ok := m.entrenamientos[e.ID]; ok {
+		return ErrDuplicado
+	}
+	m.entrenamientos[e.ID] = e.Copia()
+	return nil
+}
+
+func (m *Memoria) EntrenamientosEnCurso(context.Context) ([]Entrenamiento, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	var en []Entrenamiento
+	for _, e := range m.entrenamientos {
+		if e.Estado == EnCurso {
+			en = append(en, e.Copia())
+		}
+	}
+	return en, nil
+}
