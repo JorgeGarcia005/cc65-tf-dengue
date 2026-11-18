@@ -16,30 +16,25 @@ import (
 // TestBDDePuntaAPunta usa MongoDB y Redis reales (deploy/docker-compose.bd.yml):
 // predice dos veces la misma consulta (MISS y luego HIT desde Redis), entrena
 // y comprueba que el modelo, el entrenamiento y las predicciones quedan en Mongo.
-// Con EVIDENCIA_BASE=cc65_dengue escribe en la base real y no la borra, para
-// que scripts/evidencia-bd.sh la muestre.
+// Siempre usa una base temporal que se borra al final: el entrenador es falso y
+// su modelo no debe mezclarse con la base real cc65_dengue (PR-40 H4).
 func TestBDDePuntaAPunta(t *testing.T) {
 	ctx, cancelar := context.WithTimeout(context.Background(), time.Minute)
 	defer cancelar()
-	uri, dir, base := os.Getenv("MONGO_URI"), os.Getenv("REDIS_ADDR"), os.Getenv("EVIDENCIA_BASE")
+	uri, dir := os.Getenv("MONGO_URI"), os.Getenv("REDIS_ADDR")
 	if uri == "" {
 		uri = "mongodb://localhost:27017"
 	}
 	if dir == "" {
 		dir = "localhost:6379"
 	}
-	borrar := base == ""
-	if borrar {
-		base = fmt.Sprintf("cc65_test_%d", time.Now().UnixNano())
-	}
+	base := fmt.Sprintf("cc65_test_%d", time.Now().UnixNano())
 	alm, err := mongo.Conectar(ctx, uri, base)
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() {
-		if borrar {
-			_ = alm.Borrar(context.Background())
-		}
+		_ = alm.Borrar(context.Background())
 		_ = alm.Cerrar(context.Background())
 	})
 	cache, err := redis.Conectar(ctx, dir)

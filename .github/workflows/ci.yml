@@ -59,8 +59,8 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
-      - name: go test -race -tags integracion ./internal/almacen/...
-        run: go test -race -count=1 -tags integracion -v ./internal/almacen/...
+      - name: go test -race -tags integracion (adaptadores y API de punta a punta)
+        run: go test -race -count=1 -tags integracion -v ./internal/almacen/... ./internal/api
 
   go:
     name: Go (gofmt, vet, test -race)
