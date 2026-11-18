@@ -2,6 +2,9 @@ package api
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
+	"errors"
 	"fmt"
 	"sync"
 	"time"
@@ -55,37 +58,69 @@ const (
 type entrenamientos struct {
 	almacen almacen.Almacen
 	log     func(string, ...any)
+	nuevoID func() string // nuevoIDEntrenamiento; los tests fuerzan colisiones
 
 	mu      sync.Mutex
 	porID   map[string]*Entrenamiento
 	enCurso string
-	sig     int
 }
 
-func (e *entrenamientos) iniciar(p ParametrosEntrenamiento) (Entrenamiento, bool) {
+// nuevoIDEntrenamiento combina la fecha (legible) con 64 bits aleatorios: no
+// depende del reloj ni de un contador que se reinicia con el proceso (PR-40 H3).
+func nuevoIDEntrenamiento() string {
+	var b [8]byte
+	_, _ = rand.Read(b[:])
+	return fmt.Sprintf("ent-%s-%s", time.Now().UTC().Format("20060102T150405"), hex.EncodeToString(b[:]))
+}
+
+// IntentosCrear: IDs distintos que se prueban si CrearEntrenamiento choca.
+const IntentosCrear = 3
+
+// errEnCurso: el clúster ya está entrenando (→ 409).
+var errEnCurso = errors.New("ya hay un entrenamiento en curso")
+
+// reservando ocupa enCurso mientras el entrenamiento se crea en el almacén.
+const reservando = "(creándose)"
+
+// iniciar reserva el clúster y crea el entrenamiento en el almacén con un ID
+// nuevo. Si el almacén no lo acepta, libera la reserva y devuelve el error:
+// nunca se corre un entrenamiento que no quedó registrado.
+func (e *entrenamientos) iniciar(ctx context.Context, p ParametrosEntrenamiento) (Entrenamiento, error) {
 	e.mu.Lock()
 	if e.enCurso != "" {
-		t := e.porID[e.enCurso].Copia()
+		var t Entrenamiento
+		if actual, ok := e.porID[e.enCurso]; ok {
+			t = actual.Copia()
+		}
 		e.mu.Unlock()
-		return t, false
+		return t, errEnCurso
+	}
+	e.enCurso = reservando
+	e.mu.Unlock()
+
+	t := Entrenamiento{Estado: EnCurso, Epocas: p.Epocas, Tasa: p.Tasa, Lambda: p.Lambda,
+		Historia: []float64{}, Nodos: []cluster.EstadoNodo{}, Inicio: time.Now().UTC()}
+	var err error
+	for range IntentosCrear {
+		t.ID = e.nuevoID()
+		if err = e.almacen.CrearEntrenamiento(ctx, t); !errors.Is(err, almacen.ErrDuplicado) {
+			break
+		}
+	}
+
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if err != nil {
+		e.enCurso = ""
+		return Entrenamiento{}, fmt.Errorf("no se pudo registrar el entrenamiento: %w", err)
 	}
 	if e.porID == nil {
 		e.porID = map[string]*Entrenamiento{}
 	}
-	e.sig++
-	ahora := time.Now().UTC()
-	t := &Entrenamiento{
-		// La fecha evita repetir IDs de ejecuciones anteriores ya guardadas.
-		ID:     fmt.Sprintf("ent-%s-%d", ahora.Format("20060102T150405"), e.sig),
-		Estado: EnCurso, Epocas: p.Epocas, Tasa: p.Tasa, Lambda: p.Lambda,
-		Historia: []float64{}, Nodos: []cluster.EstadoNodo{}, Inicio: ahora,
-	}
-	e.porID[t.ID] = t
+	guardado := t.Copia()
+	e.porID[t.ID] = &guardado
 	e.enCurso = t.ID
-	copia := t.Copia()
-	e.mu.Unlock()
-	e.persistir(copia)
-	return copia, true
+	return t.Copia(), nil
 }
 
 func (e *entrenamientos) progreso(id string, epoca int, perdida float64) {
@@ -100,10 +135,13 @@ func (e *entrenamientos) progreso(id string, epoca int, perdida float64) {
 	}
 	e.mu.Unlock()
 	if copia != nil {
-		e.persistir(*copia)
+		e.persistir(*copia, 1)
 	}
 }
 
+// terminar fija el estado final y lo persiste con reintentos. Si aun así no se
+// guarda, el estado en memoria sigue siendo correcto y, tras un reinicio,
+// reconciliar lo deduce del modelo guardado (PR-40 H1).
 func (e *entrenamientos) terminar(id, version string, est *cluster.Estado, err error) Entrenamiento {
 	e.mu.Lock()
 	t := e.porID[id]
@@ -121,7 +159,7 @@ func (e *entrenamientos) terminar(id, version string, est *cluster.Estado, err e
 	e.enCurso = ""
 	copia := t.Copia()
 	e.mu.Unlock()
-	e.persistir(copia)
+	e.persistir(copia, 3)
 	return copia
 }
 
@@ -138,10 +176,48 @@ func (e *entrenamientos) consultar(ctx context.Context, id string) (Entrenamient
 	return e.almacen.Entrenamiento(ctx, id)
 }
 
-func (e *entrenamientos) persistir(t Entrenamiento) {
-	ctx, cancelar := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancelar()
-	if err := e.almacen.GuardarEntrenamiento(ctx, t); err != nil {
-		e.log("api: no se pudo guardar el entrenamiento %s: %v", t.ID, err)
+// persistir intenta hasta `intentos` veces, con espera creciente.
+func (e *entrenamientos) persistir(t Entrenamiento, intentos int) {
+	var err error
+	for i := range intentos {
+		if i > 0 {
+			time.Sleep(time.Duration(100*i*i) * time.Millisecond)
+		}
+		ctx, cancelar := context.WithTimeout(context.Background(), 5*time.Second)
+		err = e.almacen.GuardarEntrenamiento(ctx, t)
+		cancelar()
+		if err == nil {
+			return
+		}
 	}
+	e.log("api: no se pudo guardar el entrenamiento %s (%s): %v", t.ID, t.Estado, err)
+}
+
+// reconciliar cierra, al arrancar, los entrenamientos que una ejecución
+// anterior dejó en curso: si su modelo está guardado terminaron (solo faltó
+// escribir el estado final); si no, se interrumpieron. Hay un solo
+// coordinador, así que ninguno puede seguir corriendo (PR-40 H1).
+func (e *entrenamientos) reconciliar(ctx context.Context) error {
+	en, err := e.almacen.EntrenamientosEnCurso(ctx)
+	if err != nil {
+		return err
+	}
+	for _, t := range en {
+		m, ok, err := e.almacen.ModeloDeEntrenamiento(ctx, t.ID)
+		if err != nil {
+			return err
+		}
+		if ok {
+			fin := m.Publicado
+			t.Estado, t.VersionModelo, t.Fin = Terminado, m.Version, &fin
+		} else {
+			fin := time.Now().UTC()
+			t.Estado, t.Error, t.Fin = Fallido, "interrumpido: el coordinador se detuvo antes de terminar", &fin
+		}
+		if err := e.almacen.GuardarEntrenamiento(ctx, t); err != nil {
+			return err
+		}
+		e.log("api: entrenamiento %s reconciliado como %s", t.ID, t.Estado)
+	}
+	return nil
 }
