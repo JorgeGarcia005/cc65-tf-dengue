@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"go.mongodb.org/mongo-driver/v2/bson"
@@ -36,11 +37,11 @@ func Conectar(ctx context.Context, uri, base string) (*Almacen, error) {
 	cli, err := drv.Connect(options.Client().ApplyURI(uri).
 		SetServerSelectionTimeout(5 * time.Second).SetTimeout(10 * time.Second))
 	if err != nil {
-		return nil, fmt.Errorf("mongo: %w", err)
+		return nil, fmt.Errorf("mongo: %w", limpiar(err, uri))
 	}
 	if err := cli.Ping(ctx, nil); err != nil {
 		_ = cli.Disconnect(context.Background())
-		return nil, fmt.Errorf("mongo: sin conexión a %s: %w", uri, err)
+		return nil, fmt.Errorf("mongo: sin conexión a %s: %w", sinCredenciales(uri), limpiar(err, uri))
 	}
 	db := cli.Database(base)
 	a := &Almacen{cliente: cli, modelos: db.Collection("modelos"),
@@ -133,3 +134,47 @@ func (a *Almacen) Cerrar(ctx context.Context) error { return a.cliente.Disconnec
 
 // Borrar elimina la base (solo para los tests de integración).
 func (a *Almacen) Borrar(ctx context.Context) error { return a.modelos.Database().Drop(ctx) }
+
+// credenciales separa la parte usuario:clave@ de una URI mongodb://…
+func credenciales(uri string) (esquema, info, resto string, ok bool) {
+	esquema, despues, hay := strings.Cut(uri, "://")
+	if !hay {
+		return "", "", uri, false
+	}
+	fin := strings.IndexAny(despues, "/?")
+	if fin < 0 {
+		fin = len(despues)
+	}
+	at := strings.LastIndex(despues[:fin], "@")
+	if at < 0 {
+		return esquema, "", despues, false
+	}
+	return esquema, despues[:at], despues[at:], true
+}
+
+// sinCredenciales reemplaza usuario y contraseña de una URI por *** para
+// poder mostrarla en logs y errores (PR-40 H8).
+func sinCredenciales(uri string) string {
+	esquema, _, resto, ok := credenciales(uri)
+	if !ok {
+		return uri
+	}
+	return esquema + "://***" + resto
+}
+
+// limpiar quita de un error del driver la URI y cualquier rastro del usuario
+// o la contraseña.
+func limpiar(err error, uri string) error {
+	_, info, _, ok := credenciales(uri)
+	if !ok {
+		return err
+	}
+	msg := strings.ReplaceAll(err.Error(), uri, sinCredenciales(uri))
+	usuario, clave, _ := strings.Cut(info, ":")
+	for _, s := range []string{clave, usuario} {
+		if s != "" {
+			msg = strings.ReplaceAll(msg, s, "***")
+		}
+	}
+	return errors.New(msg)
+}
