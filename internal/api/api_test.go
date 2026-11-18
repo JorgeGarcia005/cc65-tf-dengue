@@ -432,3 +432,163 @@ func TestCierreOrdenadoEsperaPeticionesEnCurso(t *testing.T) {
 		t.Fatal("el puerto sigue aceptando conexiones tras el cierre")
 	}
 }
+
+// --- Ronda 1 del juez (PR-39) -------------------------------------------------
+
+func ptr[T any](v T) *T { return &v }
+
+// H1: sin edad o con edad null es 400; edad 0 explícita (recién nacido) es 200.
+func TestPrediccionEdadAusenteONulaDa400(t *testing.T) {
+	_, ts := servidorDePrueba(t, Opciones{})
+	base := `"departamento":"LORETO","ano":2024,"semana":10,"sexo":"F"`
+	for nombre, cuerpo := range map[string]string{
+		"sin edad":  `{` + base + `}`,
+		"edad null": `{` + base + `,"edad":null}`,
+	} {
+		cod, v := pedir(t, "POST", ts.URL+"/api/v1/predicciones", cuerpo)
+		if cod != http.StatusBadRequest || !strings.Contains(v["error"].(string), "edad") {
+			t.Fatalf("%s: código %d, %v", nombre, cod, v)
+		}
+	}
+	if cod, v := pedir(t, "POST", ts.URL+"/api/v1/predicciones", `{`+base+`,"edad":0}`); cod != http.StatusOK {
+		t.Fatalf("edad 0 explícita: código %d, %v", cod, v)
+	}
+}
+
+// H3: un esquema con desviación nula o ausente no se carga.
+func TestPrediccionModeloConDesviacionNulaNoSeCarga(t *testing.T) {
+	for _, campo := range []string{"desv_edad", "desv_ano"} {
+		var m map[string]any
+		if err := json.Unmarshal(modeloDePrueba(t), &m); err != nil {
+			t.Fatal(err)
+		}
+		m["esquema"].(map[string]any)[campo] = 0
+		b, _ := json.Marshal(m)
+		if _, err := CargarModelo(b); err == nil || !strings.Contains(err.Error(), campo) {
+			t.Fatalf("%s = 0: se esperaba error que lo nombre, obtuve %v", campo, err)
+		}
+		delete(m["esquema"].(map[string]any), campo)
+		b, _ = json.Marshal(m)
+		if _, err := CargarModelo(b); err == nil {
+			t.Fatalf("sin %s: se esperaba error", campo)
+		}
+	}
+}
+
+// H3: si la respuesta no se puede codificar, el cliente recibe 500 con cuerpo,
+// no un 200 vacío.
+func TestPrediccionRespuestaNoCodificableDa500(t *testing.T) {
+	rec := httptest.NewRecorder()
+	responder(rec, http.StatusOK, map[string]float64{"riesgo": math.NaN()})
+	if rec.Code != http.StatusInternalServerError || !strings.Contains(rec.Body.String(), "error") {
+		t.Fatalf("código %d, cuerpo %q", rec.Code, rec.Body.String())
+	}
+}
+
+// H4: el cuerpo de POST /entrenamientos es opcional y usa los valores por defecto.
+func TestRutasEntrenamientoSinCuerpoUsaDefectos(t *testing.T) {
+	ent := &entrenadorFalso{soltar: make(chan struct{}), resultado: func(d int) []float64 { return make([]float64, d+1) }}
+	close(ent.soltar)
+	_, ts := servidorDePrueba(t, Opciones{Entrenador: ent})
+	cod, v := pedir(t, "POST", ts.URL+"/api/v1/entrenamientos", "")
+	if cod != http.StatusAccepted {
+		t.Fatalf("sin cuerpo: código %d, %v", cod, v)
+	}
+	esperar(t, func() bool {
+		ent.mu.Lock()
+		defer ent.mu.Unlock()
+		return len(ent.pedidos) == 1
+	})
+	ent.mu.Lock()
+	p := ent.pedidos[0]
+	ent.mu.Unlock()
+	if p.Epocas != DefectoEpocas || p.Tasa != DefectoTasa || p.Lambda != DefectoLambda {
+		t.Fatalf("parámetros: %+v", p)
+	}
+}
+
+// H5: contenido después del objeto JSON es 400; el espacio en blanco final no.
+func TestPrediccionContenidoSobranteDa400(t *testing.T) {
+	_, ts := servidorDePrueba(t, Opciones{})
+	ok := `{"departamento":"LORETO","ano":2024,"semana":10,"edad":3,"sexo":"F"}`
+	for nombre, cuerpo := range map[string]string{
+		"llave sobrante":   ok + `}`,
+		"segundo objeto":   ok + `{}`,
+		"texto al final":   ok + ` hola`,
+		"arreglo sobrante": ok + `[]`,
+	} {
+		cod, v := pedir(t, "POST", ts.URL+"/api/v1/predicciones", cuerpo)
+		if cod != http.StatusBadRequest {
+			t.Fatalf("%s: código %d, %v", nombre, cod, v)
+		}
+	}
+	if cod, v := pedir(t, "POST", ts.URL+"/api/v1/predicciones", ok+" \n\t "); cod != http.StatusOK {
+		t.Fatalf("espacio final: código %d, %v", cod, v)
+	}
+}
+
+// H7: antes del primer registro de nodos, "nodos" es [] y no null.
+type clusterVacio struct{}
+
+func (clusterVacio) Estado() cluster.Estado { return cluster.Estado{} }
+
+func TestRutasClusterVacioDevuelveArregloDeNodos(t *testing.T) {
+	_, ts := servidorDePrueba(t, Opciones{Cluster: clusterVacio{}})
+	res, err := http.Get(ts.URL + "/api/v1/cluster")
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, _ := io.ReadAll(res.Body)
+	res.Body.Close()
+	if !bytes.Contains(b, []byte(`"nodos":[]`)) {
+		t.Fatalf("se esperaba \"nodos\":[], cuerpo %s", b)
+	}
+}
+
+// H6: en los mapas YAML en línea ({...}) cada elemento debe ser "clave: valor";
+// un texto sin comillas con coma parte el mapa y deja una clave basura.
+func TestOpenAPIMapasEnLineaBienFormados(t *testing.T) {
+	b, err := os.ReadFile("../../docs/api/openapi.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i, l := range strings.Split(string(b), "\n") {
+		ini := strings.Index(l, ": {")
+		if ini < 0 || !strings.HasSuffix(strings.TrimSpace(l), "}") {
+			continue
+		}
+		cuerpo := strings.TrimSpace(l[ini+2:])
+		for _, el := range partirFlujo(cuerpo[1 : len(cuerpo)-1]) {
+			clave, valor, ok := strings.Cut(el, ": ")
+			if !ok || strings.TrimSpace(clave) == "" {
+				t.Errorf("openapi.yaml:%d: elemento %q no es \"clave: valor\"", i+1, el)
+				continue
+			}
+			v := strings.TrimSpace(valor)
+			if !strings.HasPrefix(v, `"`) && !strings.HasPrefix(v, "[") && !strings.HasPrefix(v, "{") && strings.Contains(v, ": ") {
+				t.Errorf("openapi.yaml:%d: valor %q debe ir entre comillas", i+1, v)
+			}
+		}
+	}
+}
+
+// partirFlujo separa por comas de primer nivel, respetando comillas y corchetes.
+func partirFlujo(s string) []string {
+	var partes []string
+	prof, comillas, ini := 0, false, 0
+	for i, c := range s {
+		switch {
+		case c == '"':
+			comillas = !comillas
+		case comillas:
+		case c == '[' || c == '{':
+			prof++
+		case c == ']' || c == '}':
+			prof--
+		case c == ',' && prof == 0:
+			partes = append(partes, strings.TrimSpace(s[ini:i]))
+			ini = i + 1
+		}
+	}
+	return append(partes, strings.TrimSpace(s[ini:]))
+}

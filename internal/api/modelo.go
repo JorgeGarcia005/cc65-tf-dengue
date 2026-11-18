@@ -78,12 +78,12 @@ func version(b []byte) string {
 // Consulta es el cuerpo de POST /api/v1/predicciones. Usa los mismos campos y
 // reglas que el CSV del MINSA (ingest.LimpiarCampos).
 type Consulta struct {
-	Departamento string  `json:"departamento"`
-	Ano          int     `json:"ano"`
-	Semana       int     `json:"semana"`
-	Edad         float64 `json:"edad"`
-	TipoEdad     string  `json:"tipo_edad"` // A (años, por defecto), M (meses) o D (días)
-	Sexo         string  `json:"sexo"`
+	Departamento string   `json:"departamento"`
+	Ano          int      `json:"ano"`
+	Semana       int      `json:"semana"`
+	Edad         *float64 `json:"edad"`      // puntero: distingue 0 (recién nacido) de ausente o null
+	TipoEdad     string   `json:"tipo_edad"` // A (años, por defecto), M (meses) o D (días)
+	Sexo         string   `json:"sexo"`
 }
 
 // Prediccion es la respuesta de POST /api/v1/predicciones.
@@ -128,12 +128,15 @@ func (m *Modelo) registro(c Consulta) (ingest.Registro, error) {
 	if tipo == "" {
 		tipo = "A"
 	}
-	if c.Edad != math.Trunc(c.Edad) || math.IsInf(c.Edad, 0) {
+	if c.Edad == nil {
+		return r, errConsulta("falta la edad")
+	}
+	if *c.Edad != math.Trunc(*c.Edad) || math.IsInf(*c.Edad, 0) {
 		return r, errConsulta("la edad debe ser un número entero")
 	}
-	edad, ok := ingest.EdadEnAnios([]byte(fmt.Sprint(int64(c.Edad))), []byte(tipo))
+	edad, ok := ingest.EdadEnAnios([]byte(fmt.Sprint(int64(*c.Edad))), []byte(tipo))
 	if !ok {
-		return r, errConsulta("edad %v con tipo_edad %q: la edad debe ser ≥ 0 y tipo_edad A, M o D", c.Edad, c.TipoEdad)
+		return r, errConsulta("edad %v con tipo_edad %q: la edad debe ser ≥ 0 y tipo_edad A, M o D", *c.Edad, c.TipoEdad)
 	}
 	if edad > ingest.EdadMax {
 		return r, errConsulta("edad mayor a %d años", ingest.EdadMax)

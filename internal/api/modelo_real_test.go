@@ -16,7 +16,7 @@ func TestCargarModeloReal(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	p, err := m.Predecir(Consulta{Departamento: "Loreto", Ano: 2024, Semana: 10, Edad: 34, Sexo: "M"})
+	p, err := m.Predecir(Consulta{Departamento: "Loreto", Ano: 2024, Semana: 10, Edad: ptr(34.0), Sexo: "M"})
 	if err != nil {
 		t.Fatal(err)
 	}
