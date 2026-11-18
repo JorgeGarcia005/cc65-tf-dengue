@@ -160,7 +160,7 @@ func (s *Servidor) verModelo(w http.ResponseWriter, _ *http.Request) {
 
 func (s *Servidor) predecir(w http.ResponseWriter, r *http.Request) {
 	var c Consulta
-	if !leerJSON(w, r, &c) {
+	if !leerJSON(w, r, &c, false) {
 		return
 	}
 	p, err := s.ModeloActual().Predecir(c)
@@ -185,7 +185,7 @@ func (s *Servidor) crearEntrenamiento(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	p := ParametrosEntrenamiento{Epocas: DefectoEpocas, Tasa: DefectoTasa, Lambda: DefectoLambda}
-	if !leerJSON(w, r, &p) {
+	if !leerJSON(w, r, &p, true) {
 		return
 	}
 	switch {
@@ -259,16 +259,31 @@ func responderError(w http.ResponseWriter, codigo int, msg string) {
 }
 
 // leerJSON decodifica el cuerpo de forma estricta y responde el error en
-// español. Devuelve false si ya respondió.
-func leerJSON(w http.ResponseWriter, r *http.Request, v any) bool {
+// español. Devuelve false si ya respondió. Si opcional, un cuerpo vacío es
+// válido y deja v como estaba (con sus valores por defecto).
+func leerJSON(w http.ResponseWriter, r *http.Request, v any, opcional bool) bool {
 	dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, MaxCuerpo))
 	dec.DisallowUnknownFields()
 	err := dec.Decode(v)
-	if err == nil && dec.More() {
-		err = errors.New("hay datos después del objeto JSON")
+	if err == nil {
+		// Decoder.More solo mira dentro de un arreglo u objeto: para exigir que
+		// el documento terminó hay que intentar leer otro valor y obtener EOF.
+		var resto json.RawMessage
+		if errResto := dec.Decode(&resto); errResto != io.EOF {
+			var grande *http.MaxBytesError
+			if errors.As(errResto, &grande) {
+				err = errResto
+			} else {
+				responderError(w, http.StatusBadRequest, "hay contenido después del objeto JSON")
+				return false
+			}
+		}
 	}
 	if err == nil {
 		return true
+	}
+	if errors.Is(err, io.EOF) && opcional {
+		return true // sin cuerpo: v conserva los valores por defecto
 	}
 	var (
 		sintaxis *json.SyntaxError
