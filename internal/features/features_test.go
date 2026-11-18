@@ -3,6 +3,7 @@ package features
 import (
 	"encoding/json"
 	"math"
+	"slices"
 	"testing"
 
 	"github.com/JorgeGarcia005/cc65-tf-dengue/internal/ingest"
@@ -126,5 +127,27 @@ func TestSemanaDeAnguloInvierteLaCodificacion(t *testing.T) {
 	}
 	if e.Indice("no_existe") != -1 {
 		t.Error("Indice de una variable inexistente debe ser -1")
+	}
+}
+
+func TestCopiaDelEsquemaEsIndependiente(t *testing.T) {
+	regs := []ingest.Registro{
+		{Departamento: "LORETO", Ano: 2015, Semana: 3, EdadAnios: 20, Sexo: 'F'},
+		{Departamento: "PIURA", Ano: 2020, Semana: 30, EdadAnios: 40, Sexo: 'M'},
+	}
+	e, err := Ajustar(regs, 2011, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	c := e.Copia()
+	c.Departamentos[0], c.Nombres[0], c.MediaEdad = "X", "x", -1
+	if e.Departamentos[0] != "LORETO" || e.Nombres[0] != "edad_z" || e.MediaEdad == -1 {
+		t.Fatalf("la copia comparte datos con el original: %+v", e)
+	}
+	x1, x2 := make([]float64, e.D()), make([]float64, e.D())
+	e.Llenar(regs[1], x1)
+	e.Copia().Llenar(regs[1], x2)
+	if !slices.Equal(x1, x2) {
+		t.Fatal("la copia no transforma igual que el original")
 	}
 }

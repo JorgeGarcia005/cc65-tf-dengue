@@ -1,6 +1,8 @@
 package almacen_test
 
 import (
+	"encoding/json"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -68,5 +70,18 @@ func TestClavePrediccionIncluyeVersionYNormaliza(t *testing.T) {
 	c.EdadAnios = 8.0 / 12
 	if b := almacen.ClavePrediccion("v1", c); b != "pred:v1:LORETO:2024:10:0.6666666666666666:M" {
 		t.Fatalf("clave con edad en meses: %q", b)
+	}
+}
+
+// PR-40 H9: la copia de un entrenamiento nuevo serializa listas vacías, no null.
+func TestCopiaConservaListasVacias(t *testing.T) {
+	for _, e := range []almacen.Entrenamiento{{ID: "a"}, {ID: "b", Historia: []float64{}}} {
+		b, err := json.Marshal(e.Copia())
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !strings.Contains(string(b), `"historia":[]`) || !strings.Contains(string(b), `"nodos":[]`) {
+			t.Fatalf("JSON de la copia: %s", b)
+		}
 	}
 }

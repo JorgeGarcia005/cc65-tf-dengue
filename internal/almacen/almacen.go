@@ -27,6 +27,13 @@ type Modelo struct {
 	Publicado       time.Time         `json:"publicado" bson:"publicado"`
 }
 
+// Copia devuelve un Modelo que no comparte pesos ni esquema con m (PR-40 H7).
+func (m Modelo) Copia() Modelo {
+	m.Pesos = append([]float64(nil), m.Pesos...)
+	m.Esquema = m.Esquema.Copia()
+	return m
+}
+
 // Estados de un entrenamiento.
 const (
 	EnCurso   = "en_curso"
@@ -55,8 +62,9 @@ type Entrenamiento struct {
 
 // Copia devuelve un Entrenamiento que no comparte slices con e.
 func (e Entrenamiento) Copia() Entrenamiento {
-	e.Historia = append([]float64(nil), e.Historia...)
-	e.Nodos = append([]cluster.EstadoNodo(nil), e.Nodos...)
+	// Siempre listas no nulas: el contrato JSON declara arreglos (PR-40 H9).
+	e.Historia = append(make([]float64, 0, len(e.Historia)), e.Historia...)
+	e.Nodos = append(make([]cluster.EstadoNodo, 0, len(e.Nodos)), e.Nodos...)
 	if e.Fin != nil {
 		f := *e.Fin
 		e.Fin = &f

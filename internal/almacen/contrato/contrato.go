@@ -57,6 +57,15 @@ func Almacen(t *testing.T, a almacen.Almacen) {
 		if err := m.Esquema.Preparar(); err != nil {
 			t.Fatalf("el esquema leído no se puede preparar: %v", err)
 		}
+		// PR-40 H7: ni quien guardó ni quien leyó puede alterar el modelo guardado.
+		mediaOriginal, depOriginal := m.Esquema.MediaEdad, m.Esquema.Departamentos[0]
+		esq.MediaEdad, esq.Departamentos[0] = -1, "ALTERADO"
+		m.Esquema.MediaEdad, m.Esquema.Departamentos[0], m.Pesos[0] = -2, "ALTERADO", -3
+		otra, _, _ := a.ModeloVigente(ctx)
+		if otra.Esquema.MediaEdad != mediaOriginal || otra.Esquema.Departamentos[0] != depOriginal || otra.Pesos[0] != 1.125 {
+			t.Fatalf("el almacén comparte el modelo con quien lo guardó o lo leyó: media %v, depto %q, peso %v",
+				otra.Esquema.MediaEdad, otra.Esquema.Departamentos[0], otra.Pesos[0])
+		}
 	})
 
 	t.Run("EntrenamientoSeReemplazaPorID", func(t *testing.T) {

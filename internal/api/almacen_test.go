@@ -174,3 +174,23 @@ func TestRegistrosLlenosSeDescartanSinBloquear(t *testing.T) {
 func jsonDecode(res *http.Response, v any) error {
 	return json.NewDecoder(res.Body).Decode(v)
 }
+
+// PR-40 H9: la respuesta 202 y el GET antes de la primera época traen listas, no null.
+func TestRutasEntrenamientoNuevoTraeListasVacias(t *testing.T) {
+	ent := &entrenadorFalso{soltar: make(chan struct{}), resultado: func(d int) []float64 { return make([]float64, d+1) }}
+	s, ts := servidorDePrueba(t, Opciones{Entrenador: ent})
+	_ = s
+	defer close(ent.soltar)
+	res, err := http.Post(ts.URL+"/api/v1/entrenamientos", "application/json", strings.NewReader(`{"epocas":3}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var crudo map[string]json.RawMessage
+	if err := jsonDecode(res, &crudo); err != nil {
+		t.Fatal(err)
+	}
+	res.Body.Close()
+	if string(crudo["historia"]) == "null" || string(crudo["nodos"]) == "null" {
+		t.Fatalf("respuesta 202: historia %s, nodos %s", crudo["historia"], crudo["nodos"])
+	}
+}

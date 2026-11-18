@@ -21,7 +21,7 @@ func NuevaMemoria() *Memoria {
 }
 
 func (m *Memoria) GuardarModelo(_ context.Context, mod Modelo) error {
-	mod.Pesos = append([]float64(nil), mod.Pesos...)
+	mod = mod.Copia()
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.modelos[mod.Version] = mod
@@ -38,8 +38,7 @@ func (m *Memoria) ModeloVigente(context.Context) (Modelo, bool, error) {
 			vig, ok = mod, true
 		}
 	}
-	vig.Pesos = append([]float64(nil), vig.Pesos...)
-	return vig, ok, nil
+	return vig.Copia(), ok, nil
 }
 
 func (m *Memoria) GuardarEntrenamiento(_ context.Context, e Entrenamiento) error {
