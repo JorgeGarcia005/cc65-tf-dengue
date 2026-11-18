@@ -176,7 +176,11 @@ func (s *Servidor) verCluster(w http.ResponseWriter, _ *http.Request) {
 		responderError(w, http.StatusServiceUnavailable, "este servidor no tiene un clúster conectado")
 		return
 	}
-	responder(w, http.StatusOK, s.op.Cluster.Estado())
+	est := s.op.Cluster.Estado()
+	if est.Nodos == nil {
+		est.Nodos = []cluster.EstadoNodo{} // el contrato declara un arreglo, también antes del primer registro
+	}
+	responder(w, http.StatusOK, est)
 }
 
 func (s *Servidor) crearEntrenamiento(w http.ResponseWriter, r *http.Request) {
