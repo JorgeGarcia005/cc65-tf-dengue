@@ -45,6 +45,9 @@ func CargarModelo(b []byte) (*Modelo, error) {
 	if err := m.Esquema.Preparar(); err != nil {
 		return nil, fmt.Errorf("modelo: %w", err)
 	}
+	if err := validarNumeros(&m); err != nil {
+		return nil, err
+	}
 	if len(m.Pesos) != m.Esquema.D()+1 {
 		return nil, fmt.Errorf("modelo: %d pesos para %d variables (se esperaban %d con el sesgo)",
 			len(m.Pesos), m.Esquema.D(), m.Esquema.D()+1)
@@ -68,6 +71,32 @@ func (m *Modelo) conPesos(w []float64, generado string) (*Modelo, error) {
 	}
 	n.Version = version(b)
 	return n, nil
+}
+
+// validarNumeros exige que las medias sean finitas, las desviaciones positivas
+// (Llenar divide por ellas) y los pesos y el ajuste finitos: un artefacto
+// incompleto se rechaza al cargar, no con una predicción NaN.
+func validarNumeros(m *Modelo) error {
+	e := m.Esquema
+	for _, c := range []struct {
+		nombre   string
+		v        float64
+		positivo bool
+	}{
+		{"media_edad", e.MediaEdad, false}, {"desv_edad", e.DesvEdad, true},
+		{"media_ano", e.MediaAno, false}, {"desv_ano", e.DesvAno, true},
+		{"ajuste_prior", m.AjustePrior, false},
+	} {
+		if math.IsNaN(c.v) || math.IsInf(c.v, 0) || (c.positivo && c.v <= 0) {
+			return fmt.Errorf("modelo: %s = %v inválido (debe ser finito%s)", c.nombre, c.v, map[bool]string{true: " y positivo"}[c.positivo])
+		}
+	}
+	for j, w := range m.Pesos {
+		if math.IsNaN(w) || math.IsInf(w, 0) {
+			return fmt.Errorf("modelo: peso %d = %v no es finito", j, w)
+		}
+	}
+	return nil
 }
 
 func version(b []byte) string {

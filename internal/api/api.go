@@ -242,10 +242,16 @@ func (s *Servidor) verEntrenamiento(w http.ResponseWriter, r *http.Request) {
 
 // --- JSON ---------------------------------------------------------------------
 
+// responder codifica antes de escribir el código: si v no se puede codificar
+// (p. ej. un NaN), el cliente recibe 500 con mensaje y no un 200 vacío.
 func responder(w http.ResponseWriter, codigo int, v any) {
+	b, err := json.Marshal(v)
+	if err != nil {
+		codigo, b = http.StatusInternalServerError, []byte(`{"error":"error interno al codificar la respuesta"}`)
+	}
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.WriteHeader(codigo)
-	_ = json.NewEncoder(w).Encode(v)
+	_, _ = w.Write(append(b, '\n'))
 }
 
 func responderError(w http.ResponseWriter, codigo int, msg string) {
