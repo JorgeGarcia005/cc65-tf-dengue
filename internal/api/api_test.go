@@ -66,7 +66,7 @@ func servidorDePrueba(t *testing.T, op Opciones) (*Servidor, *httptest.Server) {
 		t.Fatal(err)
 	}
 	ts := httptest.NewServer(s.Handler())
-	t.Cleanup(ts.Close)
+	t.Cleanup(func() { ts.Close(); s.Cerrar() })
 	return s, ts
 }
 

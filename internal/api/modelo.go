@@ -8,7 +8,9 @@ import (
 	"fmt"
 	"math"
 	"strings"
+	"time"
 
+	"github.com/JorgeGarcia005/cc65-tf-dengue/internal/almacen"
 	"github.com/JorgeGarcia005/cc65-tf-dengue/internal/features"
 	"github.com/JorgeGarcia005/cc65-tf-dengue/internal/ingest"
 	"github.com/JorgeGarcia005/cc65-tf-dengue/internal/ml"
@@ -186,6 +188,40 @@ func (m *Modelo) Predecir(c Consulta) (Prediccion, error) {
 	if err != nil {
 		return Prediccion{}, err
 	}
+	return m.prediccion(r), nil
+}
+
+// normalizada es la forma canónica de una consulta válida: la que entra en
+// la clave de la caché y en el registro de predicciones (ADR-0006).
+func normalizada(r ingest.Registro) almacen.ConsultaNormalizada {
+	return almacen.ConsultaNormalizada{Departamento: r.Departamento, Ano: r.Ano, Semana: r.Semana,
+		EdadAnios: r.EdadAnios, Sexo: string(r.Sexo)}
+}
+
+// Documento convierte el modelo al documento de la colección modelos.
+func (m *Modelo) Documento(entrenamientoID string, publicado time.Time) almacen.Modelo {
+	return almacen.Modelo{Version: m.Version, Pesos: append([]float64(nil), m.Pesos...), Esquema: m.Esquema,
+		Umbral: m.Umbral, AjustePrior: m.AjustePrior, Generado: m.Generado,
+		EntrenamientoID: entrenamientoID, Publicado: publicado}
+}
+
+// ModeloDeDocumento reconstruye y valida un modelo leído del almacén. Conserva
+// la versión guardada, que es la que usan las claves de la caché.
+func ModeloDeDocumento(d almacen.Modelo) (*Modelo, error) {
+	b, err := json.Marshal(Modelo{Pesos: d.Pesos, Esquema: d.Esquema, Umbral: d.Umbral,
+		AjustePrior: d.AjustePrior, Generado: d.Generado})
+	if err != nil {
+		return nil, err
+	}
+	m, err := CargarModelo(b)
+	if err != nil {
+		return nil, err
+	}
+	m.Version = d.Version
+	return m, nil
+}
+
+func (m *Modelo) prediccion(r ingest.Registro) Prediccion {
 	d := m.Esquema.D()
 	x := make([]float64, d)
 	m.Esquema.Llenar(r, x)
@@ -210,5 +246,5 @@ func (m *Modelo) Predecir(c Consulta) (Prediccion, error) {
 			pr.DepartamentoModelo = dep
 		}
 	}
-	return pr, nil
+	return pr
 }

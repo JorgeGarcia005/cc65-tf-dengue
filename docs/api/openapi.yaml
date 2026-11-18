@@ -65,6 +65,10 @@ paths:
       responses:
         "200":
           description: Predicción.
+          headers:
+            X-Cache:
+              description: "HIT si la respuesta salió de la caché (Redis), MISS si se calculó. Ausente sin caché."
+              schema: {type: string, enum: [HIT, MISS]}
           content:
             application/json:
               schema: {$ref: "#/components/schemas/Prediccion"}
@@ -101,7 +105,7 @@ paths:
           description: Entrenamiento aceptado.
           headers:
             Location:
-              schema: {type: string, example: /api/v1/entrenamientos/ent-1}
+              schema: {type: string, example: /api/v1/entrenamientos/ent-20261117T183000-1}
           content:
             application/json:
               schema: {$ref: "#/components/schemas/Entrenamiento"}
@@ -117,7 +121,7 @@ paths:
         - name: id
           in: path
           required: true
-          schema: {type: string, example: ent-1}
+          schema: {type: string, example: ent-20261117T183000-1}
       responses:
         "200":
           description: Estado del entrenamiento.
@@ -186,15 +190,16 @@ components:
         error: {type: string}
         nodos:
           type: array
-          items:
-            type: object
-            properties:
-              nombre: {type: string}
-              remoto: {type: string}
-              workers: {type: integer}
-              sano: {type: boolean}
-              carga: {type: integer, description: "Shards asignados."}
-              motivo: {type: string}
+          items: {$ref: "#/components/schemas/EstadoNodo"}
+    EstadoNodo:
+      type: object
+      properties:
+        nombre: {type: string}
+        remoto: {type: string}
+        workers: {type: integer}
+        sano: {type: boolean}
+        carga: {type: integer, description: "Shards asignados."}
+        motivo: {type: string}
     ParametrosEntrenamiento:
       type: object
       additionalProperties: false
@@ -205,13 +210,22 @@ components:
     Entrenamiento:
       type: object
       properties:
-        id: {type: string, example: ent-1}
+        id: {type: string, example: ent-20261117T183000-1}
         estado: {type: string, enum: [en_curso, terminado, fallido]}
         epocas: {type: integer}
         tasa: {type: number, format: double}
         lambda: {type: number, format: double}
         epoca: {type: integer, description: "Épocas completadas."}
         perdida: {type: number, format: double}
+        historia:
+          type: array
+          description: "Pérdida por época."
+          items: {type: number, format: double}
+        nodos:
+          type: array
+          description: "Nodos del clúster al terminar."
+          items: {$ref: "#/components/schemas/EstadoNodo"}
+        reasignaciones: {type: integer}
         inicio: {type: string, format: date-time}
         fin: {type: string, format: date-time}
         version_modelo: {type: string}

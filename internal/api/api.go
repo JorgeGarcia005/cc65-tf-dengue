@@ -26,10 +26,12 @@ import (
 	"net/http"
 	"runtime/debug"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
 	apidoc "github.com/JorgeGarcia005/cc65-tf-dengue/docs/api"
+	"github.com/JorgeGarcia005/cc65-tf-dengue/internal/almacen"
 	"github.com/JorgeGarcia005/cc65-tf-dengue/internal/cluster"
 )
 
@@ -50,20 +52,33 @@ type Opciones struct {
 	Modelo     *Modelo
 	Entrenador Entrenador
 	Cluster    EstadoCluster
+	// Almacen persiste modelos, entrenamientos y predicciones (MongoDB en
+	// producción). Si es nil se usa almacen.Memoria.
+	Almacen almacen.Almacen
+	// Cache guarda predicciones (Redis en producción). Si es nil no hay caché.
+	Cache      almacen.Cache
 	Middleware []Middleware // se aplican en orden: el primero es el más externo
 	Log        func(formato string, args ...any)
 }
 
+// BufferRegistros es la capacidad del canal hacia el registrador de
+// predicciones: si se llena, el registro se descarta y la predicción no espera.
+const BufferRegistros = 1024
+
 // Servidor atiende la API.
 type Servidor struct {
-	op       Opciones
-	modelo   atomic.Pointer[Modelo]
-	ents     entrenamientos
-	ctx      context.Context
-	cancelar context.CancelFunc
+	op          Opciones
+	modelo      atomic.Pointer[Modelo]
+	ents        entrenamientos
+	registros   chan almacen.RegistroPrediccion
+	descartados atomic.Int64
+	ctx         context.Context
+	cancelar    context.CancelFunc
+	wg          sync.WaitGroup
 }
 
-// Nuevo crea el servidor con el modelo inicial.
+// Nuevo crea el servidor con el modelo inicial y arranca el registrador de
+// predicciones (una goroutine que escribe en el almacén).
 func Nuevo(op Opciones) (*Servidor, error) {
 	if op.Modelo == nil {
 		return nil, errors.New("api: falta el modelo")
@@ -71,17 +86,69 @@ func Nuevo(op Opciones) (*Servidor, error) {
 	if op.Log == nil {
 		op.Log = log.Printf
 	}
-	s := &Servidor{op: op}
+	if op.Almacen == nil {
+		op.Almacen = almacen.NuevaMemoria()
+	}
+	s := &Servidor{op: op, registros: make(chan almacen.RegistroPrediccion, BufferRegistros)}
+	s.ents = entrenamientos{almacen: op.Almacen, log: op.Log}
 	s.modelo.Store(op.Modelo)
 	s.ctx, s.cancelar = context.WithCancel(context.Background())
+	s.wg.Add(1)
+	go s.registrador()
 	return s, nil
 }
 
 // ModeloActual devuelve el modelo publicado.
 func (s *Servidor) ModeloActual() *Modelo { return s.modelo.Load() }
 
-// Cerrar cancela el entrenamiento en curso, si hay uno.
-func (s *Servidor) Cerrar() { s.cancelar() }
+// RegistrosDescartados cuenta las predicciones que no se registraron porque
+// el búfer estaba lleno.
+func (s *Servidor) RegistrosDescartados() int64 { return s.descartados.Load() }
+
+// Cerrar cancela el entrenamiento en curso, si hay uno, y espera a que el
+// registrador escriba lo pendiente.
+func (s *Servidor) Cerrar() {
+	s.cancelar()
+	s.wg.Wait()
+}
+
+// registrador es el único consumidor de s.registros. El canal nunca se cierra
+// (los handlers podrían enviar después): termina con el contexto y antes
+// vacía lo que quede en el búfer.
+func (s *Servidor) registrador() {
+	defer s.wg.Done()
+	guardar := func(r almacen.RegistroPrediccion) {
+		ctx, cancelar := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancelar()
+		if err := s.op.Almacen.RegistrarPrediccion(ctx, r); err != nil {
+			s.op.Log("api: no se pudo registrar la predicción: %v", err)
+		}
+	}
+	for {
+		select {
+		case r := <-s.registros:
+			guardar(r)
+		case <-s.ctx.Done():
+			for {
+				select {
+				case r := <-s.registros:
+					guardar(r)
+				default:
+					return
+				}
+			}
+		}
+	}
+}
+
+// registrar encola sin bloquear.
+func (s *Servidor) registrar(r almacen.RegistroPrediccion) {
+	select {
+	case s.registros <- r:
+	default:
+		s.descartados.Add(1)
+	}
+}
 
 // Ruta describe una ruta del mux. Documentar indica si debe figurar en el OpenAPI.
 type Ruta struct {
@@ -159,16 +226,54 @@ func (s *Servidor) verModelo(w http.ResponseWriter, _ *http.Request) {
 }
 
 func (s *Servidor) predecir(w http.ResponseWriter, r *http.Request) {
+	inicio := time.Now()
 	var c Consulta
 	if !leerJSON(w, r, &c, false) {
 		return
 	}
-	p, err := s.ModeloActual().Predecir(c)
+	m := s.ModeloActual() // una sola lectura: clave, cálculo y registro usan el mismo modelo
+	reg, err := m.registro(c)
 	if err != nil {
 		responderError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	responder(w, http.StatusOK, p)
+	cn := normalizada(reg)
+	clave := almacen.ClavePrediccion(m.Version, cn)
+	ctx := r.Context()
+
+	// Cache-aside (ADR-0006): un fallo de la caché no falla la predicción.
+	if s.op.Cache != nil {
+		b, ok, err := s.op.Cache.Obtener(ctx, clave)
+		if err != nil {
+			s.op.Log("api: caché no disponible al leer: %v", err)
+		}
+		var p Prediccion
+		if ok && json.Unmarshal(b, &p) == nil {
+			w.Header().Set("X-Cache", "HIT")
+			responderBytes(w, http.StatusOK, b)
+			s.registrar(registroDe(cn, p, true, inicio))
+			return
+		}
+	}
+	p := m.prediccion(reg)
+	b, err := json.Marshal(p)
+	if err != nil {
+		responderError(w, http.StatusInternalServerError, "error interno al codificar la respuesta")
+		return
+	}
+	if s.op.Cache != nil {
+		if err := s.op.Cache.Guardar(ctx, clave, b, almacen.TTLPrediccion); err != nil {
+			s.op.Log("api: caché no disponible al guardar: %v", err)
+		}
+		w.Header().Set("X-Cache", "MISS")
+	}
+	responderBytes(w, http.StatusOK, b)
+	s.registrar(registroDe(cn, p, false, inicio))
+}
+
+func registroDe(c almacen.ConsultaNormalizada, p Prediccion, desdeCache bool, inicio time.Time) almacen.RegistroPrediccion {
+	return almacen.RegistroPrediccion{Fecha: time.Now().UTC(), VersionModelo: p.VersionModelo, Consulta: c,
+		Riesgo: p.Riesgo, Clase: p.Clase, DesdeCache: desdeCache, Microsegundos: time.Since(inicio).Microseconds()}
 }
 
 func (s *Servidor) verCluster(w http.ResponseWriter, _ *http.Request) {
@@ -223,11 +328,23 @@ func (s *Servidor) entrenar(id string, p ParametrosEntrenamiento, base *Modelo) 
 	if err == nil {
 		var m *Modelo
 		if m, err = base.conPesos(w, time.Now().Format(time.RFC3339)); err == nil {
-			s.modelo.Store(m)
+			// Primero se persiste: si Mongo falla, el modelo igual se publica
+			// (la API sigue sirviendo) y el error queda en el log.
+			ctx, cancelar := context.WithTimeout(context.Background(), 5*time.Second)
+			if errG := s.op.Almacen.GuardarModelo(ctx, m.Documento(id, time.Now().UTC())); errG != nil {
+				s.op.Log("api: no se pudo guardar el modelo %s: %v", m.Version, errG)
+			}
+			cancelar()
+			s.modelo.Store(m) // las claves de caché cambian con la versión
 			version = m.Version
 		}
 	}
-	s.ents.terminar(id, version, err)
+	var est *cluster.Estado
+	if s.op.Cluster != nil {
+		e := s.op.Cluster.Estado()
+		est = &e
+	}
+	s.ents.terminar(id, version, est, err)
 	if err != nil {
 		s.op.Log("api: entrenamiento %s falló tras %v: %v", id, time.Since(inicio).Round(time.Millisecond), err)
 	} else {
@@ -236,7 +353,11 @@ func (s *Servidor) entrenar(id string, p ParametrosEntrenamiento, base *Modelo) 
 }
 
 func (s *Servidor) verEntrenamiento(w http.ResponseWriter, r *http.Request) {
-	t, ok := s.ents.consultar(r.PathValue("id"))
+	t, ok, err := s.ents.consultar(r.Context(), r.PathValue("id"))
+	if err != nil {
+		responderError(w, http.StatusServiceUnavailable, "no se pudo consultar el almacén: "+err.Error())
+		return
+	}
 	if !ok {
 		responderError(w, http.StatusNotFound, fmt.Sprintf("no existe el entrenamiento %q", r.PathValue("id")))
 		return
@@ -256,6 +377,13 @@ func responder(w http.ResponseWriter, codigo int, v any) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.WriteHeader(codigo)
 	_, _ = w.Write(append(b, '\n'))
+}
+
+// responderBytes escribe un JSON ya codificado (p. ej. desde la caché).
+func responderBytes(w http.ResponseWriter, codigo int, b []byte) {
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.WriteHeader(codigo)
+	_, _ = w.Write(b)
 }
 
 func responderError(w http.ResponseWriter, codigo int, msg string) {
