@@ -118,7 +118,7 @@ func Almacen(t *testing.T, a almacen.Almacen) {
 // (real o simulado) más allá de un TTL dado.
 func Cache(t *testing.T, c almacen.Cache, esperar func(time.Duration)) {
 	ctx := context.Background()
-	clave := fmt.Sprintf("pred:test:%d", time.Now().UnixNano())
+	clave := fmt.Sprintf("test:cache:%d", time.Now().UnixNano())
 	if _, ok, err := c.Obtener(ctx, clave); err != nil || ok {
 		t.Fatalf("clave nueva: ok=%v err=%v", ok, err)
 	}
