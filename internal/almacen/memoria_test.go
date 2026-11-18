@@ -85,3 +85,18 @@ func TestCopiaConservaListasVacias(t *testing.T) {
 		}
 	}
 }
+
+// PR-40 H10: sin Mongo, el registro de predicciones en RAM está acotado.
+func TestMemoriaRetieneSoloLasUltimasPredicciones(t *testing.T) {
+	m := almacen.NuevaMemoriaConLimite(3)
+	for i := range 5 {
+		_ = m.RegistrarPrediccion(t.Context(), almacen.RegistroPrediccion{Clase: i})
+	}
+	ps := m.Predicciones()
+	if len(ps) != 3 || ps[0].Clase != 2 || ps[2].Clase != 4 {
+		t.Fatalf("retenidas: %+v", ps)
+	}
+	if almacen.MaxPrediccionesMemoria <= 0 || almacen.MaxPrediccionesMemoria > 100000 {
+		t.Fatalf("límite por defecto %d", almacen.MaxPrediccionesMemoria)
+	}
+}

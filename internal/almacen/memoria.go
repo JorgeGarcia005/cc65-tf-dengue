@@ -8,16 +8,27 @@ import (
 
 // Memoria implementa Almacen en memoria, protegida por un mutex. La usan los
 // tests de la API y el coordinador cuando se arranca sin MongoDB.
+// El registro de predicciones es un búfer circular de capacidad acotada: sin
+// Mongo no se persiste nada y la RAM no crece con el tráfico (PR-40 H10).
 type Memoria struct {
 	mu             sync.Mutex
 	modelos        map[string]Modelo
 	entrenamientos map[string]Entrenamiento
-	predicciones   []RegistroPrediccion
+	predicciones   []RegistroPrediccion // búfer circular
+	siguiente      int                  // posición donde se escribe el próximo
+	limite         int
 }
 
-// NuevaMemoria crea un almacén vacío.
-func NuevaMemoria() *Memoria {
-	return &Memoria{modelos: map[string]Modelo{}, entrenamientos: map[string]Entrenamiento{}}
+// MaxPrediccionesMemoria es cuántas predicciones retiene NuevaMemoria.
+const MaxPrediccionesMemoria = 10000
+
+// NuevaMemoria crea un almacén vacío que retiene las últimas
+// MaxPrediccionesMemoria predicciones.
+func NuevaMemoria() *Memoria { return NuevaMemoriaConLimite(MaxPrediccionesMemoria) }
+
+// NuevaMemoriaConLimite crea un almacén que retiene las últimas n predicciones.
+func NuevaMemoriaConLimite(n int) *Memoria {
+	return &Memoria{modelos: map[string]Modelo{}, entrenamientos: map[string]Entrenamiento{}, limite: max(n, 1)}
 }
 
 func (m *Memoria) GuardarModelo(_ context.Context, mod Modelo) error {
@@ -58,15 +69,23 @@ func (m *Memoria) Entrenamiento(_ context.Context, id string) (Entrenamiento, bo
 func (m *Memoria) RegistrarPrediccion(_ context.Context, r RegistroPrediccion) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	m.predicciones = append(m.predicciones, r)
+	if len(m.predicciones) < m.limite {
+		m.predicciones = append(m.predicciones, r)
+	} else {
+		m.predicciones[m.siguiente] = r
+	}
+	m.siguiente = (m.siguiente + 1) % m.limite
 	return nil
 }
 
-// Predicciones devuelve una copia del registro (para tests y evidencias).
+// Predicciones devuelve las retenidas, de la más antigua a la más reciente.
 func (m *Memoria) Predicciones() []RegistroPrediccion {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	return append([]RegistroPrediccion(nil), m.predicciones...)
+	if len(m.predicciones) < m.limite {
+		return append([]RegistroPrediccion(nil), m.predicciones...)
+	}
+	return append(append([]RegistroPrediccion(nil), m.predicciones[m.siguiente:]...), m.predicciones[:m.siguiente]...)
 }
 
 func (m *Memoria) Cerrar(context.Context) error { return nil }
