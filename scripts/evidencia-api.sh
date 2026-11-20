@@ -59,7 +59,8 @@ ent_id=$(basename "$(cat "$out/.entrenamiento")")
   go run ./cmd/benchapi -url "$url" -exigir-p95 100ms
   if command -v npx >/dev/null 2>&1; then
     paso "7b. Colección de Postman con Newman (tests de estado y < 100 ms)"
-    npx --yes newman run docs/api/cc65-tf.postman_collection.json --env-var "base_url=$url" || true
+    # Sin `|| true`: una aserción fallida hace fallar la evidencia (PR-41 H2).
+    npx --yes newman run docs/api/cc65-tf.postman_collection.json --env-var "base_url=$url"
   else
     echo "(sin Node/npx: la colección se corre desde Postman con base_url=$url)"
   fi; } 2>&1 | tee "$out/07-latencia.txt"

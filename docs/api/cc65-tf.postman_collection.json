@@ -2,7 +2,7 @@
   "info": {
     "name": "CC65 TF · API de riesgo de dengue",
     "_postman_id": "5b0f7a52-cc65-4d1e-9f3a-7a0c0de9e8a1",
-    "description": "Una petición por ruta de docs/api/openapi.yaml, con tests de estado y de tiempo < 100 ms (issue #30). Correr con el clúster en modo servicio (scripts/evidencia-api.sh deja la API en http://localhost:18080) o con Newman: npx newman run docs/api/cc65-tf.postman_collection.json --env-var base_url=http://localhost:18080",
+    "description": "Una petición por ruta de docs/api/openapi.yaml, con tests de estado y de tiempo < 100 ms (issue #30). Correr con el clúster en modo servicio (scripts/evidencia-api.sh deja la API en http://localhost:18080) o con Newman: npx newman run docs/api/cc65-tf.postman_collection.json --env-var base_url=http://localhost:18080 La predicción nueva usa una semana y una edad al azar (variables de colección), así la repetida sale de Redis. Entre dos corridas completas debe terminar el entrenamiento lanzado por la anterior (si no, el POST responde 409); se deja en 600 épocas para no reemplazar el modelo vigente por uno con menos épocas.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
@@ -79,8 +79,19 @@
       }
     },
     {
-      "name": "Predicción (primera vez: MISS)",
+      "name": "Predicción nueva (caché: MISS)",
       "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "// Una consulta nueva en cada corrida, para que la primera sea MISS y la repetida HIT.",
+              "pm.collectionVariables.set(\"semana_prueba\", 1 + Math.floor(Math.random() * 52));",
+              "pm.collectionVariables.set(\"edad_prueba\", Math.floor(Math.random() * 100));"
+            ]
+          }
+        },
         {
           "listen": "test",
           "script": {
@@ -88,7 +99,8 @@
             "exec": [
               "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
               "pm.test(\"responde en menos de 100 ms\", function () { pm.expect(pm.response.responseTime).to.be.below(100); });",
-              "pm.test(\"riesgo entre 0 y 1\", function () { const p = pm.response.json(); pm.expect(p.riesgo).to.be.within(0, 1); });"
+              "pm.test(\"riesgo entre 0 y 1\", function () { const p = pm.response.json(); pm.expect(p.riesgo).to.be.within(0, 1); });",
+              "pm.test(\"se calcula, no sale de la caché\", function () { pm.expect(pm.response.headers.get(\"X-Cache\")).to.eql(\"MISS\"); });"
             ]
           }
         }
@@ -115,7 +127,7 @@
         "description": "",
         "body": {
           "mode": "raw",
-          "raw": "{\n  \"departamento\": \"LORETO\",\n  \"ano\": 2024,\n  \"semana\": 10,\n  \"edad\": 30,\n  \"tipo_edad\": \"A\",\n  \"sexo\": \"F\"\n}",
+          "raw": "{\n  \"departamento\": \"PIURA\",\n  \"ano\": 2024,\n  \"semana\": {{semana_prueba}},\n  \"edad\": {{edad_prueba}},\n  \"tipo_edad\": \"A\",\n  \"sexo\": \"M\"\n}",
           "options": {
             "raw": {
               "language": "json"
@@ -161,7 +173,7 @@
         "description": "",
         "body": {
           "mode": "raw",
-          "raw": "{\n  \"departamento\": \"LORETO\",\n  \"ano\": 2024,\n  \"semana\": 10,\n  \"edad\": 30,\n  \"tipo_edad\": \"A\",\n  \"sexo\": \"F\"\n}",
+          "raw": "{\n  \"departamento\": \"PIURA\",\n  \"ano\": 2024,\n  \"semana\": {{semana_prueba}},\n  \"edad\": {{edad_prueba}},\n  \"tipo_edad\": \"A\",\n  \"sexo\": \"M\"\n}",
           "options": {
             "raw": {
               "language": "json"
