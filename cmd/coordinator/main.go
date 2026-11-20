@@ -5,9 +5,14 @@
 // Uso (los nodos se conectan con cmd/node):
 //
 //	go run ./cmd/coordinator -gold data/gold -nodos 3 -epocas 600 -tasa 2
+//
+// Con -api :8080 pasa a modo servicio: no entrena al arrancar, sirve la API
+// REST (Swagger UI en /docs) y entrena en el clúster con cada
+// POST /api/v1/entrenamientos, hasta recibir SIGTERM.
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -78,6 +83,8 @@ func main() {
 	flag.DurationVar(&op.tRegistro, "timeout-registro", 60*time.Second, "espera máxima a que se registren los nodos")
 	flag.DurationVar(&op.tEpoca, "timeout-epoca", 60*time.Second, "plazo de cada shard por época")
 	salida := flag.String("salida", "reports/entrenamiento_cluster.json", "reporte")
+	dirAPI := flag.String("api", "", "modo servicio: sirve la API REST en esta dirección (p. ej. :8080) en vez de entrenar una vez y salir")
+	rutaModelo := flag.String("modelo", "data/gold/modelo.json", "modo servicio: modelo inicial que publica la API")
 	flag.Parse()
 
 	ln, err := net.Listen("tcp", *escucha)
@@ -85,6 +92,12 @@ func main() {
 		log.Fatal(err)
 	}
 	log.Printf("coordinador escuchando en %s; espera %d nodos", ln.Addr(), op.nodos)
+	if *dirAPI != "" {
+		if err := servicio(ln, *dirAPI, *rutaModelo, op); err != nil {
+			log.Fatal(err)
+		}
+		return
+	}
 	_, err = ejecutar(ln, op, log.Printf, func(rep reporte) error {
 		if err := escribirJSON(*salida, rep); err != nil {
 			return err
@@ -99,6 +112,25 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+}
+
+// servicio corre el modo API hasta SIGTERM o SIGINT (docker compose stop).
+func servicio(ln net.Listener, dir, rutaModelo string, op opciones) error {
+	modelo, err := os.ReadFile(rutaModelo)
+	if err != nil {
+		ln.Close()
+		return fmt.Errorf("modelo inicial: %w", err)
+	}
+	lnHTTP, err := net.Listen("tcp", dir)
+	if err != nil {
+		ln.Close()
+		return err
+	}
+	ctx, parar := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
+	defer parar()
+	err = ejecutarAPI(ctx, ln, lnHTTP, op, modelo, log.Printf)
+	log.Printf("coordinador detenido")
+	return err
 }
 
 // cargarShards lee shard_0.bin, shard_1.bin… de dir y devuelve su descripción
@@ -141,6 +173,41 @@ func (c *conProgreso) GradienteErr(w []float64) (ml.Gradiente, error) {
 	return g, err
 }
 
+// preparado describe el gold que atiende el clúster.
+type preparado struct {
+	shards  []cluster.Shard
+	d, tam  int
+	y       []float64
+	cfg     ml.Config
+	bloques int
+}
+
+// prepararCluster lee los shards, calcula los pesos por clase y crea el
+// coordinador sobre ln (sin esperar a los nodos). Si falla, cierra ln.
+func prepararCluster(ln net.Listener, op opciones, logf func(string, ...any)) (*cluster.Coordinador, preparado, error) {
+	if op.rutaNodos == "" {
+		op.rutaNodos = op.gold
+	}
+	shards, d, tam, y, err := cargarShards(op.gold, op.rutaNodos)
+	if err != nil {
+		ln.Close()
+		return nil, preparado{}, err
+	}
+	pos, neg := ml.PesosBalanceados(y)
+	cfg := ml.Config{TamBloque: tam, Lambda: op.lambda, PesoPos: pos, PesoNeg: neg}
+	bloques := shards[len(shards)-1].BloqueInicial + shards[len(shards)-1].NumBloques
+	logf("%d shards, %d filas, %d variables, %d bloques de %d filas", len(shards), len(y), d, bloques, tam)
+	c, err := cluster.Nuevo(ln, cluster.Opciones{
+		Shards: shards, D: d, Config: cfg,
+		TimeoutRegistro: op.tRegistro, TimeoutEpoca: op.tEpoca, Log: logf,
+	})
+	if err != nil {
+		ln.Close()
+		return nil, preparado{}, err
+	}
+	return c, preparado{shards: shards, d: d, tam: tam, y: y, cfg: cfg, bloques: bloques}, nil
+}
+
 // ejecutar corre un entrenamiento completo sobre ln. guardar recibe el reporte
 // (también el de un entrenamiento abortado, con lo avanzado) antes de que los
 // nodos reciban `fin`: mientras el coordinador verifica y escribe, los nodos
@@ -149,31 +216,16 @@ func ejecutar(ln net.Listener, op opciones, logf func(string, ...any), guardar f
 	if guardar == nil {
 		guardar = func(reporte) error { return nil }
 	}
-	if op.rutaNodos == "" {
-		op.rutaNodos = op.gold
-	}
-	shards, d, tam, y, err := cargarShards(op.gold, op.rutaNodos)
+	c, p, err := prepararCluster(ln, op, logf)
 	if err != nil {
-		ln.Close()
-		return reporte{}, err
-	}
-	pos, neg := ml.PesosBalanceados(y)
-	cfg := ml.Config{TamBloque: tam, Lambda: op.lambda, PesoPos: pos, PesoNeg: neg}
-	bloques := shards[len(shards)-1].BloqueInicial + shards[len(shards)-1].NumBloques
-	logf("%d shards, %d filas, %d variables, %d bloques de %d filas", len(shards), len(y), d, bloques, tam)
-
-	c, err := cluster.Nuevo(ln, cluster.Opciones{
-		Shards: shards, D: d, Config: cfg,
-		TimeoutRegistro: op.tRegistro, TimeoutEpoca: op.tEpoca, Log: logf,
-	})
-	if err != nil {
-		ln.Close()
 		return reporte{}, err
 	}
 	defer c.Cerrar()
 	if err := c.EsperarNodos(op.nodos); err != nil {
 		return reporte{}, err
 	}
+	d, cfg := p.d, p.cfg
+	pos, neg := cfg.PesoPos, cfg.PesoNeg
 
 	ent := ml.Entrenamiento{Epocas: op.epocas, Tasa: op.tasa}
 	ini := time.Now()
@@ -181,9 +233,9 @@ func ejecutar(ln net.Listener, op opciones, logf func(string, ...any), guardar f
 	seg := time.Since(ini).Seconds()
 
 	rep := reporte{
-		Generado: time.Now().Format(time.RFC3339), NodosPedidos: op.nodos, Shards: len(shards),
+		Generado: time.Now().Format(time.RFC3339), NodosPedidos: op.nodos, Shards: len(p.shards),
 		Epocas: len(res.Historia), Tasa: op.tasa, Lambda: op.lambda, PesoPos: pos, PesoNeg: neg,
-		FilasTrain: len(y), D: d, TamBloque: tam, Bloques: bloques,
+		FilasTrain: len(p.y), D: d, TamBloque: p.tam, Bloques: p.bloques,
 		SegTotal: seg, SegPorEpoca: seg / float64(max(len(res.Historia), 1)), Cluster: c.Estado(),
 		Historia: res.Historia, Pesos: res.W[:d], Sesgo: res.W[d],
 	}

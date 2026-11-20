@@ -13,6 +13,12 @@
 #   WORKERS    goroutines del worker pool de cada nodo; 0 = núcleos      (0)
 #   GOLD       carpeta del anfitrión con shard_<s>.bin                   (../data/gold)
 #   USUARIO    uid:gid del coordinador, que escribe en ../reports        (65532:65532)
+#   API        modo servicio: dirección de la API REST, p. ej. :8080     (vacío = entrena una vez y sale)
+#   PUERTO_API puerto del anfitrión que publica la API                   (8080)
+#
+# Modo servicio (API con Swagger en http://localhost:8080/docs; entrena con
+# POST /api/v1/entrenamientos y se detiene con `docker compose stop`):
+#   API=:8080 docker compose -f deploy/docker-compose.yml up --build
 name: cc65-tf
 
 x-imagen: &imagen
@@ -38,11 +44,15 @@ services:
       - -timeout-registro=${TIMEOUT_REGISTRO:-120s}
       - -timeout-epoca=${TIMEOUT_EPOCA:-60s}
       - -salida=/reports/entrenamiento_cluster.json
+      - -api=${API:-}
+      - -modelo=/datos/modelo.json
     volumes:
       - ${GOLD:-../data/gold}:/datos:ro
       - ../reports:/reports
     expose:
       - "9000"
+    ports:
+      - "${PUERTO_API:-8080}:8080"
     networks: [cluster]
 
   node:
