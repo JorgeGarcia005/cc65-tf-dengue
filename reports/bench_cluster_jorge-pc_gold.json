@@ -1,0 +1,183 @@
+{
+  "generado": "2026-11-20T00:32:35-05:00",
+  "fuente": "gold(data/gold/train.bin, filas=765297, features=31)",
+  "maquina": {
+    "arquitectura": "amd64",
+    "cpu": "AMD Ryzen 5 3600 6-Core Processor",
+    "go": "go1.27.3",
+    "gomaxprocs": 12,
+    "num_cpu": 12,
+    "so": "windows"
+  },
+  "protocolo": {
+    "calentamiento": "1 entrenamiento descartado (carga de shards)",
+    "desglose": "red y espera = época − cómputo del nodo más lento − reducción; JSON medido aparte (CPU)",
+    "epocas_por_repeticion": 30,
+    "estimador": "media recortada 10 % + IC95 bootstrap (2000)",
+    "karp_flatt": "e = (1/S − 1/p) / (1 − 1/p), p = nodos / nodos de la base",
+    "lambda": 0.0001,
+    "nodos": [
+      1,
+      2,
+      3,
+      4,
+      5
+    ],
+    "red": "TCP en 127.0.0.1 (loopback), protocolo JSON por línea real",
+    "repeticiones": 5,
+    "tasa": 2,
+    "verificacion": "cada repetición se compara bit a bit con el secuencial antes de registrarse",
+    "workers_por_nodo": 1
+  },
+  "mediciones": [
+    {
+      "nodos": 1,
+      "seg_por_epoca": {
+        "n": 5,
+        "media_recortada": 0.10029777133333333,
+        "recorte": 0.1,
+        "mediana": 0.10141937,
+        "desviacion": 0.0035703527394289484,
+        "min": 0.09462860666666666,
+        "max": 0.10384477,
+        "ic95_inf": 0.09740537933333333,
+        "ic95_sup": 0.10274170333333335
+      },
+      "speedup": 1,
+      "eficiencia": 1,
+      "desglose_por_epoca": {
+        "seg_epoca": 0.10029777133333333,
+        "seg_calculo_nodo_mas_lento": 0.09756393999999999,
+        "seg_calculo_todos_los_nodos": 0.09756393999999999,
+        "seg_reduccion": 0,
+        "seg_red_y_espera": 0.002733831333333339,
+        "seg_serializacion_json": 0.0020003,
+        "fraccion_red_y_espera": 0.02725714935626658
+      },
+      "bytes_por_epoca": 115225.18666666668,
+      "equivalente_bit_a_bit": true,
+      "repeticiones": 5,
+      "epocas_por_repeticion": 30
+    },
+    {
+      "nodos": 2,
+      "seg_por_epoca": {
+        "n": 5,
+        "media_recortada": 0.05373787333333333,
+        "recorte": 0.1,
+        "mediana": 0.053815413333333326,
+        "desviacion": 0.00042623665837054447,
+        "min": 0.05301907333333333,
+        "max": 0.05407584,
+        "ic95_inf": 0.053367252,
+        "ic95_sup": 0.054008428
+      },
+      "speedup": 1.8664261369479824,
+      "eficiencia": 0.9332130684739912,
+      "karp_flatt": 0.07156664837025928,
+      "desglose_por_epoca": {
+        "seg_epoca": 0.05372454733333333,
+        "seg_calculo_nodo_mas_lento": 0.052335920000000015,
+        "seg_calculo_todos_los_nodos": 0.10363545333333339,
+        "seg_reduccion": 0.000006667333333333334,
+        "seg_red_y_espera": 0.0013819599999999824,
+        "seg_serializacion_json": 0.0025125,
+        "fraccion_red_y_espera": 0.025723064569081012
+      },
+      "bytes_por_epoca": 116015.23333333332,
+      "equivalente_bit_a_bit": true,
+      "repeticiones": 5,
+      "epocas_por_repeticion": 30
+    },
+    {
+      "nodos": 3,
+      "seg_por_epoca": {
+        "n": 5,
+        "media_recortada": 0.03853929199999999,
+        "recorte": 0.1,
+        "mediana": 0.03862992333333334,
+        "desviacion": 0.0005779689359760902,
+        "min": 0.03763282333333333,
+        "max": 0.039223259999999996,
+        "ic95_inf": 0.03803166333333333,
+        "ic95_sup": 0.038956578666666665
+      },
+      "speedup": 2.6024809000988745,
+      "eficiencia": 0.8674936333662915,
+      "karp_flatt": 0.07637310611694077,
+      "desglose_por_epoca": {
+        "seg_epoca": 0.038532629999999984,
+        "seg_calculo_nodo_mas_lento": 0.03735996666666667,
+        "seg_calculo_todos_los_nodos": 0.10875752666666676,
+        "seg_reduccion": 0.000006670666666666666,
+        "seg_red_y_espera": 0.00116599266666665,
+        "seg_serializacion_json": 0.0025213,
+        "fraccion_red_y_espera": 0.030259877580810095
+      },
+      "bytes_por_epoca": 116806.6,
+      "equivalente_bit_a_bit": true,
+      "repeticiones": 5,
+      "epocas_por_repeticion": 30
+    },
+    {
+      "nodos": 4,
+      "seg_por_epoca": {
+        "n": 5,
+        "media_recortada": 0.02919446333333333,
+        "recorte": 0.1,
+        "mediana": 0.02921549,
+        "desviacion": 0.00017806680074561315,
+        "min": 0.029000913333333333,
+        "max": 0.029409126666666667,
+        "ic95_inf": 0.02905488333333333,
+        "ic95_sup": 0.029334043333333337
+      },
+      "speedup": 3.435506595485742,
+      "eficiencia": 0.8588766488714356,
+      "karp_flatt": 0.0547705157715801,
+      "desglose_por_epoca": {
+        "seg_epoca": 0.02919446333333333,
+        "seg_calculo_nodo_mas_lento": 0.02832317333333335,
+        "seg_calculo_todos_los_nodos": 0.10850756000000002,
+        "seg_reduccion": 0,
+        "seg_red_y_espera": 0.0008712899999999794,
+        "seg_serializacion_json": 0.0019979,
+        "fraccion_red_y_espera": 0.02984435747463005
+      },
+      "bytes_por_epoca": 117596.96666666667,
+      "equivalente_bit_a_bit": true,
+      "repeticiones": 5,
+      "epocas_por_repeticion": 30
+    },
+    {
+      "nodos": 5,
+      "seg_por_epoca": {
+        "n": 5,
+        "media_recortada": 0.023664476,
+        "recorte": 0.1,
+        "mediana": 0.023637506666666665,
+        "desviacion": 0.0001675063832183381,
+        "min": 0.023493323333333333,
+        "max": 0.023944503333333332,
+        "ic95_inf": 0.023551178,
+        "ic95_sup": 0.023816111333333334
+      },
+      "speedup": 4.238326313810343,
+      "eficiencia": 0.8476652627620685,
+      "karp_flatt": 0.04492773973701524,
+      "desglose_por_epoca": {
+        "seg_epoca": 0.02365763266666667,
+        "seg_calculo_nodo_mas_lento": 0.02287095333333335,
+        "seg_calculo_todos_los_nodos": 0.10844104666666668,
+        "seg_reduccion": 0.000010185333333333332,
+        "seg_red_y_espera": 0.0007764939999999878,
+        "seg_serializacion_json": 0.0015225,
+        "fraccion_red_y_espera": 0.032822134443488034
+      },
+      "bytes_por_epoca": 118388.33333333334,
+      "equivalente_bit_a_bit": true,
+      "repeticiones": 5,
+      "epocas_por_repeticion": 30
+    }
+  ]
+}
