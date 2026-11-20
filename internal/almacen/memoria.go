@@ -35,6 +35,15 @@ func (m *Memoria) GuardarModelo(_ context.Context, mod Modelo) error {
 	mod = mod.Copia()
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	if previo, ok := m.modelos[mod.Version]; ok {
+		// Misma versión: se agregan los resúmenes y se adelanta Publicado.
+		previo.Entrenamientos = append(previo.Entrenamientos, mod.Entrenamientos...)
+		if mod.Publicado.After(previo.Publicado) {
+			previo.Publicado = mod.Publicado
+		}
+		m.modelos[mod.Version] = previo
+		return nil
+	}
 	m.modelos[mod.Version] = mod
 	return nil
 }
@@ -135,7 +144,7 @@ func (m *Memoria) ModeloDeEntrenamiento(_ context.Context, id string) (Modelo, b
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	for _, mod := range m.modelos {
-		if mod.EntrenamientoID == id {
+		if _, ok := mod.Resumen(id); ok {
 			return mod.Copia(), true, nil
 		}
 	}

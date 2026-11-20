@@ -153,7 +153,7 @@ func modeloInicial(ctx context.Context, op Opciones) (*Modelo, error) {
 	if op.Modelo == nil {
 		return nil, errors.New("api: el almacén no tiene modelo y no se indicó uno")
 	}
-	if err := op.Almacen.GuardarModelo(ctx, op.Modelo.Documento("", time.Now().UTC())); err != nil {
+	if err := op.Almacen.GuardarModelo(ctx, op.Modelo.Documento(time.Now().UTC())); err != nil {
 		return nil, fmt.Errorf("api: guardar el modelo inicial: %w", err)
 	}
 	op.Log("api: modelo inicial %s, del archivo", op.Modelo.Version)
@@ -433,12 +433,20 @@ func (s *Servidor) entrenar(id string, p ParametrosEntrenamiento, base *Modelo) 
 	defer s.wgEntrenar.Done()
 	inicio := time.Now()
 	w, err := s.op.Entrenador.Entrenar(s.ctx, p, func(e int, perdida float64) { s.ents.progreso(id, e, perdida) })
+	var est *cluster.Estado
+	if s.op.Cluster != nil {
+		e := s.op.Cluster.Estado()
+		est = &e
+	}
+	fin := time.Now().UTC()
 	var version string
 	if err == nil {
 		var m *Modelo
 		if m, err = base.conPesos(w, time.Now().Format(time.RFC3339)); err == nil {
+			// El resumen final viaja en la misma escritura que el modelo: si luego
+			// se pierde el estado terminal, reconciliar lo reconstruye completo.
 			ctx, cancelar := context.WithTimeout(context.Background(), 5*time.Second)
-			errG := s.op.Almacen.GuardarModelo(ctx, m.Documento(id, time.Now().UTC()))
+			errG := s.op.Almacen.GuardarModelo(ctx, m.Documento(fin, s.ents.resumen(id, est, fin)))
 			cancelar()
 			if errG != nil {
 				err = fmt.Errorf("no se pudo guardar el modelo %s; sigue publicado el anterior: %w", m.Version, errG)
@@ -448,12 +456,7 @@ func (s *Servidor) entrenar(id string, p ParametrosEntrenamiento, base *Modelo) 
 			}
 		}
 	}
-	var est *cluster.Estado
-	if s.op.Cluster != nil {
-		e := s.op.Cluster.Estado()
-		est = &e
-	}
-	s.ents.terminar(id, version, est, err)
+	s.ents.terminar(id, version, est, fin, err)
 	if err != nil {
 		s.op.Log("api: entrenamiento %s falló tras %v: %v", id, time.Since(inicio).Round(time.Millisecond), err)
 	} else {

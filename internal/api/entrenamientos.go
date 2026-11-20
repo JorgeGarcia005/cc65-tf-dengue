@@ -142,10 +142,9 @@ func (e *entrenamientos) progreso(id string, epoca int, perdida float64) {
 // terminar fija el estado final y lo persiste con reintentos. Si aun así no se
 // guarda, el estado en memoria sigue siendo correcto y, tras un reinicio,
 // reconciliar lo deduce del modelo guardado (PR-40 H1).
-func (e *entrenamientos) terminar(id, version string, est *cluster.Estado, err error) Entrenamiento {
+func (e *entrenamientos) terminar(id, version string, est *cluster.Estado, fin time.Time, err error) Entrenamiento {
 	e.mu.Lock()
 	t := e.porID[id]
-	fin := time.Now().UTC()
 	t.Fin = &fin
 	if est != nil {
 		t.Nodos = append([]cluster.EstadoNodo{}, est.Nodos...)
@@ -161,6 +160,20 @@ func (e *entrenamientos) terminar(id, version string, est *cluster.Estado, err e
 	e.mu.Unlock()
 	e.persistir(copia, 3)
 	return copia
+}
+
+// resumen arma el estado final del entrenamiento id con la foto del clúster.
+func (e *entrenamientos) resumen(id string, est *cluster.Estado, fin time.Time) almacen.ResumenEntrenamiento {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	t := e.porID[id]
+	r := almacen.ResumenEntrenamiento{ID: id, Epoca: t.Epoca, Perdida: t.Perdida,
+		Historia: append([]float64{}, t.Historia...), Nodos: []cluster.EstadoNodo{}, Fin: fin}
+	if est != nil {
+		r.Nodos = append(r.Nodos, est.Nodos...)
+		r.Reasignaciones = est.Reasignaciones
+	}
+	return r
 }
 
 // consultar busca en memoria y, si no está (otra ejecución), en el almacén.
@@ -207,9 +220,13 @@ func (e *entrenamientos) reconciliar(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
-		if ok {
-			fin := m.Publicado
+		if r, publicado := m.Resumen(t.ID); ok && publicado {
+			// El modelo se guardó con el resumen final: se reconstruye completo.
+			fin := r.Fin
 			t.Estado, t.VersionModelo, t.Fin = Terminado, m.Version, &fin
+			t.Epoca, t.Perdida, t.Reasignaciones = r.Epoca, r.Perdida, r.Reasignaciones
+			t.Historia = append([]float64{}, r.Historia...)
+			t.Nodos = append([]cluster.EstadoNodo{}, r.Nodos...)
 		} else {
 			fin := time.Now().UTC()
 			t.Estado, t.Error, t.Fin = Fallido, "interrumpido: el coordinador se detuvo antes de terminar", &fin

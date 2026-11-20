@@ -2,8 +2,8 @@
 # Evidencia para el informe (issue #29): verifica en MongoDB y Redis la cadena
 # completa de UN entrenamiento (PR-40 H4):
 #
-#   entrenamiento terminado → su version_modelo → el modelo con ese _id y
-#   entrenamiento_id → predicciones de esa versión → claves pred:<versión>:*
+#   entrenamiento terminado → su version_modelo → el modelo con ese _id y el
+#   resumen de ese entrenamiento (entrenamientos.id) → predicciones de esa versión → claves pred:<versión>:*
 #   en Redis con TTL positivo.
 #
 # Además muestra cuántos documentos e índices tiene cada colección.
@@ -43,8 +43,8 @@ print('   estado ' + ent.estado + ', ' + ent.epoca + '/' + ent.epocas + ' época
   ', ' + (ent.nodos || []).length + ' nodos, ' + ent.reasignaciones + ' reasignaciones');
 if (ent.estado !== 'terminado' || !ent.version_modelo) { print('FALTA: el entrenamiento no terminó con un modelo'); quit(1); }
 const v = ent.version_modelo;
-const mod = db.modelos.findOne({_id: v});
-if (!mod || mod.entrenamiento_id !== ent._id) { print('FALTA: modelo ' + v + ' guardado por ' + ent._id); quit(1); }
+const mod = db.modelos.findOne({_id: v, 'entrenamientos.id': ent._id});
+if (!mod) { print('FALTA: modelo ' + v + ' con el resumen de ' + ent._id); quit(1); }
 print('   modelo ' + v + ' publicado ' + mod.publicado.toISOString());
 const n = db.predicciones.countDocuments({version_modelo: v});
 const hits = db.predicciones.countDocuments({version_modelo: v, desde_cache: true});

@@ -147,14 +147,44 @@ func Almacen(t *testing.T, a almacen.Almacen) {
 			t.Fatalf("sin modelo: ok=%v err=%v", ok, err)
 		}
 		esq := esquema(t)
+		// PR-40 ronda 2, H1: el modelo guarda el resumen completo del entrenamiento
+		// (7 épocas: no múltiplo de PersistirCada), para reconstruirlo al reiniciar.
+		fin := ini.Add(time.Minute)
+		resA := almacen.ResumenEntrenamiento{ID: "ent-rec-0", Epoca: 7, Perdida: 0.51,
+			Historia: []float64{0.69, 0.65, 0.6, 0.57, 0.55, 0.53, 0.51}, Reasignaciones: 1, Fin: fin,
+			Nodos: []cluster.EstadoNodo{{Nombre: "node-1", Remoto: "10.0.0.2:5000", Workers: 8, Sano: true, Carga: 2}}}
 		m := almacen.Modelo{Version: "ffffffffffff", Pesos: make([]float64, esq.D()+1), Esquema: esq, Umbral: 0.5,
-			EntrenamientoID: "ent-rec-0", Publicado: ini}
+			Entrenamientos: []almacen.ResumenEntrenamiento{resA}, Publicado: ini}
 		if err := a.GuardarModelo(ctx, m); err != nil {
 			t.Fatal(err)
 		}
 		got, ok, err := a.ModeloDeEntrenamiento(ctx, "ent-rec-0")
 		if err != nil || !ok || got.Version != "ffffffffffff" {
 			t.Fatalf("modelo de ent-rec-0: %+v ok=%v err=%v", got, ok, err)
+		}
+		if r, ok := got.Resumen("ent-rec-0"); !ok || !mismoResumen(r, resA) {
+			t.Fatalf("resumen leído %+v, guardado %+v", r, resA)
+		}
+
+		// PR-40 ronda 2, H11: otro entrenamiento que produce la misma versión no
+		// borra el vínculo del primero.
+		resB := almacen.ResumenEntrenamiento{ID: "ent-rec-2", Epoca: 3, Perdida: 0.6, Historia: []float64{0.69, 0.65, 0.6},
+			Nodos: []cluster.EstadoNodo{}, Fin: fin.Add(time.Second)}
+		m2 := m
+		m2.Entrenamientos, m2.Publicado = []almacen.ResumenEntrenamiento{resB}, ini.Add(10*time.Hour)
+		if err := a.GuardarModelo(ctx, m2); err != nil {
+			t.Fatal(err)
+		}
+		for id, want := range map[string]almacen.ResumenEntrenamiento{"ent-rec-0": resA, "ent-rec-2": resB} {
+			got, ok, err := a.ModeloDeEntrenamiento(ctx, id)
+			r, okR := got.Resumen(id)
+			if err != nil || !ok || !okR || got.Version != "ffffffffffff" || !mismoResumen(r, want) {
+				t.Fatalf("tras la segunda publicación, %s: ok=%v err=%v resumen %+v", id, ok, err, r)
+			}
+		}
+		vig, _, _ := a.ModeloVigente(ctx)
+		if vig.Version != "ffffffffffff" || !vig.Publicado.Equal(ini.Add(10*time.Hour)) || len(vig.Entrenamientos) != 2 {
+			t.Fatalf("vigente tras republicar: %s %v, %d resúmenes", vig.Version, vig.Publicado, len(vig.Entrenamientos))
 		}
 	})
 
@@ -209,4 +239,9 @@ func Cache(t *testing.T, c almacen.Cache, esperar func(time.Duration)) {
 	if _, ok, err := c.Obtener(ctx, corta); err != nil || ok {
 		t.Fatalf("la clave debía expirar: ok=%v err=%v", ok, err)
 	}
+}
+
+func mismoResumen(a, b almacen.ResumenEntrenamiento) bool {
+	return a.ID == b.ID && a.Epoca == b.Epoca && a.Perdida == b.Perdida && slices.Equal(a.Historia, b.Historia) &&
+		slices.Equal(a.Nodos, b.Nodos) && a.Reasignaciones == b.Reasignaciones && a.Fin.Equal(b.Fin)
 }

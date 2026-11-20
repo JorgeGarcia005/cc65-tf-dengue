@@ -18,20 +18,56 @@ import (
 
 // Modelo publicado (colección modelos). Version es el _id.
 type Modelo struct {
-	Version         string            `json:"version" bson:"_id"`
-	Pesos           []float64         `json:"pesos" bson:"pesos"`
-	Esquema         *features.Esquema `json:"esquema" bson:"esquema"`
-	Umbral          float64           `json:"umbral" bson:"umbral"`
-	AjustePrior     float64           `json:"ajuste_prior" bson:"ajuste_prior"`
-	Generado        string            `json:"generado" bson:"generado"`
-	EntrenamientoID string            `json:"entrenamiento_id,omitempty" bson:"entrenamiento_id,omitempty"`
-	Publicado       time.Time         `json:"publicado" bson:"publicado"`
+	Version     string            `json:"version" bson:"_id"`
+	Pesos       []float64         `json:"pesos" bson:"pesos"`
+	Esquema     *features.Esquema `json:"esquema" bson:"esquema"`
+	Umbral      float64           `json:"umbral" bson:"umbral"`
+	AjustePrior float64           `json:"ajuste_prior" bson:"ajuste_prior"`
+	Generado    string            `json:"generado" bson:"generado"`
+	// Entrenamientos que publicaron esta versión, con su resumen final. Dos
+	// entrenamientos con los mismos pesos comparten versión y ambos quedan
+	// aquí (PR-40 ronda 2, H11). GuardarModelo agrega, nunca reemplaza.
+	Entrenamientos []ResumenEntrenamiento `json:"entrenamientos" bson:"entrenamientos"`
+	// Publicado es la publicación más reciente de esta versión.
+	Publicado time.Time `json:"publicado" bson:"publicado"`
 }
 
-// Copia devuelve un Modelo que no comparte pesos ni esquema con m (PR-40 H7).
+// ResumenEntrenamiento es el estado final de un entrenamiento. Se guarda en
+// la misma escritura que publica el modelo: si después se pierde la escritura
+// terminal del entrenamiento, al reiniciar se reconstruye completo desde aquí
+// (PR-40 ronda 2, H1).
+type ResumenEntrenamiento struct {
+	ID             string               `json:"id" bson:"id"`
+	Epoca          int                  `json:"epoca" bson:"epoca"`
+	Perdida        float64              `json:"perdida" bson:"perdida"`
+	Historia       []float64            `json:"historia" bson:"historia"`
+	Nodos          []cluster.EstadoNodo `json:"nodos" bson:"nodos"`
+	Reasignaciones int                  `json:"reasignaciones" bson:"reasignaciones"`
+	Fin            time.Time            `json:"fin" bson:"fin"`
+}
+
+// Resumen devuelve el resumen del entrenamiento id, si publicó este modelo.
+func (m Modelo) Resumen(id string) (ResumenEntrenamiento, bool) {
+	for _, r := range m.Entrenamientos {
+		if r.ID == id {
+			return r, true
+		}
+	}
+	return ResumenEntrenamiento{}, false
+}
+
+// Copia devuelve un Modelo que no comparte pesos, esquema ni resúmenes con m
+// (PR-40 H7).
 func (m Modelo) Copia() Modelo {
 	m.Pesos = append([]float64(nil), m.Pesos...)
 	m.Esquema = m.Esquema.Copia()
+	rs := make([]ResumenEntrenamiento, len(m.Entrenamientos))
+	for i, r := range m.Entrenamientos {
+		r.Historia = append(make([]float64, 0, len(r.Historia)), r.Historia...)
+		r.Nodos = append(make([]cluster.EstadoNodo, 0, len(r.Nodos)), r.Nodos...)
+		rs[i] = r
+	}
+	m.Entrenamientos = rs
 	return m
 }
 
@@ -96,7 +132,9 @@ type RegistroPrediccion struct {
 
 // Almacen es la persistencia de la API.
 type Almacen interface {
-	// GuardarModelo inserta o reemplaza el modelo con esa versión.
+	// GuardarModelo inserta la versión si no existe; si existe, le agrega los
+	// resúmenes de m.Entrenamientos y adelanta Publicado (nunca lo atrasa). Es
+	// una sola escritura: el modelo y el resumen quedan juntos o no quedan.
 	GuardarModelo(ctx context.Context, m Modelo) error
 	// ModeloVigente devuelve el de Publicado más reciente; false si no hay.
 	ModeloVigente(ctx context.Context) (Modelo, bool, error)

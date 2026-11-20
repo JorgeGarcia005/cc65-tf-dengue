@@ -65,7 +65,7 @@ func TestBDDePuntaAPunta(t *testing.T) {
 	}
 	s.Cerrar() // vacía el registrador
 	vig, ok, err := alm.ModeloVigente(ctx)
-	if err != nil || !ok || vig.Version != s.ModeloActual().Version || vig.EntrenamientoID != id {
+	if err != nil || !ok || vig.Version != s.ModeloActual().Version || len(vig.Entrenamientos) != 1 || vig.Entrenamientos[0].ID != id {
 		t.Fatalf("modelo vigente en Mongo: %+v %v %v", vig, ok, err)
 	}
 	if _, err := ModeloDeDocumento(vig); err != nil {

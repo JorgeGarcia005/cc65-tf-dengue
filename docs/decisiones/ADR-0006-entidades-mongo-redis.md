@@ -21,8 +21,8 @@ sin contenedores.
 | Tema | Decisión |
 |---|---|
 | Acceso | `internal/almacen` define las interfaces `Almacen` (persistente) y `Cache`. Hay tres implementaciones: `almacen.Memoria` (tests y modo sin BD), `almacen/mongo` y `almacen/redis`. La API solo conoce las interfaces |
-| Modelo publicado | Se guarda en Mongo al publicarse. Al arrancar, el coordinador toma el vigente de Mongo y, si no hay ninguno, el de `data/gold/modelo.json` |
-| Entrenamientos | Se escriben en Mongo (upsert por `_id`) al iniciar, cada 10 épocas y al terminar. El estado en vivo sigue en memoria; Mongo responde por los entrenamientos de ejecuciones anteriores |
+| Modelo publicado | Se publica solo después de guardarlo en Mongo. La misma escritura (`UpdateOne` con `upsert`, `$setOnInsert` y `$push`) agrega el resumen final del entrenamiento, así que el modelo y el resumen quedan juntos o no quedan. Al arrancar, el coordinador toma el vigente de Mongo; si no hay ninguno, usa `data/gold/modelo.json` y lo guarda. Si la lectura falla, no arranca |
+| Entrenamientos | Se crean con inserción (sin upsert: un ID repetido no pisa otro) y se actualizan cada 10 épocas y al terminar. El estado en vivo sigue en memoria. Al arrancar, los que quedaron `en_curso` se reconcilian: pasan a `terminado`, con su resumen completo, si su modelo se guardó, y a `fallido` (interrumpido) si no |
 | Registro de predicciones | Se escribe en segundo plano por un canal con búfer (capacidad 1024). Si el búfer está lleno, el registro se descarta y se cuenta: **la latencia de la predicción no depende de Mongo** |
 | Caché | Redis, patrón *cache-aside*. La clave incluye la versión del modelo, así que publicar un modelo nuevo invalida la caché sin borrar nada; las claves viejas expiran por TTL |
 | Fallos de Redis | Un error de la caché no falla la predicción: se calcula y se registra el error |
@@ -31,7 +31,7 @@ sin contenedores.
 
 | Colección | `_id` | Campos | Índices |
 |---|---|---|---|
-| `modelos` | `version` (12 hex del sha256 del modelo) | `pesos` [D+1], `esquema` (departamentos, medias, desviaciones, nombres), `umbral`, `ajuste_prior`, `generado`, `entrenamiento_id`, `publicado` | `{publicado: -1}`, para obtener el vigente |
+| `modelos` | `version` (12 hex del sha256 del modelo) | `pesos` [D+1], `esquema` (departamentos, medias, desviaciones, nombres), `umbral`, `ajuste_prior`, `generado`, `publicado` (la publicación más reciente), `entrenamientos` [resumen final de cada entrenamiento que publicó esta versión: `id`, `epoca`, `perdida`, `historia`, `nodos`, `reasignaciones`, `fin`] | `{publicado: -1}`, para obtener el vigente; `{"entrenamientos.id": 1}`, para reconciliar |
 | `entrenamientos` | `id` (`ent-<fecha>-<n>`) | `estado` (`en_curso`/`terminado`/`fallido`), `epocas`, `tasa`, `lambda`, `epoca`, `perdida`, `historia` [pérdida por época], `nodos` [nombre, remoto, workers, sano, carga, motivo], `reasignaciones`, `inicio`, `fin`, `version_modelo`, `error` | `{inicio: -1}`, `{estado: 1}` |
 | `predicciones` | ObjectId | `fecha`, `version_modelo`, `consulta` {departamento, ano, semana, edad_anios, sexo}, `riesgo`, `clase`, `desde_cache`, `microsegundos` | `{fecha: -1}`, `{version_modelo: 1, "consulta.departamento": 1}` y TTL de 90 días sobre `fecha` |
 | `usuarios` (TB2) | `correo` | `hash` (bcrypt o PBKDF2), `rol` (`admin`/`analista`), `creado` | Único por `_id`. Se implementa con JWT en TB2 |

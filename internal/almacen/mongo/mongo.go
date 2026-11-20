@@ -60,7 +60,7 @@ func (a *Almacen) crearIndices(ctx context.Context) error {
 	}{
 		{a.modelos, []drv.IndexModel{
 			{Keys: bson.D{{Key: "publicado", Value: -1}}},
-			{Keys: bson.D{{Key: "entrenamiento_id", Value: 1}}},
+			{Keys: bson.D{{Key: "entrenamientos.id", Value: 1}}},
 		}},
 		{a.entrenamientos, []drv.IndexModel{
 			{Keys: bson.D{{Key: "inicio", Value: -1}}},
@@ -88,9 +88,27 @@ func reemplazar(ctx context.Context, col *drv.Collection, id string, doc any) er
 	return nil
 }
 
-// GuardarModelo inserta o reemplaza el modelo con esa versión.
+// GuardarModelo es un solo UpdateOne con upsert, atómico sobre el documento:
+// inserta los campos del modelo si la versión es nueva ($setOnInsert), agrega
+// los resúmenes de entrenamiento ($push) y adelanta publicado ($max).
 func (a *Almacen) GuardarModelo(ctx context.Context, m almacen.Modelo) error {
-	return reemplazar(ctx, a.modelos, m.Version, m)
+	resumenes := m.Entrenamientos
+	if resumenes == nil {
+		resumenes = []almacen.ResumenEntrenamiento{}
+	}
+	cambio := bson.D{
+		{Key: "$setOnInsert", Value: bson.D{
+			{Key: "pesos", Value: m.Pesos}, {Key: "esquema", Value: m.Esquema}, {Key: "umbral", Value: m.Umbral},
+			{Key: "ajuste_prior", Value: m.AjustePrior}, {Key: "generado", Value: m.Generado},
+		}},
+		{Key: "$max", Value: bson.D{{Key: "publicado", Value: m.Publicado}}},
+		{Key: "$push", Value: bson.D{{Key: "entrenamientos", Value: bson.D{{Key: "$each", Value: resumenes}}}}},
+	}
+	_, err := a.modelos.UpdateOne(ctx, bson.D{{Key: "_id", Value: m.Version}}, cambio, options.UpdateOne().SetUpsert(true))
+	if err != nil {
+		return fmt.Errorf("mongo: modelos: %w", err)
+	}
+	return nil
 }
 
 // ModeloVigente devuelve el de publicado más reciente.
@@ -185,7 +203,7 @@ func limpiar(err error, uri string) error {
 // ModeloDeEntrenamiento busca el modelo publicado por ese entrenamiento.
 func (a *Almacen) ModeloDeEntrenamiento(ctx context.Context, id string) (almacen.Modelo, bool, error) {
 	var m almacen.Modelo
-	err := a.modelos.FindOne(ctx, bson.D{{Key: "entrenamiento_id", Value: id}}).Decode(&m)
+	err := a.modelos.FindOne(ctx, bson.D{{Key: "entrenamientos.id", Value: id}}).Decode(&m)
 	if errors.Is(err, drv.ErrNoDocuments) {
 		return almacen.Modelo{}, false, nil
 	}

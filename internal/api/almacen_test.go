@@ -125,7 +125,7 @@ func TestEntrenamientoSePersisteYSeConsultaTrasReinicio(t *testing.T) {
 		t.Fatalf("persistido: %+v", e)
 	}
 	vig, ok, _ := mem.ModeloVigente(context.Background())
-	if !ok || vig.Version != s.ModeloActual().Version || vig.EntrenamientoID != id {
+	if !ok || vig.Version != s.ModeloActual().Version || len(vig.Entrenamientos) != 1 || vig.Entrenamientos[0].ID != id {
 		t.Fatalf("modelo vigente: %+v", vig)
 	}
 	// Un servidor nuevo (reinicio) con el mismo almacén ve el entrenamiento.

@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"slices"
 	"strings"
@@ -96,10 +97,11 @@ func TestModeloNoGuardadoNoSePublica(t *testing.T) {
 func TestEstadoFinalNoGuardadoSeReconciliaAlReiniciar(t *testing.T) {
 	alm := nuevoAlmacenConFallas()
 	alm.fallaFinal.Store(true)
-	s, ts := servidorDePrueba(t, Opciones{Almacen: alm, Entrenador: entrenadorListo()})
-	_, v := pedir(t, "POST", ts.URL+"/api/v1/entrenamientos", `{"epocas":2}`)
+	s, ts := servidorDePrueba(t, Opciones{Almacen: alm, Entrenador: entrenadorListo(), Cluster: clusterFalso{}})
+	// 7 épocas: no es múltiplo de PersistirCada, así que el progreso tampoco quedó guardado.
+	_, v := pedir(t, "POST", ts.URL+"/api/v1/entrenamientos", `{"epocas":7}`)
 	id := v["id"].(string)
-	esperarEstado(t, ts.URL, id, Terminado)
+	antes := esperarEstado(t, ts.URL, id, Terminado)
 	version := s.ModeloActual().Version
 	if e, _, _ := alm.Memoria.Entrenamiento(context.Background(), id); e.Estado != EnCurso {
 		t.Fatalf("la prueba supone que el estado final no se guardó: %s", e.Estado)
@@ -110,6 +112,15 @@ func TestEstadoFinalNoGuardadoSeReconciliaAlReiniciar(t *testing.T) {
 	v2 := esperarEstado(t, ts2.URL, id, Terminado)
 	if v2["version_modelo"] != version || s2.ModeloActual().Version != version {
 		t.Fatalf("tras reiniciar: %v, servido %s, esperado %s", v2, s2.ModeloActual().Version, version)
+	}
+	// PR-40 ronda 2, H1: el reinicio conserva las métricas finales, no solo la versión.
+	for _, campo := range []string{"epoca", "historia", "perdida", "nodos", "reasignaciones", "fin", "estado"} {
+		if fmt.Sprint(antes[campo]) != fmt.Sprint(v2[campo]) {
+			t.Errorf("%s: antes del cierre %v, tras reiniciar %v", campo, antes[campo], v2[campo])
+		}
+	}
+	if fmt.Sprint(v2["historia"]) != "[0.69 0.5]" || v2["epoca"].(float64) != 7 || len(v2["nodos"].([]any)) != 1 {
+		t.Fatalf("tras reiniciar: %v", v2)
 	}
 }
 
@@ -132,7 +143,7 @@ func TestArranqueUsaElModeloVigenteDelAlmacen(t *testing.T) {
 		t.Fatal(err)
 	}
 	mem := almacen.NuevaMemoria()
-	_ = mem.GuardarModelo(context.Background(), enMongo.Documento("ent-anterior", time.Now().UTC()))
+	_ = mem.GuardarModelo(context.Background(), enMongo.Documento(time.Now().UTC()))
 	s, ts := servidorDePrueba(t, Opciones{Almacen: mem})
 	if s.ModeloActual().Version != enMongo.Version || s.ModeloActual().Version == archivo.Version {
 		t.Fatalf("servido %s; en Mongo %s; archivo %s", s.ModeloActual().Version, enMongo.Version, archivo.Version)

@@ -198,11 +198,12 @@ func normalizada(r ingest.Registro) almacen.ConsultaNormalizada {
 		EdadAnios: r.EdadAnios, Sexo: string(r.Sexo)}
 }
 
-// Documento convierte el modelo al documento de la colección modelos.
-func (m *Modelo) Documento(entrenamientoID string, publicado time.Time) almacen.Modelo {
+// Documento convierte el modelo al documento de la colección modelos, con
+// los resúmenes de los entrenamientos que lo publican.
+func (m *Modelo) Documento(publicado time.Time, resumenes ...almacen.ResumenEntrenamiento) almacen.Modelo {
 	return almacen.Modelo{Version: m.Version, Pesos: append([]float64(nil), m.Pesos...), Esquema: m.Esquema,
 		Umbral: m.Umbral, AjustePrior: m.AjustePrior, Generado: m.Generado,
-		EntrenamientoID: entrenamientoID, Publicado: publicado}
+		Entrenamientos: resumenes, Publicado: publicado}
 }
 
 // ModeloDeDocumento reconstruye y valida un modelo leído del almacén. Conserva
