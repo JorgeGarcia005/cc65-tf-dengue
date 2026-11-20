@@ -513,7 +513,16 @@ func main() {
 	escribirFigura("docs/informe/pc3/fig/speedup_loader.svg",
 		figuraSpeedup("Speedup de la limpieza concurrente", curvasLoader(l.Bench)))
 
-	// PC4
+	// PC4: las secciones 5–7 y sus figuras son las de la PC3 (mismos datos).
+	if _, err := os.Stat("docs/informe/pc4"); err == nil {
+		for _, sec := range []string{"05-datos.md", "06-limpieza.md", "07-modelo.md"} {
+			copiarSeccion("docs/informe/pc3/"+sec, "docs/informe/pc4/"+sec)
+		}
+		for _, f := range []string{"casos_por_ano", "riesgo_departamento", "riesgo_semana", "speedup_gradiente", "speedup_loader"} {
+			copiarSeccion("docs/informe/pc3/fig/"+f+".svg", "docs/informe/pc4/fig/"+f+".svg")
+		}
+		generarPC4(s)
+	}
 	if cs := curvasCluster(); len(cs) > 0 {
 		escribirFigura("docs/informe/pc4/fig/speedup_cluster.svg",
 			figuraSpeedupEjes("Speedup del entrenamiento distribuido por número de nodos", cs,

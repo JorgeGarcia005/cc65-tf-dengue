@@ -317,6 +317,16 @@ func serializacionPorEpoca(partes []gold.Archivo, w []float64, cfg ml.Config) (t
 	return total, shardMax, nil
 }
 
+// nodosMedidos es la lista de nodos efectivamente medida (ordenada y sin
+// repetidos), para el protocolo del reporte.
+func nodosMedidos(med []medicionCluster) []int {
+	var ns []int
+	for _, m := range med {
+		ns = append(ns, m.Nodos)
+	}
+	return ns
+}
+
 func imprimirCluster(rep reporteCluster) {
 	fmt.Println(rep.Fuente)
 	fmt.Printf("%6s %12s %16s %8s %8s %8s %10s %10s %13s %12s\n", "nodos", "ms/época", "IC95 ms", "speedup", "efic.", "K-F", "cómp. ms", "red+esp ms", "JSON/shard ms", "KB/época")
@@ -341,14 +351,14 @@ func ejecutarCluster(train gold.Archivo, fuente string, op opcionesCluster, sali
 	rep := reporteCluster{
 		Generado: time.Now().Format(time.RFC3339), Fuente: fuente, Maquina: maquina.Describir(),
 		Protocolo: map[string]any{
-			"nodos": op.nodos, "repeticiones": op.reps, "epocas_por_repeticion": op.epocas,
+			"nodos": nodosMedidos(med), "repeticiones": op.reps, "epocas_por_repeticion": op.epocas,
 			"workers_por_nodo": op.workersNodo, "tasa": op.tasa, "lambda": op.lambda,
 			"red":           "TCP en 127.0.0.1 (loopback), protocolo JSON por línea real",
 			"calentamiento": "1 entrenamiento descartado (carga de shards)",
 			"estimador":     fmt.Sprintf("media recortada %.0f %% + IC95 bootstrap (2000)", op.recorte*100),
 			"verificacion":  "cada repetición se compara bit a bit con el secuencial antes de registrarse",
 			"desglose":      "medias aritméticas: red y espera = época − cómputo del nodo más lento (sus shards en serie) − reducción; JSON medido aparte (CPU de un hilo, k pasadas agrupadas): total de los shards y shard más pesado (incluido en red y espera)",
-			"karp_flatt":    "e = (1/S − 1/p) / (1 − 1/p), p = nodos / nodos de la base",
+			"karp_flatt":    "e = (1/S − 1/p) / (1 − 1/p), p = nodos; solo si la base es 1 nodo",
 		},
 		Mediciones: med,
 	}

@@ -1,0 +1,69 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="800" height="400" viewBox="0 0 800 400" font-family="Arial, Helvetica, sans-serif">
+<title>Una época del entrenamiento distribuido</title>
+<defs>
+  <marker id="f" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+    <path d="M0,0 L10,5 L0,10 z" fill="#0b0b0b"/>
+  </marker>
+</defs>
+<rect width="800" height="400" fill="#ffffff"/>
+
+<g font-size="12" fill="#0b0b0b" text-anchor="middle">
+  <rect x="40" y="16" width="150" height="40" rx="6" fill="#ffffff" stroke="#8a8984" stroke-width="1.5" stroke-dasharray="6 4"/>
+  <text x="115" y="41" font-weight="bold">Coordinador</text>
+  <rect x="300" y="16" width="130" height="40" rx="6" fill="#cde2fb" stroke="#2a78d6" stroke-width="2"/>
+  <text x="365" y="34" font-weight="bold">Nodo 0</text><text x="365" y="49" font-size="11">shard 0</text>
+  <rect x="470" y="16" width="130" height="40" rx="6" fill="#cde2fb" stroke="#2a78d6" stroke-width="2"/>
+  <text x="535" y="34" font-weight="bold">Nodo 1</text><text x="535" y="49" font-size="11">shard 1</text>
+  <rect x="640" y="16" width="130" height="40" rx="6" fill="#cde2fb" stroke="#2a78d6" stroke-width="2"/>
+  <text x="705" y="34" font-weight="bold">Nodo 2</text><text x="705" y="49" font-size="11">shard 2</text>
+</g>
+
+<!-- Líneas de vida -->
+<g stroke="#8a8984" stroke-width="1" stroke-dasharray="3 3">
+  <line x1="115" y1="56" x2="115" y2="380"/>
+  <line x1="365" y1="56" x2="365" y2="380"/>
+  <line x1="535" y1="56" x2="535" y2="380"/>
+  <line x1="705" y1="56" x2="705" y2="380"/>
+</g>
+
+<!-- Cálculo local -->
+<g fill="#cde2fb" stroke="#2a78d6" stroke-width="1.5">
+  <rect x="358" y="98" width="14" height="100"/>
+  <rect x="528" y="116" width="14" height="148"/>
+  <rect x="698" y="134" width="14" height="96"/>
+</g>
+
+<!-- Mensajes: difusión de pesos y respuestas (en el orden en que terminan) -->
+<g stroke="#0b0b0b" stroke-width="1.5" fill="none">
+  <line x1="115" y1="98" x2="356" y2="98" marker-end="url(#f)"/>
+  <line x1="115" y1="116" x2="526" y2="116" marker-end="url(#f)"/>
+  <line x1="115" y1="134" x2="696" y2="134" marker-end="url(#f)"/>
+  <line x1="358" y1="198" x2="117" y2="198" marker-end="url(#f)"/>
+  <line x1="698" y1="230" x2="117" y2="230" marker-end="url(#f)"/>
+  <line x1="528" y1="264" x2="117" y2="264" marker-end="url(#f)"/>
+</g>
+<g font-size="11" fill="#0b0b0b">
+  <text x="125" y="93">epoca{e, shard 0, w}</text>
+  <text x="380" y="111">epoca{e, shard 1, w}</text>
+  <text x="550" y="129">epoca{e, shard 2, w}</text>
+  <text x="125" y="193">gradiente{e, shard 0, bloques [0, b₁)}</text>
+  <text x="125" y="225">gradiente{e, shard 2, bloques [b₂, B)}</text>
+  <text x="125" y="259">gradiente{e, shard 1, bloques [b₁, b₂)}</text>
+  <text x="378" y="160" text-anchor="start" fill="#52514e">worker pool</text>
+</g>
+
+<!-- Barrera y actualización -->
+<rect x="20" y="290" width="320" height="80" rx="6" fill="#f0efec" stroke="#52514e" stroke-width="1.5"/>
+<g font-size="12" fill="#0b0b0b">
+  <text x="32" y="310" font-weight="bold">Barrera: llegaron todos los shards de la época e</text>
+  <text x="32" y="328">parciales[0..B−1] en orden de bloque global</text>
+  <text x="32" y="345">→ ReducirEnOrden → Finalizar → ∇L(w)</text>
+  <text x="32" y="362">w ← w − η·∇L(w); publica métricas</text>
+</g>
+<g font-size="11" fill="#52514e">
+  <text x="360" y="318">Las respuestas pueden llegar en cualquier orden: cada parcial se</text>
+  <text x="360" y="334">guarda en el slot de su bloque global, así que el resultado no</text>
+  <text x="360" y="350">depende de la red. Si un nodo cae o se demora, su shard se</text>
+  <text x="360" y="366">reasigna a un nodo sano en la misma época.</text>
+</g>
+</svg>
