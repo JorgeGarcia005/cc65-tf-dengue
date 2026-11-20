@@ -1,5 +1,7 @@
 # syntax=docker/dockerfile:1
-# Imagen única del proyecto: todos los comandos de cmd/ en una imagen mínima.
+# Imagen única del clúster: coordinator y node en una imagen mínima. Los demás
+# comandos de cmd/ (gold, entrenar, benchapi, informe…) corren en el host con
+# `go run` y no entran a la imagen: con ellos superaba el límite de 40 MB del CI.
 #
 #   docker build -f deploy/Dockerfile -t cc65-tf .
 #
@@ -19,7 +21,7 @@ COPY docs/api ./docs/api
 # -trimpath: sin rutas de la máquina que compiló. -s -w: sin tabla de símbolos
 # ni datos de depuración (binarios más pequeños).
 RUN --mount=type=cache,target=/root/.cache/go-build \
-    CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /out/ ./cmd/...
+    CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /out/ ./cmd/coordinator ./cmd/node
 
 FROM gcr.io/distroless/static-debian12:nonroot
 COPY --from=construccion /out/ /usr/local/bin/
