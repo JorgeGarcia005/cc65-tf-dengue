@@ -92,6 +92,21 @@ func (e *Esquema) construirNombres() {
 	}
 }
 
+// Copia devuelve un esquema independiente: modificar uno no altera el otro.
+func (e *Esquema) Copia() *Esquema {
+	if e == nil {
+		return nil
+	}
+	c := *e
+	c.Departamentos = slices.Clone(e.Departamentos)
+	c.Nombres = slices.Clone(e.Nombres)
+	c.indiceDepto = nil
+	if e.indiceDepto != nil {
+		c.construirNombres()
+	}
+	return &c
+}
+
 // Preparar reconstruye los índices internos tras leer el esquema de un JSON.
 func (e *Esquema) Preparar() error {
 	if len(e.Departamentos) == 0 || e.Departamentos[len(e.Departamentos)-1] != OtrosDepartamentos {

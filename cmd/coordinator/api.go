@@ -9,6 +9,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/JorgeGarcia005/cc65-tf-dengue/internal/almacen"
 	"github.com/JorgeGarcia005/cc65-tf-dengue/internal/api"
 	"github.com/JorgeGarcia005/cc65-tf-dengue/internal/cluster"
 	"github.com/JorgeGarcia005/cc65-tf-dengue/internal/ml"
@@ -24,7 +25,14 @@ const PlazoCierreHTTP = 10 * time.Second
 // un entrenamiento distribuido sobre los mismos nodos; al terminar, la API
 // publica el modelo nuevo. Al cerrar, cancela el entrenamiento en curso y
 // envía `fin` a los nodos.
-func ejecutarAPI(ctx context.Context, ln, lnHTTP net.Listener, op opciones, modelo []byte, logf func(string, ...any)) error {
+// baseDatos son la persistencia y la caché de la API (#29). Con valores nil
+// la API usa el almacén en memoria y no tiene caché (tests y modo local).
+type baseDatos struct {
+	Almacen almacen.Almacen
+	Cache   almacen.Cache
+}
+
+func ejecutarAPI(ctx context.Context, ln, lnHTTP net.Listener, op opciones, modelo []byte, bd baseDatos, logf func(string, ...any)) error {
 	base, err := api.CargarModelo(modelo)
 	if err != nil {
 		ln.Close()
@@ -37,6 +45,8 @@ func ejecutarAPI(ctx context.Context, ln, lnHTTP net.Listener, op opciones, mode
 		return err
 	}
 	defer c.Cerrar()
+	// Antes de api.Nuevo, que guarda el modelo del archivo como vigente en un
+	// almacén vacío: uno incompatible no debe quedar persistido.
 	if base.Esquema.D() != p.d {
 		lnHTTP.Close()
 		return fmt.Errorf("el modelo tiene %d variables y los shards %d: regenera el gold y el modelo juntos", base.Esquema.D(), p.d)
@@ -44,10 +54,17 @@ func ejecutarAPI(ctx context.Context, ln, lnHTTP net.Listener, op opciones, mode
 	ctx, cancelarNodos := context.WithCancel(ctx)
 	defer cancelarNodos()
 	ent := &entrenadorCluster{calc: c, d: p.d, lambda: op.lambda, progreso: op.progreso, logf: logf}
-	srv, err := api.Nuevo(api.Opciones{Modelo: base, Entrenador: ent, Cluster: c, Log: logf})
+	srv, err := api.Nuevo(api.Opciones{Modelo: base, Entrenador: ent, Cluster: c, Almacen: bd.Almacen, Cache: bd.Cache, Log: logf})
 	if err != nil {
 		lnHTTP.Close()
 		return err
+	}
+	// El modelo que publica la API puede venir del almacén (el vigente de una
+	// ejecución anterior): debe tener las mismas variables que los shards.
+	if dm := srv.ModeloActual().Esquema.D(); dm != p.d {
+		srv.Cerrar()
+		lnHTTP.Close()
+		return fmt.Errorf("el modelo tiene %d variables y los shards %d: regenera el gold y el modelo juntos", dm, p.d)
 	}
 	// La API responde desde ya (salud, modelo, predicciones y estado del
 	// clúster mientras se registran los nodos); un entrenamiento pedido antes

@@ -38,6 +38,30 @@ jobs:
       - name: Validar docs/api/openapi.yaml
         run: npx --yes @redocly/cli@1.25.0 lint --extends=minimal docs/api/openapi.yaml
 
+  bd:
+    name: MongoDB y Redis (tests de integración)
+    runs-on: ubuntu-24.04
+    services:
+      mongo:
+        image: mongo:7.0.14
+        ports: ["27017:27017"]
+        options: >-
+          --health-cmd "mongosh --quiet --eval 'db.adminCommand(\"ping\").ok'"
+          --health-interval 5s --health-timeout 5s --health-retries 12
+      redis:
+        image: redis:7.4.1
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s --health-timeout 3s --health-retries 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: go test -race -tags integracion (adaptadores y API de punta a punta)
+        run: go test -race -count=1 -tags integracion -v ./internal/almacen/... ./internal/api
+
   go:
     name: Go (gofmt, vet, test -race)
     runs-on: ubuntu-24.04

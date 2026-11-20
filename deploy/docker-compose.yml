@@ -1,4 +1,5 @@
-# Clúster de entrenamiento: un coordinador (parameter server) y N nodos de ML.
+# Clúster de entrenamiento: un coordinador (parameter server), N nodos de ML,
+# MongoDB y Redis.
 #
 #   go run ./cmd/gold -shards 3                      # una vez: gold y shards en data/gold
 #   docker compose -f deploy/docker-compose.yml up --build --exit-code-from coordinator
@@ -67,6 +68,33 @@ services:
     deploy:
       replicas: ${NODOS:-3}
     networks: [cluster]
+
+  # Bases de datos del modo servicio (ADR-0006): MongoDB persistente y Redis
+  # como caché de predicciones. Solo en la red interna; el coordinador las usa
+  # cuando corre con docker-compose.api.yml.
+  mongo:
+    image: mongo:7.0.14
+    volumes: [mongo-datos:/data/db]
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    networks: [cluster]
+
+  redis:
+    image: redis:7.4.1
+    # Solo caché: sin persistencia en disco y con desalojo LRU si se llena.
+    command: ["redis-server", "--save", "", "--appendonly", "no", "--maxmemory", "128mb", "--maxmemory-policy", "allkeys-lru"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+    networks: [cluster]
+
+volumes:
+  mongo-datos: {}
 
 networks:
   # Red interna: el puerto 9000 no se publica en el anfitrión.

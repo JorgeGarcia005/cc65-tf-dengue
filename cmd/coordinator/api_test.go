@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/JorgeGarcia005/cc65-tf-dengue/internal/almacen"
 	"github.com/JorgeGarcia005/cc65-tf-dengue/internal/cluster"
 	"github.com/JorgeGarcia005/cc65-tf-dengue/internal/features"
 	"github.com/JorgeGarcia005/cc65-tf-dengue/internal/gold"
@@ -66,7 +67,7 @@ func servicioDePrueba(t *testing.T, modelo []byte, op opciones) (base, dirCluste
 	ln, lnHTTP := escuchar(t), escuchar(t)
 	ctx, cancelar := context.WithCancel(context.Background())
 	fin := make(chan error, 1)
-	go func() { fin <- ejecutarAPI(ctx, ln, lnHTTP, op, modelo, silencio) }()
+	go func() { fin <- ejecutarAPI(ctx, ln, lnHTTP, op, modelo, baseDatos{}, silencio) }()
 	detenido := false
 	var errFin error
 	detener = func() error {
@@ -286,11 +287,28 @@ func TestServicioRechazaModeloYShardsIncompatibles(t *testing.T) {
 	modelo, _, _ := modeloYGold(t, 1_000, 2)
 	dirOtro, _ := goldDePrueba(t, 1_000, 2) // 8 variables, el modelo tiene otras
 	ln, lnHTTP := escuchar(t), escuchar(t)
-	err := ejecutarAPI(context.Background(), ln, lnHTTP, opciones{gold: dirOtro, nodos: 2}, modelo, silencio)
+	err := ejecutarAPI(context.Background(), ln, lnHTTP, opciones{gold: dirOtro, nodos: 2}, modelo, baseDatos{}, silencio)
 	if err == nil || !strings.Contains(err.Error(), "variables") {
 		t.Fatalf("err = %v, se esperaba el aviso de variables incompatibles", err)
 	}
 	if _, err := net.Dial("tcp", lnHTTP.Addr().String()); err == nil {
 		t.Fatal("el listener HTTP quedó abierto")
+	}
+}
+
+// Observación preventiva del juez (PR-40, ronda 3): un modelo.json
+// incompatible con los shards no queda guardado como vigente en un almacén
+// vacío, así que corregir el archivo basta para volver a arrancar.
+func TestServicioNoPersisteUnModeloIncompatible(t *testing.T) {
+	modelo, _, _ := modeloYGold(t, 1_000, 2)
+	dirOtro, _ := goldDePrueba(t, 1_000, 2)
+	mem := almacen.NuevaMemoria()
+	err := ejecutarAPI(context.Background(), escuchar(t), escuchar(t), opciones{gold: dirOtro, nodos: 2}, modelo,
+		baseDatos{Almacen: mem}, silencio)
+	if err == nil || !strings.Contains(err.Error(), "variables") {
+		t.Fatalf("err = %v, se esperaba el aviso de variables incompatibles", err)
+	}
+	if _, hay, err := mem.ModeloVigente(context.Background()); err != nil || hay {
+		t.Fatalf("el almacén quedó con un modelo vigente (hay=%v, err=%v)", hay, err)
 	}
 }
