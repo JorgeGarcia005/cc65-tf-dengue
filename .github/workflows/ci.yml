@@ -18,7 +18,7 @@ jobs:
     name: Ecosistema de agentes
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Skills sincronizadas (.agents ↔ .claude)
         run: bash scripts/check-skills-sync.sh
       - name: AGENTS.md dentro del límite de Antigravity (12 000 caracteres)
@@ -31,7 +31,7 @@ jobs:
     name: Spin (modelo del protocolo y mutantes)
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Instalar Spin y gcc
         run: sudo apt-get update -q && sudo apt-get install -y -q spin gcc
       - name: Seguridad y LTL del modelo; contraejemplo en cada mutante
@@ -41,7 +41,7 @@ jobs:
     name: OpenAPI 3 válido
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-node@v4
         with:
           node-version: 20
@@ -65,7 +65,7 @@ jobs:
           --health-cmd "redis-cli ping"
           --health-interval 5s --health-timeout 3s --health-retries 12
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
@@ -76,7 +76,7 @@ jobs:
     name: Go (gofmt, vet, test -race)
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: ¿Hay código Go?
         id: hay
         run: |
@@ -107,7 +107,7 @@ jobs:
     runs-on: ubuntu-24.04
     needs: go
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
