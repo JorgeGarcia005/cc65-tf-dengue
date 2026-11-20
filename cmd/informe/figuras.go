@@ -139,6 +139,13 @@ type curvaSpeedup struct {
 // figuraSpeedup: speedup frente a workers (eje x en potencias de 2) con la
 // recta ideal y = x como referencia discontinua.
 func figuraSpeedup(titulo string, curvas []curvaSpeedup) string {
+	return figuraSpeedupEjes(titulo, curvas, "Workers (goroutines)", "Ideal (speedup = workers)", false)
+}
+
+// figuraSpeedupEjes dibuja speedup frente a workers o nodos, con la recta
+// ideal y = x. Con lineal el eje X es lineal (nodos 1, 2, 3…); si no, log2
+// (workers 1, 2, 4…).
+func figuraSpeedupEjes(titulo string, curvas []curvaSpeedup, ejeX, nombreIdeal string, lineal bool) string {
 	if len(curvas) > len(serie) {
 		log.Fatalf("figura %q: %d series; la paleta valida como máximo %d", titulo, len(curvas), len(serie))
 	}
@@ -158,7 +165,12 @@ func figuraSpeedup(titulo string, curvas []curvaSpeedup) string {
 	paso := pasoEje(maxS)
 	tope := math.Ceil((maxS+0.5)/paso) * paso
 	escalaY := func(v float64) float64 { return y1 - (y1-y0)*v/tope }
-	lg := func(w int) float64 { return math.Log2(float64(w)) }
+	lg := func(w int) float64 {
+		if lineal {
+			return float64(w)
+		}
+		return math.Log2(float64(w))
+	}
 	escalaX := func(w int) float64 {
 		return x0 + (x1-x0)*(lg(w)-lg(ws[0]))/(lg(ws[len(ws)-1])-lg(ws[0]))
 	}
@@ -173,7 +185,7 @@ func figuraSpeedup(titulo string, curvas []curvaSpeedup) string {
 		l.texto(x, y1+18, fmt.Sprint(w), 11, tintaSec, "middle", "")
 	}
 	l.linea(x0, y1, x1, y1, tintaSec, 1, "")
-	l.texto((x0+x1)/2, y1+38, "Workers (goroutines)", 12, tintaSec, "middle", "")
+	l.texto((x0+x1)/2, y1+38, ejeX, 12, tintaSec, "middle", "")
 	l.texto(x0-50, y0-14, "Speedup", 12, tintaSec, "start", "")
 
 	// Recta ideal y = x, recortada al tope del eje.
@@ -181,7 +193,11 @@ func figuraSpeedup(titulo string, curvas []curvaSpeedup) string {
 	for _, w := range ws {
 		if float64(w) > tope {
 			// Termina donde la recta cruza el tope del eje.
-			xt := x0 + (x1-x0)*(math.Log2(tope)-lg(ws[0]))/(lg(ws[len(ws)-1])-lg(ws[0]))
+			lt := math.Log2(tope)
+			if lineal {
+				lt = tope
+			}
+			xt := x0 + (x1-x0)*(lt-lg(ws[0]))/(lg(ws[len(ws)-1])-lg(ws[0]))
 			ideal = append(ideal, fmt.Sprintf("%.1f,%.1f", xt, escalaY(tope)))
 			break
 		}
@@ -189,7 +205,7 @@ func figuraSpeedup(titulo string, curvas []curvaSpeedup) string {
 	}
 	fmt.Fprintf(&l.b, `<polyline points="%s" fill="none" stroke="%s" stroke-width="1.5" stroke-dasharray="4 3"/>`+"\n", strings.Join(ideal, " "), tintaSec)
 
-	nombres := []string{"Ideal (speedup = workers)"}
+	nombres := []string{nombreIdeal}
 	colores := []string{tintaSec}
 	for i, c := range curvas {
 		var pts []string
