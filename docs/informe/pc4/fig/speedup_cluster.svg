@@ -27,13 +27,13 @@
 <text x="330.0" y="378.0" font-size="12" fill="#52514e" text-anchor="middle">Nodos (1 worker cada uno, TCP)</text>
 <text x="10.0" y="46.0" font-size="12" fill="#52514e" text-anchor="start">Speedup</text>
 <polyline points="60.0,284.0 195.0,228.0 330.0,172.0 465.0,116.0 600.0,60.0" fill="none" stroke="#52514e" stroke-width="1.5" stroke-dasharray="4 3"/>
-<polyline points="60.0,284.0 195.0,235.5 330.0,194.3 465.0,147.6 600.0,102.7" fill="none" stroke="#2a78d6" stroke-width="2" stroke-linejoin="round"/>
+<polyline points="60.0,284.0 195.0,236.2 330.0,194.4 465.0,153.2 600.0,110.9" fill="none" stroke="#2a78d6" stroke-width="2" stroke-linejoin="round"/>
 <circle cx="60.0" cy="284.0" r="4" fill="#2a78d6" stroke="#ffffff" stroke-width="2"/>
-<circle cx="195.0" cy="235.5" r="4" fill="#2a78d6" stroke="#ffffff" stroke-width="2"/>
-<circle cx="330.0" cy="194.3" r="4" fill="#2a78d6" stroke="#ffffff" stroke-width="2"/>
-<circle cx="465.0" cy="147.6" r="4" fill="#2a78d6" stroke="#ffffff" stroke-width="2"/>
-<circle cx="600.0" cy="102.7" r="4" fill="#2a78d6" stroke="#ffffff" stroke-width="2"/>
-<text x="610.0" y="106.7" font-size="11" fill="#0b0b0b" text-anchor="start">máx, 4.24×</text>
+<circle cx="195.0" cy="236.2" r="4" fill="#2a78d6" stroke="#ffffff" stroke-width="2"/>
+<circle cx="330.0" cy="194.4" r="4" fill="#2a78d6" stroke="#ffffff" stroke-width="2"/>
+<circle cx="465.0" cy="153.2" r="4" fill="#2a78d6" stroke="#ffffff" stroke-width="2"/>
+<circle cx="600.0" cy="110.9" r="4" fill="#2a78d6" stroke="#ffffff" stroke-width="2"/>
+<text x="610.0" y="114.9" font-size="11" fill="#0b0b0b" text-anchor="start">máx, 4.09×</text>
 <rect x="64.0" y="62.0" width="290" height="38.0" fill="#ffffff"/>
 <line x1="70.0" y1="74.0" x2="88.0" y2="74.0" stroke="#52514e" stroke-width="1.5" stroke-dasharray="4 3"/>
 <text x="94.0" y="78.0" font-size="11" fill="#0b0b0b" text-anchor="start">Ideal (speedup = nodos)</text>
