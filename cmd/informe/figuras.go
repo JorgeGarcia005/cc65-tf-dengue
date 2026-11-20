@@ -219,7 +219,7 @@ func figuraSpeedupEjes(titulo string, curvas []curvaSpeedup, ejeX, nombreIdeal s
 		// Etiqueta directa: el mejor speedup de la serie, junto a su último punto.
 		mejor := slices.Max(c.Speedup)
 		ultimo := len(c.Workers) - 1
-		l.texto(escalaX(c.Workers[ultimo])+10, escalaY(c.Speedup[ultimo])+4, strings.Replace(fmt.Sprintf("máx. %.2f×", mejor), ".", ",", 1), 11, tinta, "start", "")
+		l.texto(escalaX(c.Workers[ultimo])+10, escalaY(c.Speedup[ultimo])+4, "máx. "+strings.Replace(fmt.Sprintf("%.2f×", mejor), ".", ",", 1), 11, tinta, "start", "")
 		nombres = append(nombres, c.Nombre)
 		colores = append(colores, serie[i])
 	}

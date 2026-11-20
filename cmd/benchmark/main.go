@@ -97,6 +97,9 @@ func main() {
 	if !(*recorte >= 0 && *recorte < 0.5) {
 		log.Fatalf("-recorte = %v: debe estar en [0, 0.5)", *recorte)
 	}
+	if !(*recorteCluster >= 0 && *recorteCluster < 0.5) {
+		log.Fatalf("-recorte-cluster = %v: debe estar en [0, 0.5)", *recorteCluster)
+	}
 	if *reps < 1 || *filas < 1 || *features < 1 || *tamBloque < 1 {
 		log.Fatal("-reps, -filas, -features y -bloque deben ser ≥ 1")
 	}
