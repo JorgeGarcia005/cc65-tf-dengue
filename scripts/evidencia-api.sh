@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Evidencia de los issues #28 y #29: la API vive en el coordinador del clúster
+# Evidencia de los issues #28, #29 y #30: la API vive en el coordinador del clúster
 # en Docker, con MongoDB y Redis, y se prueba desde el anfitrión. Requiere el gold real
 # (scripts/evidencia-cluster.sh antes).
 #
@@ -55,9 +55,18 @@ ent_id=$(basename "$(cat "$out/.entrenamiento")")
   "${dc[@]}" logs coordinator | grep -E 'MongoDB|Redis' || true
   bash scripts/evidencia-bd.sh "$ent_id"; } 2>&1 | tee "$out/06-bd.txt"
 
-{ paso "7. Cierre con SIGTERM: docker compose stop coordinator"
+{ paso "7. Latencia de la API con carga concurrente (issue #30): cmd/benchapi -exigir-p95 100ms"
+  go run ./cmd/benchapi -url "$url" -exigir-p95 100ms
+  if command -v npx >/dev/null 2>&1; then
+    paso "7b. Colección de Postman con Newman (tests de estado y < 100 ms)"
+    npx --yes newman run docs/api/cc65-tf.postman_collection.json --env-var "base_url=$url" || true
+  else
+    echo "(sin Node/npx: la colección se corre desde Postman con base_url=$url)"
+  fi; } 2>&1 | tee "$out/07-latencia.txt"
+
+{ paso "8. Cierre con SIGTERM: docker compose stop coordinator"
   "${dc[@]}" stop coordinator
   "${dc[@]}" ps -a
-  "${dc[@]}" logs coordinator | tail -25; } 2>&1 | tee "$out/07-cierre.txt"
+  "${dc[@]}" logs coordinator | tail -25; } 2>&1 | tee "$out/08-cierre.txt"
 
 paso "Listo: evidencia en $out/"

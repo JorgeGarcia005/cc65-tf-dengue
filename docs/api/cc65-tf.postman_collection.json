@@ -1,0 +1,333 @@
+{
+  "info": {
+    "name": "CC65 TF · API de riesgo de dengue",
+    "_postman_id": "5b0f7a52-cc65-4d1e-9f3a-7a0c0de9e8a1",
+    "description": "Una petición por ruta de docs/api/openapi.yaml, con tests de estado y de tiempo < 100 ms (issue #30). Correr con el clúster en modo servicio (scripts/evidencia-api.sh deja la API en http://localhost:18080) o con Newman: npx newman run docs/api/cc65-tf.postman_collection.json --env-var base_url=http://localhost:18080",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:8080"
+    },
+    {
+      "key": "entrenamiento_id",
+      "value": ""
+    }
+  ],
+  "item": [
+    {
+      "name": "Salud",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+              "pm.test(\"responde en menos de 100 ms\", function () { pm.expect(pm.response.responseTime).to.be.below(100); });",
+              "pm.test(\"estado ok\", function () { pm.expect(pm.response.json().estado).to.eql(\"ok\"); });"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{base_url}}/healthz",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "healthz"
+          ]
+        },
+        "description": ""
+      }
+    },
+    {
+      "name": "Modelo publicado",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+              "pm.test(\"responde en menos de 100 ms\", function () { pm.expect(pm.response.responseTime).to.be.below(100); });",
+              "pm.test(\"tiene versión y variables\", function () { const m = pm.response.json(); pm.expect(m.version).to.be.a(\"string\"); pm.expect(m.variables.length).to.be.above(0); });"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{base_url}}/api/v1/modelo",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "modelo"
+          ]
+        },
+        "description": ""
+      }
+    },
+    {
+      "name": "Predicción (primera vez: MISS)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+              "pm.test(\"responde en menos de 100 ms\", function () { pm.expect(pm.response.responseTime).to.be.below(100); });",
+              "pm.test(\"riesgo entre 0 y 1\", function () { const p = pm.response.json(); pm.expect(p.riesgo).to.be.within(0, 1); });"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{base_url}}/api/v1/predicciones",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "predicciones"
+          ]
+        },
+        "description": "",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"departamento\": \"LORETO\",\n  \"ano\": 2024,\n  \"semana\": 10,\n  \"edad\": 30,\n  \"tipo_edad\": \"A\",\n  \"sexo\": \"F\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "Predicción repetida (caché: HIT)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+              "pm.test(\"responde en menos de 100 ms\", function () { pm.expect(pm.response.responseTime).to.be.below(100); });",
+              "pm.test(\"sale de la caché de Redis\", function () { pm.expect(pm.response.headers.get(\"X-Cache\")).to.eql(\"HIT\"); });"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{base_url}}/api/v1/predicciones",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "predicciones"
+          ]
+        },
+        "description": "",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"departamento\": \"LORETO\",\n  \"ano\": 2024,\n  \"semana\": 10,\n  \"edad\": 30,\n  \"tipo_edad\": \"A\",\n  \"sexo\": \"F\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "Predicción inválida (sin edad)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 400\", function () { pm.response.to.have.status(400); });",
+              "pm.test(\"responde en menos de 100 ms\", function () { pm.expect(pm.response.responseTime).to.be.below(100); });",
+              "pm.test(\"mensaje de error en español\", function () { pm.expect(pm.response.json().error).to.include(\"edad\"); });"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{base_url}}/api/v1/predicciones",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "predicciones"
+          ]
+        },
+        "description": "",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"departamento\": \"LORETO\",\n  \"ano\": 2024,\n  \"semana\": 10,\n  \"tipo_edad\": \"A\",\n  \"sexo\": \"F\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "Estado del clúster",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+              "pm.test(\"responde en menos de 100 ms\", function () { pm.expect(pm.response.responseTime).to.be.below(100); });",
+              "pm.test(\"nodos es un arreglo\", function () { pm.expect(pm.response.json().nodos).to.be.an(\"array\"); });"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{base_url}}/api/v1/cluster",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "cluster"
+          ]
+        },
+        "description": ""
+      }
+    },
+    {
+      "name": "Lanzar entrenamiento distribuido",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 202\", function () { pm.response.to.have.status(202); });",
+              "pm.test(\"responde en menos de 100 ms\", function () { pm.expect(pm.response.responseTime).to.be.below(100); });",
+              "const e = pm.response.json();",
+              "pm.collectionVariables.set(\"entrenamiento_id\", e.id);",
+              "pm.test(\"queda en curso con un ID\", function () { pm.expect(e.estado).to.eql(\"en_curso\"); pm.expect(e.id).to.be.a(\"string\"); });"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{base_url}}/api/v1/entrenamientos",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "entrenamientos"
+          ]
+        },
+        "description": "",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"epocas\": 600\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "Consultar el entrenamiento",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+              "pm.test(\"responde en menos de 100 ms\", function () { pm.expect(pm.response.responseTime).to.be.below(100); });",
+              "pm.test(\"es el entrenamiento lanzado\", function () { pm.expect(pm.response.json().id).to.eql(pm.collectionVariables.get(\"entrenamiento_id\")); });"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{base_url}}/api/v1/entrenamientos/{{entrenamiento_id}}",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "entrenamientos",
+            "{{entrenamiento_id}}"
+          ]
+        },
+        "description": ""
+      }
+    }
+  ]
+}
