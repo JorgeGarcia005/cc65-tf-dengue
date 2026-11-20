@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/JorgeGarcia005/cc65-tf-dengue/internal/cluster"
 	"github.com/JorgeGarcia005/cc65-tf-dengue/internal/features"
 	"github.com/JorgeGarcia005/cc65-tf-dengue/internal/gold"
 	"github.com/JorgeGarcia005/cc65-tf-dengue/internal/ingest"
@@ -223,10 +224,13 @@ func TestServicioRechazaUnLambdaDistintoAlDelCluster(t *testing.T) {
 	}
 }
 
-func TestServicioSinNodosRegistradosNoEntrena(t *testing.T) {
+// También H8 del PR-39: con un nodo de dos registrados y TimeoutRegistro
+// largo, el cierre (SIGTERM) no espera ese plazo y el nodo conectado recibe
+// `fin` de entrenamiento completo.
+func TestServicioSinNodosRegistradosNoEntrenaYCierraSinEsperarElRegistro(t *testing.T) {
 	modelo, dir, _ := modeloYGold(t, 2_000, 2)
-	op := opciones{gold: dir, nodos: 2, lambda: 1e-4, tRegistro: 10 * time.Second, tEpoca: 10 * time.Second}
-	base, _, detener := servicioDePrueba(t, modelo, op)
+	op := opciones{gold: dir, nodos: 2, lambda: 1e-4, tRegistro: 60 * time.Second, tEpoca: 10 * time.Second}
+	base, dirCluster, detener := servicioDePrueba(t, modelo, op)
 	esperar(t, "la API responde", func() bool {
 		res, err := http.Get(base + "/healthz")
 		if err == nil {
@@ -234,6 +238,18 @@ func TestServicioSinNodosRegistradosNoEntrena(t *testing.T) {
 		}
 		return err == nil
 	})
+	conn, err := net.Dial("tcp", dirCluster)
+	if err != nil {
+		t.Fatal(err)
+	}
+	finNodo := make(chan error, 1)
+	go func() { finNodo <- (&cluster.Nodo{Nombre: "solo", Workers: 1}).Servir(conn) }()
+	esperar(t, "el nodo aparece en el clúster", func() bool {
+		_, c, _ := pedirJSON(t, "GET", base+"/api/v1/cluster", "")
+		ns, _ := c["nodos"].([]any)
+		return len(ns) == 1
+	})
+
 	codigo, _, h := pedirJSON(t, "POST", base+"/api/v1/entrenamientos", "")
 	if codigo != http.StatusAccepted {
 		t.Fatalf("POST = %d", codigo)
@@ -248,8 +264,21 @@ func TestServicioSinNodosRegistradosNoEntrena(t *testing.T) {
 	if codigo != http.StatusOK || p["riesgo"] == nil {
 		t.Fatalf("predicción = %d %v", codigo, p)
 	}
+
+	ini := time.Now()
 	if err := detener(); err != nil {
 		t.Fatalf("cierre: %v", err)
+	}
+	if d := time.Since(ini); d > 2*time.Second {
+		t.Fatalf("el cierre tardó %v esperando el registro de nodos", d)
+	}
+	select {
+	case err := <-finNodo:
+		if err != nil {
+			t.Fatalf("el nodo conectado terminó con %v, se esperaba `fin` completo", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("el nodo conectado no recibió `fin`")
 	}
 }
 

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -40,6 +41,8 @@ func ejecutarAPI(ctx context.Context, ln, lnHTTP net.Listener, op opciones, mode
 		lnHTTP.Close()
 		return fmt.Errorf("el modelo tiene %d variables y los shards %d: regenera el gold y el modelo juntos", base.Esquema.D(), p.d)
 	}
+	ctx, cancelarNodos := context.WithCancel(ctx)
+	defer cancelarNodos()
 	ent := &entrenadorCluster{calc: c, d: p.d, lambda: op.lambda, progreso: op.progreso, logf: logf}
 	srv, err := api.Nuevo(api.Opciones{Modelo: base, Entrenador: ent, Cluster: c, Log: logf})
 	if err != nil {
@@ -48,9 +51,13 @@ func ejecutarAPI(ctx context.Context, ln, lnHTTP net.Listener, op opciones, mode
 	}
 	// La API responde desde ya (salud, modelo, predicciones y estado del
 	// clúster mientras se registran los nodos); un entrenamiento pedido antes
-	// de que estén todos falla con un mensaje claro.
+	// de que estén todos falla con un mensaje claro. La espera se cancela con
+	// ctx (SIGTERM) y se espera a su goroutine antes de cerrar (PR-39 H8).
+	var wgNodos sync.WaitGroup
+	wgNodos.Add(1)
 	go func() {
-		if err := c.EsperarNodos(op.nodos); err != nil {
+		defer wgNodos.Done()
+		if err := c.EsperarNodosContext(ctx, op.nodos); err != nil {
 			ent.sinNodos.Store(&err)
 			logf("los nodos no se registraron: %v", err)
 			return
@@ -61,7 +68,13 @@ func ejecutarAPI(ctx context.Context, ln, lnHTTP net.Listener, op opciones, mode
 
 	logf("API en http://%s (Swagger UI en /docs)", lnHTTP.Addr())
 	errHTTP := api.Servir(ctx, api.NuevoHTTP(srv.Handler()), lnHTTP, PlazoCierreHTTP)
-	srv.Cerrar() // cancela el entrenamiento en curso y espera su cierre
+	// Orden del cierre: ya no entran peticiones; se cancela y espera el
+	// entrenamiento en curso (Servidor.Cerrar) y la espera de nodos; recién
+	// entonces se avisa `fin` a los nodos sanos y defer cierra el clúster.
+	// ctx ya está cancelado salvo que Servir haya fallado: se cancela aparte.
+	cancelarNodos()
+	srv.Cerrar()
+	wgNodos.Wait()
 	c.Terminar()
 	return errHTTP
 }
