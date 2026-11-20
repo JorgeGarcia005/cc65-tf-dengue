@@ -1,0 +1,59 @@
+# Evidencia del issue #27 con el CSV real del MINSA (no sintético).
+# Descarga el CSV, verifica el sha256 del manifiesto, regenera el pipeline y
+# corre en Docker el clúster (coordinador + 3 nodos), la comparación bit a bit
+# con el secuencial y la caída de un nodo. Los logs y reports/*.json quedan
+# como artefacto del run para las capturas del informe.
+name: Evidencia con el CSV real
+
+on:
+  workflow_dispatch:
+  push:
+    branches: ["evidencia/**"]
+
+permissions:
+  contents: read
+
+jobs:
+  gold-real:
+    name: Clúster en Docker con el gold real
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Hardware del runner
+        run: |
+          mkdir -p evidencia
+          { nproc; free -h; go version; docker --version; docker compose version; } | tee evidencia/00-hardware.txt
+      - name: 1. CSV del MINSA y sha256 (make data)
+        run: bash scripts/descargar-datos.sh 2>&1 | tee evidencia/01-datos.txt
+      - name: 2. Pipeline perfil → loader → gold → entrenar (secuencial)
+        run: |
+          set -o pipefail
+          { go run ./cmd/perfil && go run ./cmd/loader && go run ./cmd/gold -shards 3 && go run ./cmd/entrenar; } 2>&1 | tee evidencia/02-pipeline.txt
+          ls -la data/gold | tee -a evidencia/02-pipeline.txt
+      - name: 3. Clúster en Docker (coordinador + 3 nodos)
+        run: |
+          set -o pipefail
+          export USUARIO="$(id -u):$(id -g)"
+          docker compose -f deploy/docker-compose.yml up --build --exit-code-from coordinator 2>&1 | tee evidencia/03-cluster.txt
+          docker compose -f deploy/docker-compose.yml down
+          cp reports/entrenamiento_cluster.json evidencia/entrenamiento_cluster.json
+      - name: 4. Clúster = secuencial bit a bit
+        run: go run ./cmd/entrenar -comparar reports/entrenamiento_cluster.json 2>&1 | tee evidencia/04-comparar.txt
+      - name: 5. Caída de un nodo a mitad del entrenamiento
+        run: |
+          set -o pipefail
+          export USUARIO="$(id -u):$(id -g)"
+          bash scripts/prueba-caida.sh 2>&1 | tee evidencia/05-caida.txt
+          cp reports/entrenamiento_cluster.json evidencia/entrenamiento_cluster_caida.json
+      - name: Reportes
+        if: always()
+        run: cp reports/*.json evidencia/ 2>/dev/null || true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: evidencia-27-gold-real
+          path: evidencia/
