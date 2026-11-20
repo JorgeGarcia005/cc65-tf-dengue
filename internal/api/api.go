@@ -26,6 +26,7 @@ import (
 	"net/http"
 	"runtime/debug"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -61,6 +62,11 @@ type Servidor struct {
 	ents     entrenamientos
 	ctx      context.Context
 	cancelar context.CancelFunc
+
+	cierreMu     sync.Mutex // protege cerrado y el Add de wgEntrenar
+	cerrado      bool
+	wgEntrenar   sync.WaitGroup // goroutines de entrenamiento en curso
+	cerrarUnaVez sync.Once
 }
 
 // Nuevo crea el servidor con el modelo inicial.
@@ -80,8 +86,19 @@ func Nuevo(op Opciones) (*Servidor, error) {
 // ModeloActual devuelve el modelo publicado.
 func (s *Servidor) ModeloActual() *Modelo { return s.modelo.Load() }
 
-// Cerrar cancela el entrenamiento en curso, si hay uno.
-func (s *Servidor) Cerrar() { s.cancelar() }
+// Cerrar deja de admitir entrenamientos (503), cancela el que esté en curso y
+// espera a que su goroutine termine de registrar el resultado (PR-39 H9).
+// Después de Cerrar nadie usa el Entrenador, así que se puede cerrar el
+// clúster. Es idempotente.
+func (s *Servidor) Cerrar() {
+	s.cerrarUnaVez.Do(func() {
+		s.cierreMu.Lock()
+		s.cerrado = true
+		s.cierreMu.Unlock()
+		s.cancelar()
+	})
+	s.wgEntrenar.Wait()
+}
 
 // Ruta describe una ruta del mux. Documentar indica si debe figurar en el OpenAPI.
 type Ruta struct {
@@ -205,8 +222,19 @@ func (s *Servidor) crearEntrenamiento(w http.ResponseWriter, r *http.Request) {
 	}
 	base := s.ModeloActual()
 	p.D = base.Esquema.D()
+	// Admisión: tras Cerrar no se aceptan entrenamientos. El Add ocurre bajo
+	// el mismo mutex que lee Cerrar, así nunca corre en paralelo a su Wait.
+	s.cierreMu.Lock()
+	if s.cerrado {
+		s.cierreMu.Unlock()
+		responderError(w, http.StatusServiceUnavailable, "el servidor se está cerrando")
+		return
+	}
+	s.wgEntrenar.Add(1)
+	s.cierreMu.Unlock()
 	t, ok := s.ents.iniciar(p)
 	if !ok {
+		s.wgEntrenar.Done()
 		responderError(w, http.StatusConflict, fmt.Sprintf("ya hay un entrenamiento en curso (%s)", t.ID))
 		return
 	}
@@ -217,6 +245,7 @@ func (s *Servidor) crearEntrenamiento(w http.ResponseWriter, r *http.Request) {
 
 // entrenar corre en su goroutine; al terminar bien publica el modelo nuevo.
 func (s *Servidor) entrenar(id string, p ParametrosEntrenamiento, base *Modelo) {
+	defer s.wgEntrenar.Done()
 	inicio := time.Now()
 	w, err := s.op.Entrenador.Entrenar(s.ctx, p, func(e int, perdida float64) { s.ents.progreso(id, e, perdida) })
 	var version string
