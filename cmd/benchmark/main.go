@@ -92,6 +92,7 @@ func main() {
 	repsCluster := flag.Int("reps-cluster", 5, "-cluster: repeticiones medidas por número de nodos")
 	epocasCluster := flag.Int("epocas-cluster", 30, "-cluster: épocas por repetición")
 	workersNodo := flag.Int("workers-nodo", 1, "-cluster: goroutines del worker pool de cada nodo (1 = un núcleo por nodo)")
+	recorteCluster := flag.Float64("recorte-cluster", 0.20, "-cluster: fracción recortada en cada extremo (con 5 repeticiones, 0,20 recorta una por lado)")
 	flag.Parse()
 	if !(*recorte >= 0 && *recorte < 0.5) {
 		log.Fatalf("-recorte = %v: debe estar en [0, 0.5)", *recorte)
@@ -130,7 +131,7 @@ func main() {
 		}
 		ejecutarCluster(gold.Archivo{Dataset: ds, TamBloque: *tamBloque}, fuente, opcionesCluster{
 			nodos: parsearLista(*listaNodos), reps: *repsCluster, epocas: *epocasCluster, workersNodo: *workersNodo,
-			tasa: 2, lambda: 1e-4, recorte: *recorte, logf: log.Printf,
+			tasa: 2, lambda: 1e-4, recorte: *recorteCluster, logf: log.Printf,
 		}, *salida)
 		return
 	}

@@ -23,6 +23,7 @@ package main
 //     e = (1/S − 1/p) / (1 − 1/p).
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -31,6 +32,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"slices"
 	"sync"
 	"time"
 
@@ -52,6 +54,10 @@ type opcionesCluster struct {
 	lambda      float64
 	recorte     float64
 	logf        func(string, ...any)
+	// Para los tests: plazo de registro (0 = 30 s) y cuántos nodos se
+	// conectan de verdad (0 = todos).
+	timeoutRegistro time.Duration
+	conectar        int
 }
 
 // medicionCluster es el resultado para un número de nodos.
@@ -75,8 +81,15 @@ type desglose struct {
 	CalculoNodos   float64 `json:"seg_calculo_todos_los_nodos"`
 	Reduccion      float64 `json:"seg_reduccion"`
 	RedYEspera     float64 `json:"seg_red_y_espera"` // época − cómputo del más lento − reducción
-	Serializacion  float64 `json:"seg_serializacion_json"`
+	// JSON medido aparte (CPU de un hilo): el total de todos los shards, que
+	// en el clúster se reparte entre nodos y lectoras del coordinador, y el del
+	// shard más pesado, que es lo que cae en el camino crítico y está incluido
+	// en red y espera.
+	SerializacionTotal float64 `json:"seg_json_cpu_todos_los_shards"`
+	SerializacionShard float64 `json:"seg_json_shard_mas_pesado"`
 	// FraccionRed es (red y espera) / época: cuánto de la época no es cómputo.
+	// Todos los campos del desglose son medias aritméticas sobre las
+	// repeticiones (el recorte se aplica solo a seg_por_epoca).
 	FraccionRed float64 `json:"fraccion_red_y_espera"`
 }
 
@@ -99,22 +112,30 @@ func medirCluster(train gold.Archivo, op opcionesCluster) ([]medicionCluster, er
 	op.logf("referencia secuencial: %d épocas sobre %d filas × %d variables", op.epocas, train.N, train.D)
 	ref := ml.Entrenar(ml.NuevoSecuencial(train.Dataset, cfg), train.D, ent)
 
+	// Base = el menor número de nodos: se ordena y se quitan repetidos.
+	nodos := slices.Clone(op.nodos)
+	slices.Sort(nodos)
+	nodos = slices.Compact(nodos)
+	if nodos[0] < 1 {
+		return nil, errors.New("cluster: -nodos debe tener valores ≥ 1")
+	}
 	var out []medicionCluster
-	for _, n := range op.nodos {
+	for _, n := range nodos {
 		m, err := medirNodos(train, n, cfg, ent, ref, op)
 		if err != nil {
 			return nil, fmt.Errorf("%d nodos: %w", n, err)
 		}
 		out = append(out, m)
 	}
-	// Speedup, eficiencia y Karp-Flatt contra la configuración de 1 nodo (o
-	// la menor medida).
+	// Speedup y eficiencia contra la menor configuración medida. Karp-Flatt
+	// solo se define contra 1 nodo (e = (1/S − 1/p)/(1 − 1/p) supone que la
+	// base es la ejecución en un procesador).
 	base := out[0]
 	for i := range out {
 		p := float64(out[i].Nodos) / float64(base.Nodos)
 		s := base.SegPorEpoca.MediaRecortada / out[i].SegPorEpoca.MediaRecortada
 		out[i].Speedup, out[i].Eficiencia = s, s/p
-		if p > 1 {
+		if base.Nodos == 1 && p > 1 {
 			e := (1/s - 1/p) / (1 - 1/p)
 			out[i].KarpFlatt = &e
 		}
@@ -151,18 +172,29 @@ func medirNodos(train gold.Archivo, n int, cfg ml.Config, ent ml.Entrenamiento, 
 	if err != nil {
 		return medicionCluster{}, err
 	}
+	tReg := op.timeoutRegistro
+	if tReg <= 0 {
+		tReg = 30 * time.Second
+	}
 	c, err := cluster.Nuevo(ln, cluster.Opciones{
 		Shards: shards, D: train.D, Config: cfg,
-		TimeoutRegistro: 30 * time.Second, TimeoutEpoca: 5 * time.Minute,
+		TimeoutRegistro: tReg, TimeoutEpoca: 5 * time.Minute,
 	})
 	if err != nil {
 		ln.Close()
 		return medicionCluster{}, err
 	}
-	defer c.Cerrar()
+	// Orden de salida (LIFO): Terminar (si se llegó a registrar) → Cerrar,
+	// que corta las conexiones → esperar a los nodos. Al revés, un error
+	// antes de Terminar dejaba a los nodos bloqueados leyendo (PR-42 H1).
 	var wg sync.WaitGroup
 	defer wg.Wait()
-	for i := range n {
+	defer c.Cerrar()
+	conectar := n
+	if op.conectar > 0 {
+		conectar = min(op.conectar, n)
+	}
+	for i := range conectar {
 		conn, err := net.Dial("tcp", ln.Addr().String())
 		if err != nil {
 			return medicionCluster{}, err
@@ -212,7 +244,7 @@ func medirNodos(train gold.Archivo, n int, cfg ml.Config, ent ml.Entrenamiento, 
 	}
 	des.RedYEspera = math.Max(0, des.Epoca-des.CalculoNodoMax-des.Reduccion)
 	des.FraccionRed = des.RedYEspera / des.Epoca
-	des.Serializacion, err = serializacionPorEpoca(partes, ref.W)
+	des.SerializacionTotal, des.SerializacionShard, err = serializacionPorEpoca(partes, ref.W, cfg)
 	if err != nil {
 		return medicionCluster{}, err
 	}
@@ -222,53 +254,81 @@ func medirNodos(train gold.Archivo, n int, cfg ml.Config, ent ml.Entrenamiento, 
 	}, nil
 }
 
-// serializacionPorEpoca mide (CPU) lo que cuesta codificar y decodificar los
-// mensajes de una época: los pesos hacia cada shard y el gradiente de cada
-// shard de vuelta. Toma la mediana de 5 mediciones.
-func serializacionPorEpoca(partes []gold.Archivo, w []float64) (float64, error) {
-	var msgs []protocolo.Mensaje
+// serializacionPorEpoca mide (CPU, un hilo) lo que cuesta codificar y
+// decodificar los mensajes de una época con los parciales reales de cada
+// shard (calculados con los pesos de referencia) y el mismo json.Decoder que
+// usa protocolo.Conexion. Devuelve el total de todos los shards (CPU sumada:
+// en el clúster se reparte entre nodos y lectoras del coordinador) y el del
+// shard más pesado (lo que cae en el camino crítico de una época). Cada medida
+// agrupa k pasadas para no caer bajo la resolución del reloj (en Windows,
+// ~0,5 ms) y se toma la mediana de 5.
+func serializacionPorEpoca(partes []gold.Archivo, w []float64, cfg ml.Config) (total, shardMax float64, err error) {
+	type par struct{ epoca, grad protocolo.Mensaje }
+	var msgs []par
 	for s, p := range partes {
-		msgs = append(msgs, protocolo.Mensaje{Tipo: protocolo.Epoca, Epoca: 1, Shard: s, W: w})
-		par := make([]ml.Parcial, ml.NumBloques(p.N, p.TamBloque))
-		for k := range par {
-			g := make([]float64, len(w))
-			for j := range g {
-				g[j] = 1.0 / float64(3+j+k) // valores no triviales, como un gradiente real
-			}
-			par[k] = ml.Parcial{Grad: g, Perdida: 0.69, Peso: float64(p.TamBloque)}
-		}
-		msgs = append(msgs, protocolo.Mensaje{Tipo: protocolo.Gradiente, Epoca: 1, Shard: s, Parciales: par, MicrosCalculo: 1})
+		pool := ml.NuevoPool(nil, cfg, 1)
+		parciales := pool.Parciales(p.Dataset, w)
+		pool.Cerrar()
+		msgs = append(msgs, par{
+			epoca: protocolo.Mensaje{Tipo: protocolo.Epoca, Epoca: 1, Shard: s, W: w},
+			grad: protocolo.Mensaje{Tipo: protocolo.Gradiente, Epoca: 1, Shard: s, BloqueInicial: 0,
+				Parciales: parciales, MicrosCalculo: 1},
+		})
 	}
-	var tiempos []float64
-	for range 5 {
-		ini := time.Now()
-		for i := range msgs {
-			b, err := protocolo.Codificar(&msgs[i])
-			if err != nil {
-				return 0, err
-			}
-			var m protocolo.Mensaje
-			if err := json.Unmarshal(b, &m); err != nil {
-				return 0, err
+	idaYVuelta := func(m *protocolo.Mensaje) error {
+		b, err := protocolo.Codificar(m)
+		if err != nil {
+			return err
+		}
+		var otro protocolo.Mensaje
+		return json.NewDecoder(bytes.NewReader(b)).Decode(&otro)
+	}
+	medir := func(f func() error) (float64, error) {
+		var errF error
+		g := func() {
+			if err := f(); err != nil {
+				errF = err
 			}
 		}
-		tiempos = append(tiempos, time.Since(ini).Seconds())
+		k := pasadasPorMedicion(g, medicionMinima)
+		var ts []float64
+		for range 5 {
+			ini := time.Now()
+			for range k {
+				g()
+			}
+			ts = append(ts, time.Since(ini).Seconds()/float64(k))
+		}
+		return estadistica.Mediana(ts), errF
 	}
-	return estadistica.Mediana(tiempos), nil
+	for i := range msgs {
+		t, err := medir(func() error {
+			if err := idaYVuelta(&msgs[i].epoca); err != nil {
+				return err
+			}
+			return idaYVuelta(&msgs[i].grad)
+		})
+		if err != nil {
+			return 0, 0, err
+		}
+		total += t
+		shardMax = max(shardMax, t)
+	}
+	return total, shardMax, nil
 }
 
 func imprimirCluster(rep reporteCluster) {
 	fmt.Println(rep.Fuente)
-	fmt.Printf("%6s %12s %16s %8s %8s %8s %10s %10s %10s %12s\n", "nodos", "ms/época", "IC95 ms", "speedup", "efic.", "K-F", "cómp. ms", "red+esp ms", "JSON ms", "KB/época")
+	fmt.Printf("%6s %12s %16s %8s %8s %8s %10s %10s %13s %12s\n", "nodos", "ms/época", "IC95 ms", "speedup", "efic.", "K-F", "cómp. ms", "red+esp ms", "JSON/shard ms", "KB/época")
 	for _, m := range rep.Mediciones {
 		kf := "—"
 		if m.KarpFlatt != nil {
 			kf = fmt.Sprintf("%.3f", *m.KarpFlatt)
 		}
-		fmt.Printf("%6d %12.2f %7.2f–%-8.2f %8.2f %8.2f %8s %10.2f %10.2f %10.2f %12.1f\n",
+		fmt.Printf("%6d %12.2f %7.2f–%-8.2f %8.2f %8.2f %8s %10.2f %10.2f %13.2f %12.1f\n",
 			m.Nodos, 1000*m.SegPorEpoca.MediaRecortada, 1000*m.SegPorEpoca.IC95Inf, 1000*m.SegPorEpoca.IC95Sup,
 			m.Speedup, m.Eficiencia, kf, 1000*m.Desglose.CalculoNodoMax, 1000*m.Desglose.RedYEspera,
-			1000*m.Desglose.Serializacion, m.BytesPorEpoca/1024)
+			1000*m.Desglose.SerializacionShard, m.BytesPorEpoca/1024)
 	}
 }
 
@@ -287,7 +347,7 @@ func ejecutarCluster(train gold.Archivo, fuente string, op opcionesCluster, sali
 			"calentamiento": "1 entrenamiento descartado (carga de shards)",
 			"estimador":     fmt.Sprintf("media recortada %.0f %% + IC95 bootstrap (2000)", op.recorte*100),
 			"verificacion":  "cada repetición se compara bit a bit con el secuencial antes de registrarse",
-			"desglose":      "red y espera = época − cómputo del nodo más lento − reducción; JSON medido aparte (CPU)",
+			"desglose":      "medias aritméticas: red y espera = época − cómputo del nodo más lento (sus shards en serie) − reducción; JSON medido aparte (CPU de un hilo, k pasadas agrupadas): total de los shards y shard más pesado (incluido en red y espera)",
 			"karp_flatt":    "e = (1/S − 1/p) / (1 − 1/p), p = nodos / nodos de la base",
 		},
 		Mediciones: med,
