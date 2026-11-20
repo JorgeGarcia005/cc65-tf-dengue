@@ -20,6 +20,7 @@
 //
 //	go run ./cmd/benchmark -filas 1000000 -features 40 -reps 20
 //	go run ./cmd/benchmark -gold data/gold/train.bin -reps 20   # → reports/bench_gradiente_<host>_gold.json
+//	go run ./cmd/benchmark -cluster -gold data/gold/train.bin   # → reports/bench_cluster_<host>_gold.json (ver cluster.go)
 package main
 
 import (
@@ -86,6 +87,11 @@ func main() {
 	salida := flag.String("salida", "", "archivo JSON (por defecto reports/bench_gradiente_<host>.json)")
 	semilla := flag.Uint64("semilla", 2026, "semilla del dataset y del barajado")
 	rutaGold := flag.String("gold", "", "archivo gold real (p. ej. data/gold/train.bin) en vez del sintético")
+	modoCluster := flag.Bool("cluster", false, "benchmark del clúster por número de nodos (issue #32) en vez del de gradiente")
+	listaNodos := flag.String("nodos", "1,2,3,4,5", "-cluster: nodos a medir, separados por coma")
+	repsCluster := flag.Int("reps-cluster", 5, "-cluster: repeticiones medidas por número de nodos")
+	epocasCluster := flag.Int("epocas-cluster", 30, "-cluster: épocas por repetición")
+	workersNodo := flag.Int("workers-nodo", 1, "-cluster: goroutines del worker pool de cada nodo (1 = un núcleo por nodo)")
 	flag.Parse()
 	if !(*recorte >= 0 && *recorte < 0.5) {
 		log.Fatalf("-recorte = %v: debe estar en [0, 0.5)", *recorte)
@@ -117,6 +123,16 @@ func main() {
 		log.Printf("generando dataset sintético: %d filas × %d features", *filas, *features)
 		ds, _ = ml.Sintetico(*filas, *features, *semilla)
 		fuente = fmt.Sprintf("sintetico(filas=%d, features=%d, semilla=%d)", *filas, *features, *semilla)
+	}
+	if *modoCluster {
+		if *salida == "" {
+			*salida = filepath.Join("reports", "bench_cluster_"+maquina.Host()+sufijo+".json")
+		}
+		ejecutarCluster(gold.Archivo{Dataset: ds, TamBloque: *tamBloque}, fuente, opcionesCluster{
+			nodos: parsearLista(*listaNodos), reps: *repsCluster, epocas: *epocasCluster, workersNodo: *workersNodo,
+			tasa: 2, lambda: 1e-4, recorte: *recorte, logf: log.Printf,
+		}, *salida)
+		return
 	}
 	cfg := ml.Config{TamBloque: *tamBloque, Lambda: 1e-4}
 	w := make([]float64, ds.D+1)
@@ -305,7 +321,7 @@ func imprimir(rep reporte) {
 	}
 }
 
-func escribir(rep reporte, ruta string) {
+func escribir(rep any, ruta string) {
 	if err := os.MkdirAll(filepath.Dir(ruta), 0o755); err != nil {
 		log.Fatal(err)
 	}

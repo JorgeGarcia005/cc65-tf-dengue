@@ -22,6 +22,7 @@ import (
 	"io"
 	"net"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/JorgeGarcia005/cc65-tf-dengue/internal/ml"
@@ -99,7 +100,11 @@ type Mensaje struct {
 	W             []float64    `json:"w,omitempty"`
 	Parciales     []ml.Parcial `json:"parciales,omitempty"`
 	Detalle       string       `json:"mensaje,omitempty"`
-	Motivo        string       `json:"motivo,omitempty"`
+	// MicrosCalculo es lo que tardó el nodo en calcular los parciales de un
+	// gradiente (solo cómputo, sin red ni JSON). Lo usa el benchmark del
+	// clúster (#32) para separar cómputo de red y espera.
+	MicrosCalculo int64  `json:"us_calculo,omitempty"`
+	Motivo        string `json:"motivo,omitempty"`
 }
 
 // Validar comprueba que el mensaje tenga un tipo conocido y los campos que su
@@ -141,6 +146,9 @@ func (m *Mensaje) Validar() error {
 			return mal("w tiene %d valores (mínimo 2: un peso y el sesgo)", len(m.W))
 		}
 	case Gradiente:
+		if m.MicrosCalculo < 0 {
+			return mal("tiempo de cálculo negativo")
+		}
 		if len(m.Parciales) == 0 {
 			return mal("sin parciales")
 		}
@@ -192,10 +200,17 @@ func Codificar(m *Mensaje) ([]byte, error) {
 // mezclen). Recibir debe llamarlo una sola goroutine: la lectora de esa
 // conexión (ADR-0005).
 type Conexion struct {
-	conn    net.Conn
-	lector  *lectorLimitado
-	dec     *json.Decoder
-	muEnvio sync.Mutex
+	conn     net.Conn
+	lector   *lectorLimitado
+	dec      *json.Decoder
+	muEnvio  sync.Mutex
+	escritos atomic.Int64 // bytes escritos (benchmark #32)
+}
+
+// Bytes devuelve los bytes enviados y recibidos por esta conexión. Es seguro
+// llamarlo desde cualquier goroutine.
+func (c *Conexion) Bytes() (enviados, recibidos int64) {
+	return c.escritos.Load(), c.lector.leidos.Load()
 }
 
 // Nueva envuelve una conexión ya establecida.
@@ -224,7 +239,9 @@ func (c *Conexion) Enviar(m Mensaje, plazo time.Duration) error {
 	// Fijar el plazo solo falla si la conexión ya está cerrada; en ese caso la
 	// escritura de abajo falla de inmediato con el error que importa.
 	_ = c.conn.SetWriteDeadline(limite)
-	if _, err := c.conn.Write(linea); err != nil {
+	n, err := c.conn.Write(linea)
+	c.escritos.Add(int64(n))
+	if err != nil {
 		return fmt.Errorf("protocolo: al enviar %s (plazo %v): %w", m.Tipo, plazo, err)
 	}
 	return nil
@@ -275,6 +292,7 @@ func (c *Conexion) Remoto() string {
 type lectorLimitado struct {
 	r        io.Reader
 	restante int
+	leidos   atomic.Int64 // bytes leídos de la conexión (benchmark #32)
 }
 
 func (l *lectorLimitado) Read(p []byte) (int, error) {
@@ -286,5 +304,6 @@ func (l *lectorLimitado) Read(p []byte) (int, error) {
 	}
 	n, err := l.r.Read(p)
 	l.restante -= n
+	l.leidos.Add(int64(n))
 	return n, err
 }

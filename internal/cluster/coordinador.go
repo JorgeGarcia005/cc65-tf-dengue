@@ -110,8 +110,11 @@ type Coordinador struct {
 	reasign   int
 	fallo     error
 
+	calcMax, calcSuma int64 // µs de cómputo de la época en curso (máximo y suma por shard)
+
 	muEstado sync.RWMutex
 	estado   Estado
+	tiempos  Tiempos
 
 	muConns sync.Mutex
 	conns   map[int]*protocolo.Conexion // todas las abiertas, para Cerrar
@@ -268,6 +271,8 @@ func (c *Coordinador) GradienteErr(w []float64) (ml.Gradiente, error) {
 	if len(w) != c.op.D+1 {
 		return ml.Gradiente{}, fmt.Errorf("cluster: len(w) = %d, se esperaban %d", len(w), c.op.D+1)
 	}
+	ini := time.Now()
+	c.calcMax, c.calcSuma = 0, 0
 	c.w = w
 	for s := range c.listo {
 		c.listo[s], c.enviado[s] = false, false
@@ -298,8 +303,17 @@ func (c *Coordinador) GradienteErr(w []float64) (ml.Gradiente, error) {
 	}
 	// Barrera cumplida: están los parciales de los B bloques. Reducción en
 	// orden global de bloque, igual que la versión secuencial.
+	iniRed := time.Now()
 	g := ml.Finalizar(ml.ReducirEnOrden(c.parciales, c.op.D), c.op.Config, w)
+	fin := time.Now()
 	c.epoca++
+	c.muEstado.Lock()
+	c.tiempos.Epocas++
+	c.tiempos.SegEpoca += fin.Sub(ini).Seconds()
+	c.tiempos.SegReduccion += fin.Sub(iniRed).Seconds()
+	c.tiempos.SegCalculoMax += float64(c.calcMax) / 1e6
+	c.tiempos.SegCalculoSuma += float64(c.calcSuma) / 1e6
+	c.muEstado.Unlock()
 	c.publicar(g.Perdida)
 	return g, nil
 }
@@ -498,6 +512,8 @@ func (c *Coordinador) atender(ev evento) bool {
 		}
 		copy(c.parciales[sh.BloqueInicial:], m.Parciales)
 		c.listo[m.Shard] = true
+		c.calcMax = max(c.calcMax, m.MicrosCalculo)
+		c.calcSuma += m.MicrosCalculo
 		return true
 	case protocolo.Error:
 		c.descartar(j, "el nodo informó: "+m.Detalle)
@@ -546,6 +562,36 @@ func (c *Coordinador) Cerrar() {
 		c.muConns.Unlock()
 	})
 	c.wg.Wait()
+}
+
+// Tiempos acumula, sobre las épocas completadas, cuánto duró cada época en el
+// coordinador y qué parte fue cómputo en los nodos y reducción; los bytes son
+// los de todas las conexiones con nodos. Lo usa el benchmark del clúster (#32):
+// red y espera = época − cómputo del nodo más lento − reducción.
+type Tiempos struct {
+	Epocas         int     `json:"epocas"`
+	SegEpoca       float64 `json:"seg_epoca"`
+	SegCalculoMax  float64 `json:"seg_calculo_max"`  // suma, por época, del shard más lento
+	SegCalculoSuma float64 `json:"seg_calculo_suma"` // suma de todos los shards
+	SegReduccion   float64 `json:"seg_reduccion"`    // ReducirEnOrden + Finalizar
+	BytesEnviados  int64   `json:"bytes_enviados"`
+	BytesRecibidos int64   `json:"bytes_recibidos"`
+}
+
+// Tiempos devuelve los acumulados hasta ahora; es seguro llamarlo desde
+// cualquier goroutine.
+func (c *Coordinador) Tiempos() Tiempos {
+	c.muEstado.RLock()
+	t := c.tiempos
+	c.muEstado.RUnlock()
+	c.muConns.Lock()
+	for _, pc := range c.conns {
+		e, r := pc.Bytes()
+		t.BytesEnviados += e
+		t.BytesRecibidos += r
+	}
+	c.muConns.Unlock()
+	return t
 }
 
 // Estado devuelve una copia del estado publicado; es seguro llamarlo desde
