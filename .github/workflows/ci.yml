@@ -56,7 +56,7 @@ jobs:
           --health-interval 5s --health-timeout 3s --health-retries 12
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
       - name: go test -race -tags integracion (adaptadores y API de punta a punta)
@@ -76,7 +76,7 @@ jobs:
             echo "go=false" >> "$GITHUB_OUTPUT"
             echo "Sin código Go todavía; se omite."
           fi
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v7
         if: steps.hay.outputs.go == 'true'
         with:
           go-version-file: go.mod
@@ -98,7 +98,7 @@ jobs:
     needs: go
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
       - name: Imagen única, sin privilegios y menor de 40 MB
