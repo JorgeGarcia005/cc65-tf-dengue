@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -22,6 +23,24 @@ import (
 // apiDePrueba levanta la API real (internal/api) con un modelo de prueba, el
 // almacén en memoria y, si conCache, una caché en memoria.
 func apiDePrueba(t *testing.T, conCache bool) *httptest.Server {
+	var c almacen.Cache
+	if conCache {
+		c = almacen.NuevaCacheMemoria(time.Now)
+	}
+	return apiConCache(t, c)
+}
+
+// cacheCaida simula Redis caído: toda operación falla.
+type cacheCaida struct{}
+
+func (cacheCaida) Obtener(context.Context, string) ([]byte, bool, error) {
+	return nil, false, errors.New("redis caído")
+}
+func (cacheCaida) Guardar(context.Context, string, []byte, time.Duration) error {
+	return errors.New("redis caído")
+}
+
+func apiConCache(t *testing.T, cache almacen.Cache) *httptest.Server {
 	t.Helper()
 	var regs []ingest.Registro
 	for i := range 60 {
@@ -41,10 +60,7 @@ func apiDePrueba(t *testing.T, conCache bool) *httptest.Server {
 	if err != nil {
 		t.Fatal(err)
 	}
-	op := api.Opciones{Modelo: m, Log: func(string, ...any) {}}
-	if conCache {
-		op.Cache = almacen.NuevaCacheMemoria(time.Now)
-	}
+	op := api.Opciones{Modelo: m, Cache: cache, Log: func(string, ...any) {}}
 	s, err := api.Nuevo(op)
 	if err != nil {
 		t.Fatal(err)
@@ -233,6 +249,55 @@ func TestColeccionPostmanCubreLasRutas(t *testing.T) {
 	for _, r := range api.Rutas() {
 		if r.Documentar && !tiene[r.Metodo+" "+r.Ruta] {
 			t.Errorf("la colección no tiene %s %s", r.Metodo, r.Ruta)
+		}
+	}
+}
+
+// PR-41 H1: con Redis caído la API responde MISS en vez de HIT; la corrida
+// caliente no puede darse por buena.
+func TestCacheCaidaFallaLaCorridaCaliente(t *testing.T) {
+	ts := apiConCache(t, cacheCaida{})
+	rep, err := medir(context.Background(), opciones{url: ts.URL, peticiones: 40, concurrencia: 4, calientes: 4, semilla: 9, timeout: time.Second}, time.Second, silencio)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := verificar(rep); err == nil || !strings.Contains(err.Error(), "corrida caliente") {
+		t.Fatalf("err = %v, se esperaba el fallo de la corrida caliente", err)
+	}
+}
+
+// PR-41 H1: repetir la semilla contra la misma caché hace que la corrida fría
+// salga de la caché; debe fallar.
+func TestSemillaRepetidaFallaLaCorridaFria(t *testing.T) {
+	ts := apiDePrueba(t, true)
+	op := opciones{url: ts.URL, peticiones: 40, concurrencia: 4, calientes: 4, semilla: 11, timeout: time.Second}
+	if _, err := medir(context.Background(), op, 0, silencio); err != nil {
+		t.Fatal(err)
+	}
+	rep, err := medir(context.Background(), op, 0, silencio)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := verificar(rep); err == nil || !strings.Contains(err.Error(), "corrida fria") {
+		t.Fatalf("err = %v, se esperaba el fallo de la corrida fría", err)
+	}
+}
+
+// PR-41 H1 y H3: opciones que solaparían la fría con la caliente o que no
+// tienen sentido se rechazan antes de medir.
+func TestOpcionesInvalidasSeRechazan(t *testing.T) {
+	ts := apiDePrueba(t, true)
+	base := opciones{url: ts.URL, peticiones: 10, concurrencia: 2, calientes: 2, semilla: 1, timeout: time.Second}
+	casos := map[string]func(*opciones) time.Duration{
+		"n mayor que la mitad": func(o *opciones) time.Duration { o.peticiones = 10_000_000; return 0 },
+		"timeout cero":         func(o *opciones) time.Duration { o.timeout = 0; return 0 },
+		"límite negativo":      func(o *opciones) time.Duration { return -time.Millisecond },
+	}
+	for nombre, f := range casos {
+		op := base
+		limite := f(&op)
+		if _, err := medir(context.Background(), op, limite, silencio); err == nil {
+			t.Errorf("%s: se esperaba error", nombre)
 		}
 	}
 }

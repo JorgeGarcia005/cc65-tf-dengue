@@ -36,6 +36,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/JorgeGarcia005/cc65-tf-dengue/internal/maquina"
 )
 
 // opciones de una medición.
@@ -91,26 +93,26 @@ func main() {
 	flag.Uint64Var(&op.semilla, "semilla", 0, "semilla de las consultas frías (0 = según la hora, para no repetir claves de corridas anteriores)")
 	flag.DurationVar(&op.timeout, "timeout", 5*time.Second, "plazo de cada petición")
 	exigir := flag.Duration("exigir-p95", 0, "falla (código 1) si el p95 de alguna corrida no es menor que esto, p. ej. 100ms")
-	maquina := flag.String("maquina", "", "nombre de la máquina para el archivo (por defecto, el hostname)")
+	nombreMaquina := flag.String("maquina", "", "nombre de la máquina para el archivo (por defecto, el hostname)")
 	salida := flag.String("salida", "", "reporte (por defecto reports/bench_api_<maquina>.json)")
 	flag.Parse()
 
 	if op.semilla == 0 {
 		op.semilla = uint64(time.Now().UnixNano())
 	}
-	if *maquina == "" {
-		*maquina, _ = os.Hostname()
+	host := maquina.Host()
+	if *nombreMaquina != "" {
+		host = nombreArchivo(*nombreMaquina)
 	}
-	*maquina = nombreArchivo(*maquina)
 	if *salida == "" {
-		*salida = filepath.Join("reports", "bench_api_"+*maquina+".json")
+		*salida = filepath.Join("reports", "bench_api_"+host+".json")
 	}
 
 	rep, err := medir(context.Background(), op, *exigir, log.Printf)
 	if err != nil {
 		log.Fatal(err)
 	}
-	rep.Maquina = *maquina
+	rep.Maquina = host
 	imprimir(rep)
 	if err := escribirJSON(*salida, rep); err != nil {
 		log.Fatal(err)
@@ -126,16 +128,26 @@ func medir(ctx context.Context, op opciones, limite time.Duration, logf func(str
 	if op.peticiones < 1 || op.concurrencia < 1 || op.calientes < 1 {
 		return reporte{}, errors.New("-n, -c y -calientes deben ser positivos")
 	}
-	cli := &http.Client{
-		Timeout:   op.timeout,
-		Transport: &http.Transport{MaxIdleConns: op.concurrencia, MaxIdleConnsPerHost: op.concurrencia},
+	if op.timeout <= 0 || limite < 0 {
+		return reporte{}, errors.New("-timeout debe ser positivo y -exigir-p95 no puede ser negativo")
 	}
+	tr := http.DefaultTransport.(*http.Transport).Clone()
+	tr.MaxIdleConns, tr.MaxIdleConnsPerHost = op.concurrencia, op.concurrencia
+	tr.IdleConnTimeout = 30 * time.Second
+	cli := &http.Client{Timeout: op.timeout, Transport: tr}
+	defer cli.CloseIdleConnections()
 	op.url = strings.TrimRight(op.url, "/")
 	mod, err := leerModelo(ctx, cli, op.url)
 	if err != nil {
 		return reporte{}, err
 	}
 	gen := generador{deptos: mod.deptos, anoMin: mod.anoMin, base: rand.New(rand.NewPCG(op.semilla, 0)).Uint64N(1 << 40)}
+	// La fría y la caliente usan mitades disjuntas de las combinaciones: si una
+	// corrida no cabe en su mitad, se repetirían consultas (PR-41 H1).
+	if mitad := gen.combinaciones() / 2; uint64(op.peticiones) > mitad || uint64(op.calientes) > mitad {
+		return reporte{}, fmt.Errorf("-n (%d) y -calientes (%d) deben ser ≤ %d: con este modelo hay %d consultas distintas",
+			op.peticiones, op.calientes, mitad, gen.combinaciones())
+	}
 	rep := reporte{
 		Generado: time.Now().Format(time.RFC3339), SO: runtime.GOOS + "/" + runtime.GOARCH, CPUs: runtime.NumCPU(),
 		URL: op.url, VersionModelo: mod.version, Concurrencia: op.concurrencia, Semilla: op.semilla,
@@ -178,10 +190,21 @@ func medir(ctx context.Context, op opciones, limite time.Duration, logf func(str
 	return rep, nil
 }
 
-// verificar falla si alguna corrida no cumple el límite o tuvo errores.
+// verificar falla si alguna corrida no cumple el límite o tuvo errores y, si
+// la API tiene caché, si la corrida fría no salió entera del cálculo (claves
+// de una corrida anterior con la misma semilla) o la caliente no salió entera
+// de la caché (Redis caído o calentamiento fallido) (PR-41 H1).
 func verificar(rep reporte) error {
 	var errs []error
 	for _, c := range rep.Corridas {
+		if c.ConCache && c.Errores == 0 {
+			switch {
+			case c.Nombre == "fria" && c.Hits > 0:
+				errs = append(errs, fmt.Errorf("corrida fria: %d de %d respuestas salieron de la caché; use otra -semilla", c.Hits, c.Peticiones))
+			case c.Nombre == "caliente" && c.Hits != c.Peticiones:
+				errs = append(errs, fmt.Errorf("corrida caliente: solo %d de %d respuestas salieron de la caché (¿Redis caído?)", c.Hits, c.Peticiones))
+			}
+		}
 		if c.Errores > 0 {
 			errs = append(errs, fmt.Errorf("corrida %s: %d de %d peticiones con error (%s)", c.Nombre, c.Errores, c.Peticiones, c.PrimerError))
 		}
