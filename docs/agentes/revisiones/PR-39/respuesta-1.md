@@ -103,7 +103,40 @@ $ go test -race -count=3 ./cmd/coordinator
 ok  	github.com/JorgeGarcia005/cc65-tf-dengue/cmd/coordinator	33.805s
 ```
 
-**Pendiente de la verificación desde el anfitrión** (Docker en la PC de Jorge, con el gold real):
-`API=:8080 docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.api.yml up --build -d`, `GET /docs`, `GET /docs/openapi.yaml`,
-`POST /api/v1/entrenamientos` + `GET /api/v1/entrenamientos/{id}` y `docker compose stop coordinator`. Las
-salidas quedan en `evidencia/28/` y se suman en la ronda 2.
+### Verificación desde el anfitrión (Docker Desktop, PC de Jorge, gold real)
+
+`bash scripts/evidencia-api.sh` en `8bad2d1`: Windows/amd64, 12 CPU lógicas, Docker 29.9.3, gold real
+(765 297 filas de train, 31 variables, 3 shards). El puerto del anfitrión es 18080 porque el 8080 estaba
+ocupado en esa PC (`PUERTO_API`). Extractos:
+
+```text
+== 2. Swagger UI y contrato desde el anfitrión
+GET /docs → 200 (text/html; charset=utf-8)
+GET /docs/openapi.yaml → 200 (8243 bytes)
+
+== 3. Estado del clúster
+{"epocas":0,"perdida":0,"nodos":[{"nombre":"372ac67cf223","remoto":"172.18.0.5:51614","workers":12,"sano":true,"carga":0}, … 3 nodos …],"reasignaciones":0}
+
+== 4. Entrenamiento distribuido vía API
+HTTP/1.1 202 Accepted
+Location: /api/v1/entrenamientos/ent-1
+{"id":"ent-1","estado":"en_curso","epocas":600,"tasa":2,"lambda":0.0001,"epoca":0,"perdida":0,"inicio":"2026-11-20T04:16:17Z"}
+GET /api/v1/entrenamientos/ent-1
+{"id":"ent-1","estado":"terminado","epocas":600,"tasa":2,"lambda":0.0001,"epoca":600,"perdida":0.6700654760947148,"inicio":"2026-11-20T04:16:17Z","fin":"2026-11-20T04:16:26Z","version_modelo":"9bb1594a398f"}
+
+== 5. Predicción con el modelo publicado
+{"riesgo":0.1734997592400519,"probabilidad_ponderada":0.5940450096064652,"clase":1,"etiqueta":"con signos de alarma o grave","umbral":0.5,"departamento_modelo":"LORETO","version_modelo":"9bb1594a398f"}
+(0.002655 s)
+
+== 6. Cierre con SIGTERM: docker compose stop coordinator
+cc65-tf-coordinator-1   Exited (0)
+cc65-tf-node-1          Exited (0)   (node-2 y node-3 igual)
+coordinator-1  | … 3 nodos registrados: la API acepta entrenamientos
+coordinator-1  | … entrenamiento vía API: 600 épocas en 9.6 s, pérdida 0.693147 → 0.670065
+coordinator-1  | … api: entrenamiento ent-1 terminado en 9.627s; modelo publicado 9bb1594a398f
+coordinator-1  | … coordinador detenido
+```
+
+La pérdida final (0.670065) es la misma del entrenamiento del clúster en modo único que `cmd/entrenar
+-comparar` declaró idéntico bit a bit al secuencial (evidencia del #27). El SIGTERM cierra el coordinador
+con código 0 y los nodos terminan con `fin` (código 0). La latencia p95 y Postman se miden en el #30.
