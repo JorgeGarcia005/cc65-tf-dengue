@@ -37,7 +37,7 @@ bench:
 bench-api:
 	@go run ./cmd/benchapi
 
-## imagen: construye la imagen única del proyecto (todos los cmd/)
+## imagen: construye la imagen del clúster (solo coordinator y node)
 imagen:
 	docker build -f deploy/Dockerfile -t cc65-tf .
 
