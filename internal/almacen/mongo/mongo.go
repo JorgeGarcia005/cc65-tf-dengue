@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/url"
 	"strings"
 	"time"
 
@@ -41,7 +42,7 @@ func Conectar(ctx context.Context, uri, base string) (*Almacen, error) {
 	}
 	if err := cli.Ping(ctx, nil); err != nil {
 		_ = cli.Disconnect(context.Background())
-		return nil, fmt.Errorf("mongo: sin conexión a %s: %w", sinCredenciales(uri), limpiar(err, uri))
+		return nil, fmt.Errorf("mongo: sin conexión a %s: %w", destino(uri), limpiar(err, uri))
 	}
 	db := cli.Database(base)
 	a := &Almacen{cliente: cli, modelos: db.Collection("modelos"),
@@ -156,43 +157,76 @@ func (a *Almacen) Cerrar(ctx context.Context) error { return a.cliente.Disconnec
 // Borrar elimina la base (solo para los tests de integración).
 func (a *Almacen) Borrar(ctx context.Context) error { return a.modelos.Database().Drop(ctx) }
 
-// credenciales separa la parte usuario:clave@ de una URI mongodb://…
-func credenciales(uri string) (esquema, info, resto string, ok bool) {
-	esquema, despues, hay := strings.Cut(uri, "://")
-	if !hay {
-		return "", "", uri, false
-	}
-	fin := strings.IndexAny(despues, "/?")
-	if fin < 0 {
-		fin = len(despues)
-	}
-	at := strings.LastIndex(despues[:fin], "@")
-	if at < 0 {
-		return esquema, "", despues, false
-	}
-	return esquema, despues[:at], despues[at:], true
-}
-
-// sinCredenciales reemplaza usuario y contraseña de una URI por *** para
-// poder mostrarla en logs y errores (PR-40 H8).
-func sinCredenciales(uri string) string {
-	esquema, _, resto, ok := credenciales(uri)
+// partes separa una URI mongodb:// en esquema, userinfo, hosts y consulta.
+func partes(uri string) (esquema, info, hosts, consulta string, ok bool) {
+	esquema, resto, ok := strings.Cut(uri, "://")
 	if !ok {
-		return uri
+		return "", "", "", "", false
 	}
-	return esquema + "://***" + resto
+	autoridad, despues := resto, ""
+	if i := strings.IndexAny(resto, "/?"); i >= 0 {
+		autoridad, despues = resto[:i], resto[i:]
+	}
+	if at := strings.LastIndex(autoridad, "@"); at >= 0 {
+		info, autoridad = autoridad[:at], autoridad[at+1:]
+	}
+	if _, q, hay := strings.Cut(despues, "?"); hay {
+		consulta = q
+	}
+	return esquema, info, autoridad, consulta, true
 }
 
-// limpiar quita de un error del driver la URI y cualquier rastro del usuario
-// o la contraseña.
+// destino es lo único de la URI que se muestra en un diagnóstico: esquema y
+// hosts, sin usuario, contraseña, base ni opciones (PR-40 H8, rondas 1 y 2).
+func destino(uri string) string {
+	esquema, _, hosts, _, ok := partes(uri)
+	if !ok {
+		return "(URI no válida)"
+	}
+	return esquema + "://" + hosts
+}
+
+// opcionesSensibles se ocultan siempre, aunque su valor sea corto.
+var opcionesSensibles = map[string]bool{
+	"tlscertificatekeyfilepassword":   true,
+	"sslclientcertificatekeypassword": true,
+	"authmechanismproperties":         true,
+	"password":                        true,
+}
+
+// limpiar quita de un error del driver la URI completa y los valores que
+// pueden ser secretos: usuario, contraseña y los valores de la consulta (los
+// sensibles siempre; los demás si tienen al menos 4 caracteres, para no
+// desfigurar direcciones o números del mensaje).
 func limpiar(err error, uri string) error {
-	_, info, _, ok := credenciales(uri)
+	_, info, _, consulta, ok := partes(uri)
+	msg := err.Error()
 	if !ok {
 		return err
 	}
-	msg := strings.ReplaceAll(err.Error(), uri, sinCredenciales(uri))
-	usuario, clave, _ := strings.Cut(info, ":")
-	for _, s := range []string{clave, usuario} {
+	msg = strings.ReplaceAll(msg, uri, destino(uri))
+	var secretos []string
+	if info != "" {
+		usuario, clave, _ := strings.Cut(info, ":")
+		secretos = append(secretos, clave, usuario)
+	}
+	for _, par := range strings.Split(consulta, "&") {
+		clave, valor, _ := strings.Cut(par, "=")
+		if valor == "" || (len(valor) < 4 && !opcionesSensibles[strings.ToLower(clave)]) {
+			continue
+		}
+		secretos = append(secretos, valor)
+		if dec, err := url.QueryUnescape(valor); err == nil && dec != valor {
+			secretos = append(secretos, dec)
+		}
+		// authMechanismProperties=CLAVE:valor,…: oculta también cada valor.
+		for _, kv := range strings.Split(valor, ",") {
+			if _, v, hay := strings.Cut(kv, ":"); hay && v != "" {
+				secretos = append(secretos, v)
+			}
+		}
+	}
+	for _, s := range secretos {
 		if s != "" {
 			msg = strings.ReplaceAll(msg, s, "***")
 		}
