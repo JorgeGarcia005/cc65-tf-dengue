@@ -27,6 +27,16 @@ jobs:
           echo "AGENTS.md: $n caracteres"
           test "$n" -le 12000
 
+  spin:
+    name: Spin (modelo del protocolo y mutantes)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Instalar Spin y gcc
+        run: sudo apt-get update -q && sudo apt-get install -y -q spin gcc
+      - name: Seguridad y LTL del modelo; contraejemplo en cada mutante
+        run: bash spin/verificar.sh
+
   openapi:
     name: OpenAPI 3 válido
     runs-on: ubuntu-24.04
