@@ -13,6 +13,8 @@ COPY go.mod go.su[m] ./
 RUN go mod download
 COPY cmd ./cmd
 COPY internal ./internal
+# El contrato OpenAPI se embebe en el binario (go:embed en docs/api).
+COPY docs/api ./docs/api
 # CGO_ENABLED=0: binarios estáticos, sin libc (requisito de distroless/static).
 # -trimpath: sin rutas de la máquina que compiló. -s -w: sin tabla de símbolos
 # ni datos de depuración (binarios más pequeños).
