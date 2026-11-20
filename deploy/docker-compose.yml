@@ -14,11 +14,12 @@
 #   GOLD       carpeta del anfitrión con shard_<s>.bin                   (../data/gold)
 #   USUARIO    uid:gid del coordinador, que escribe en ../reports        (65532:65532)
 #   API        modo servicio: dirección de la API REST, p. ej. :8080     (vacío = entrena una vez y sale)
-#   PUERTO_API puerto del anfitrión que publica la API                   (8080)
+#   PUERTO_API puerto del anfitrión que publica la API (docker-compose.api.yml) (8080)
 #
 # Modo servicio (API con Swagger en http://localhost:8080/docs; entrena con
-# POST /api/v1/entrenamientos y se detiene con `docker compose stop`):
-#   API=:8080 docker compose -f deploy/docker-compose.yml up --build
+# POST /api/v1/entrenamientos y se detiene con `docker compose stop`). El
+# archivo extra publica el puerto solo en este modo:
+#   API=:8080 docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.api.yml up --build
 name: cc65-tf
 
 x-imagen: &imagen
@@ -51,8 +52,6 @@ services:
       - ../reports:/reports
     expose:
       - "9000"
-    ports:
-      - "${PUERTO_API:-8080}:8080"
     networks: [cluster]
 
   node:

@@ -81,8 +81,9 @@ del PR). Commit `4f3bbe1`:
   entrenamiento falla con «el clúster todavía espera a que se registren sus nodos».
 - `signal.NotifyContext(SIGTERM, SIGINT)` + `api.Servir`: cierre ordenado, cancela el entrenamiento en
   curso y envía `fin` a los nodos.
-- `deploy/docker-compose.yml`: `-api=${API:-}`, `-modelo=/datos/modelo.json` y `ports: 8080`. Sin `API`
-  sigue el modo de entrenamiento único (el CI del clúster no cambia).
+- `deploy/docker-compose.yml`: `-api=${API:-}` y `-modelo=/datos/modelo.json`; `deploy/docker-compose.api.yml`
+  publica el puerto (`PUERTO_API`, 8080 por defecto) solo en modo servicio. Sin `API` sigue el modo de
+  entrenamiento único y no publica puertos (el CI del clúster no cambia).
 
 Tests nuevos en `cmd/coordinator/api_test.go`, con el clúster real por TCP (3 nodos):
 
@@ -103,6 +104,6 @@ ok  	github.com/JorgeGarcia005/cc65-tf-dengue/cmd/coordinator	33.805s
 ```
 
 **Pendiente de la verificación desde el anfitrión** (Docker en la PC de Jorge, con el gold real):
-`API=:8080 docker compose -f deploy/docker-compose.yml up --build -d`, `GET /docs`, `GET /docs/openapi.yaml`,
+`API=:8080 docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.api.yml up --build -d`, `GET /docs`, `GET /docs/openapi.yaml`,
 `POST /api/v1/entrenamientos` + `GET /api/v1/entrenamientos/{id}` y `docker compose stop coordinator`. Las
 salidas quedan en `evidencia/28/` y se suman en la ronda 2.
