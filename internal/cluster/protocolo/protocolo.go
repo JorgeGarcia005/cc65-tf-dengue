@@ -79,7 +79,7 @@ type ConfigML struct {
 //	asignacion  Shard, Ruta, SHA256, BloqueInicial, NumBloques, TamBloque, D, Config
 //	listo       Shard, BloqueInicial, NumBloques, N, D
 //	epoca       Epoca, Shard, W
-//	gradiente   Epoca, Shard, BloqueInicial, Parciales
+//	gradiente   Epoca, Shard, BloqueInicial, Parciales (MicrosCalculo, opcional)
 //	error       Epoca, Shard, Detalle
 //	fin         Motivo
 type Mensaje struct {
