@@ -27,6 +27,11 @@ func Conectar(ctx context.Context, direccion string) (*Cache, error) {
 		DialTimeout:  2 * time.Second,
 		ReadTimeout:  200 * time.Millisecond,
 		WriteTimeout: 200 * time.Millisecond,
+		// Sin esto, go-redis v9 usa ReadTimeout/WriteTimeout para la E/S y no el
+		// plazo del contexto: con Redis lento la predicción esperaba 200 ms
+		// aunque la API le diera 15 (PR-40 ronda 2, H5). Con esto, el contexto
+		// acota conexión, espera del pool, E/S y reintentos.
+		ContextTimeoutEnabled: true,
 	})
 	if err := c.Ping(ctx).Err(); err != nil {
 		_ = c.Close()

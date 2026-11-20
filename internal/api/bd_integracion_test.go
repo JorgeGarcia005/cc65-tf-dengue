@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/JorgeGarcia005/cc65-tf-dengue/internal/almacen/contrato"
 	"github.com/JorgeGarcia005/cc65-tf-dengue/internal/almacen/mongo"
 	"github.com/JorgeGarcia005/cc65-tf-dengue/internal/almacen/redis"
 )
@@ -72,4 +73,38 @@ func TestBDDePuntaAPunta(t *testing.T) {
 		t.Fatalf("el modelo de Mongo no se puede volver a cargar: %v", err)
 	}
 	t.Logf("base %s: entrenamiento %s, modelo %s", base, id, vig.Version)
+}
+
+// PR-40 ronda 2, H5: con el adaptador Redis real y 120 ms de demora en cada
+// respuesta, el p95 de la predicción sigue bajo 100 ms (cae al cálculo local).
+func TestRedisLentoNoRompeElPresupuesto(t *testing.T) {
+	dir := os.Getenv("REDIS_ADDR")
+	if dir == "" {
+		dir = "localhost:6379"
+	}
+	directo, err := redis.Conectar(context.Background(), dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = directo.Cerrar() })
+	_, ts := servidorDePrueba(t, Opciones{Cache: directo})
+	if x, _ := predecirConCabecera(t, ts.URL); x != "MISS" { // calienta la clave
+		t.Logf("primera consulta: %s", x)
+	}
+	if x, _ := predecirConCabecera(t, ts.URL); x != "HIT" {
+		t.Fatalf("la clave no quedó en Redis: %s", x)
+	}
+	control := p95(t, ts.URL, 20)
+
+	lento, err := redis.Conectar(context.Background(), contrato.ProxyLento(t, dir, 120*time.Millisecond))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = lento.Cerrar() })
+	_, ts2 := servidorDePrueba(t, Opciones{Cache: lento})
+	d := p95(t, ts2.URL, 20)
+	t.Logf("p95 con Redis directo %v; con 120 ms de demora %v", control, d)
+	if d >= 100*time.Millisecond {
+		t.Fatalf("p95 %v con Redis lento", d)
+	}
 }
