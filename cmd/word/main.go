@@ -435,18 +435,47 @@ func lineaDe(dec *xml.Decoder, s string) int {
 
 // declararNamespaces agrega a <w:document> las declaraciones de nsDocumento
 // que la plantilla no trae (#24). cabecera va del inicio hasta <w:body>.
+//
+// La etiqueta se lee con encoding/xml, no buscando el primer '>': un '>' entre
+// comillas es válido en un atributo (PR-47 H1). Si la plantilla ya declara uno
+// de esos prefijos con otro URI, el contenido generado cambiaría de
+// vocabulario sin que nada falle: se rechaza con el conflicto (PR-47 H3).
 func declararNamespaces(cabecera string) (string, error) {
-	ini := strings.Index(cabecera, "<w:document")
-	if ini < 0 {
-		return "", fmt.Errorf("plantilla sin <w:document>")
+	dec := xml.NewDecoder(strings.NewReader(cabecera))
+	var raiz xml.StartElement
+	for {
+		tok, err := dec.RawToken()
+		if err != nil {
+			return "", fmt.Errorf("plantilla sin <w:document>: %w", err)
+		}
+		if e, ok := tok.(xml.StartElement); ok {
+			raiz = e
+			break
+		}
 	}
-	fin := ini + strings.Index(cabecera[ini:], ">")
-	raiz := cabecera[ini:fin]
+	if raiz.Name.Space != "w" || raiz.Name.Local != "document" {
+		return "", fmt.Errorf("la raíz de la plantilla es <%s:%s>, se esperaba <w:document>", raiz.Name.Space, raiz.Name.Local)
+	}
+	declarados := map[string]string{}
+	for _, a := range raiz.Attr {
+		if a.Name.Space == "xmlns" {
+			declarados[a.Name.Local] = a.Value
+		}
+	}
 	var faltan strings.Builder
 	for _, ns := range nsDocumento {
-		if !regexp.MustCompile(`\sxmlns:` + ns[0] + `\s*=`).MatchString(raiz) {
+		uri, ok := declarados[ns[0]]
+		switch {
+		case !ok:
 			fmt.Fprintf(&faltan, ` xmlns:%s="%s"`, ns[0], ns[1])
+		case uri != ns[1]:
+			return "", fmt.Errorf("la plantilla declara xmlns:%s=%q y el contenido generado lo usa para %q", ns[0], uri, ns[1])
 		}
+	}
+	// InputOffset queda justo después del '>' (o "/>") que cierra la etiqueta.
+	fin := int(dec.InputOffset()) - 1
+	if strings.HasSuffix(cabecera[:fin], "/") {
+		fin--
 	}
 	return cabecera[:fin] + faltan.String() + cabecera[fin:], nil
 }

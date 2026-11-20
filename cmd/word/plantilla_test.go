@@ -3,10 +3,10 @@ package main
 import (
 	"archive/zip"
 	"bytes"
+	"encoding/xml"
 	"io"
 	"os"
 	"path/filepath"
-	"regexp"
 	"strings"
 	"testing"
 )
@@ -33,9 +33,11 @@ func plantillaMinima(raiz string) *paquete {
 const raizSoloWR = `<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" ` +
 	`xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" w:conformance="transitional">`
 
-// seccionConTodo escribe una sección con figura, ecuación y enlace: usa los
-// prefijos w, m, r, wp, a, pic y asvg.
-func seccionConTodo(t *testing.T) string {
+// generar arma el .docx con una sección que tiene figura, ecuaciones y
+// enlace (usa w, m, r, wp, a, pic y asvg). Corre desde la carpeta de la
+// sección con ruta relativa, como main, y exige cero avisos: si el Markdown
+// no se carga, el test falla (PR-47 H2).
+func generar(t *testing.T, raiz string, cambios reemplazos) (string, error) {
 	t.Helper()
 	dir := t.TempDir()
 	md := "# 1. Prueba\n\nTexto con [enlace](https://x.pe) y $x^2$.\n\n$$\\frac{1}{S}\\sum_i s_i$$\n\n![Figura](f.svg)\n"
@@ -46,7 +48,15 @@ func seccionConTodo(t *testing.T) string {
 	if err := os.WriteFile(filepath.Join(dir, "f.svg"), []byte(svg), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	return filepath.Join(dir, "01-x.md")
+	t.Chdir(dir)
+	docx, avisos, err := armar(plantillaMinima(raiz), ".", []string{"01-x.md"}, cambios)
+	if err != nil {
+		return "", err
+	}
+	if len(avisos) > 0 {
+		t.Fatalf("avisos de armar: %v", avisos)
+	}
+	return documentoGenerado(t, docx), nil
 }
 
 func documentoGenerado(t *testing.T, docx []byte) string {
@@ -73,43 +83,147 @@ func documentoGenerado(t *testing.T, docx []byte) string {
 	return ""
 }
 
+// exigirContenido cuenta elementos por nombre expandido (URI + nombre local):
+// la figura, las ecuaciones y el enlace tienen que estar, y en el vocabulario
+// de Word, no solo con el prefijo correcto (PR-47 H2 y H3).
+func exigirContenido(t *testing.T, doc string) {
+	t.Helper()
+	ns := map[string]string{}
+	for _, n := range nsDocumento {
+		ns[n[0]] = n[1]
+	}
+	quiere := map[xml.Name]int{
+		{Space: ns["pic"], Local: "pic"}:      1,
+		{Space: ns["a"], Local: "graphic"}:    1,
+		{Space: ns["wp"], Local: "inline"}:    1,
+		{Space: ns["asvg"], Local: "svgBlip"}: 1,
+		{Space: ns["m"], Local: "oMath"}:      2,
+		{Space: ns["w"], Local: "hyperlink"}:  1,
+	}
+	hay := map[xml.Name]int{}
+	dec := xml.NewDecoder(strings.NewReader(doc))
+	for {
+		tok, err := dec.Token()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			t.Fatalf("document.xml: %v", err)
+		}
+		if e, ok := tok.(xml.StartElement); ok {
+			hay[e.Name]++
+		}
+	}
+	for n, c := range quiere {
+		if hay[n] != c {
+			t.Errorf("{%s}%s: %d elementos, quiere %d", n.Space, n.Local, hay[n], c)
+		}
+	}
+}
+
+// raizDe devuelve la etiqueta de <w:document> tal como está escrita.
+func raizDe(t *testing.T, doc string) xml.StartElement {
+	t.Helper()
+	dec := xml.NewDecoder(strings.NewReader(doc))
+	for {
+		tok, err := dec.RawToken()
+		if err != nil {
+			t.Fatalf("sin <w:document>: %v", err)
+		}
+		if e, ok := tok.(xml.StartElement); ok {
+			return e
+		}
+	}
+}
+
+func declaraciones(e xml.StartElement, prefijo string) []string {
+	var uris []string
+	for _, a := range e.Attr {
+		if a.Name.Space == "xmlns" && a.Name.Local == prefijo {
+			uris = append(uris, a.Value)
+		}
+	}
+	return uris
+}
+
 // TestPlantillaConSectPrConAtributos: issue #24, falla 1.
 func TestPlantillaConSectPrConAtributos(t *testing.T) {
-	docx, _, err := armar(plantillaMinima(raizSoloWR), ".", []string{seccionConTodo(t)}, reemplazos{{"TB1", "PC4"}})
+	doc, err := generar(t, raizSoloWR, reemplazos{{"TB1", "PC4"}})
 	if err != nil {
 		t.Fatalf("armar: %v", err)
 	}
-	doc := documentoGenerado(t, docx)
 	if n := strings.Count(doc, "<w:sectPr"); n != 1 {
 		t.Errorf("%d <w:sectPr> en el documento, quiere 1 (el de la plantilla, al final)", n)
 	}
 	if !strings.Contains(doc, `<w:sectPr w:rsidR="00AB12CD"`) {
 		t.Error("se perdió el <w:sectPr> de la plantilla con sus atributos")
 	}
+	exigirContenido(t, doc)
 }
 
 // TestPlantillaSinNamespacesDeFiguras: issue #24, falla 2. El documento
-// generado declara cada prefijo que usa, y no duplica los que ya traía.
+// generado declara cada prefijo que usa, una sola vez, con su URI.
 func TestPlantillaSinNamespacesDeFiguras(t *testing.T) {
-	docx, _, err := armar(plantillaMinima(raizSoloWR), ".", []string{seccionConTodo(t)}, nil)
+	doc, err := generar(t, raizSoloWR, nil)
 	if err != nil {
 		t.Fatalf("armar: %v", err)
 	}
-	doc := documentoGenerado(t, docx)
 	if err := xmlBienFormado(doc); err != nil {
 		t.Fatalf("document.xml: %v", err)
 	}
-	raiz := doc[strings.Index(doc, "<w:document"):]
-	raiz = raiz[:strings.Index(raiz, ">")]
+	raiz := raizDe(t, doc)
 	for _, ns := range nsDocumento {
-		if n := len(regexp.MustCompile(`\sxmlns:`+ns[0]+`=`).FindAllString(raiz, -1)); n != 1 {
-			t.Errorf("xmlns:%s declarado %d veces en <w:document>, quiere 1", ns[0], n)
+		if uris := declaraciones(raiz, ns[0]); len(uris) != 1 || uris[0] != ns[1] {
+			t.Errorf("xmlns:%s en <w:document>: %v, quiere [%s]", ns[0], uris, ns[1])
 		}
 	}
-	if !strings.Contains(raiz, `w:conformance="transitional"`) {
-		t.Error("se perdieron los atributos originales de <w:document>")
+	if len(raiz.Attr) != len(nsDocumento)+1 {
+		t.Errorf("<w:document> con %d atributos, quiere %d (los de la plantilla y los agregados)", len(raiz.Attr), len(nsDocumento)+1)
+	}
+	exigirContenido(t, doc)
+}
+
+// TestRaizConMayorQueEnUnAtributo: un '>' entre comillas es válido en XML y
+// no cierra la etiqueta (PR-47 H1). La raíz conserva sus atributos.
+func TestRaizConMayorQueEnUnAtributo(t *testing.T) {
+	raiz := `<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" ` +
+		`xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" xmlns:upc="urn:plantilla:upc" ` +
+		`mc:Ignorable="upc" upc:nota="Nivel > 1">`
+	doc, err := generar(t, raiz, nil)
+	if err != nil {
+		t.Fatalf("armar: %v", err)
+	}
+	r := raizDe(t, doc)
+	var nota string
+	for _, a := range r.Attr {
+		if a.Name.Space == "upc" && a.Name.Local == "nota" {
+			nota = a.Value
+		}
+	}
+	if nota != "Nivel > 1" {
+		t.Errorf("upc:nota = %q, quiere %q", nota, "Nivel > 1")
+	}
+	exigirContenido(t, doc)
+}
+
+// TestPrefijoDeLaPlantillaConOtroURI: si la plantilla usa pic (u otro prefijo
+// del contenido) para otro vocabulario, la figura cambiaría de significado
+// sin que nada falle. armar se niega y dice qué prefijo choca (PR-47 H3).
+func TestPrefijoDeLaPlantillaConOtroURI(t *testing.T) {
+	raiz := `<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" ` +
+		`xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:pic="urn:plantilla:portada">`
+	_, err := generar(t, raiz, nil)
+	if err == nil {
+		t.Fatal("armar aceptó xmlns:pic con otro URI")
+	}
+	for _, quiere := range []string{"xmlns:pic", "urn:plantilla:portada", nsPic} {
+		if !strings.Contains(err.Error(), quiere) {
+			t.Errorf("el error no menciona %q: %v", quiere, err)
+		}
 	}
 }
+
+const nsPic = "http://schemas.openxmlformats.org/drawingml/2006/picture"
 
 // TestXMLBienFormadoRechazaPrefijosSinDeclarar: encoding/xml acepta un
 // prefijo sin declarar; LibreOffice no («unbound prefix»). La comprobación de
