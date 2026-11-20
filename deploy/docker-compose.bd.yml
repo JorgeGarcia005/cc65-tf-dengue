@@ -1,11 +1,10 @@
-# Bases de datos del sistema (ADR-0006): MongoDB persistente y Redis como caché.
+# MongoDB y Redis solos, para los tests de integración en el anfitrión
+# (ADR-0006). El despliegue usa los servicios de deploy/docker-compose.yml.
 #
 #   docker compose -f deploy/docker-compose.bd.yml up -d --wait
 #   go test -race -tags integracion ./internal/almacen/...
 #
-# Los puertos se publican solo en 127.0.0.1 (para los tests y la evidencia desde
-# el anfitrión). Cuando entre el Compose del clúster (#27) se incluye desde
-# deploy/docker-compose.yml y el coordinador los usa por la red interna.
+# Los puertos se publican solo en 127.0.0.1.
 name: cc65-tf-bd
 
 services:

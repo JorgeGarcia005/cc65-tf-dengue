@@ -16,7 +16,8 @@
 # entrenamiento del clúster en Compose, no de los tests (que usan otra base).
 set -euo pipefail
 cd "$(dirname "$0")/.."
-COMPOSE=(docker compose -f deploy/docker-compose.bd.yml)
+# Las bases del despliegue (modo servicio del clúster, scripts/evidencia-api.sh).
+COMPOSE=(docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.api.yml)
 BASE=${BASE:-cc65_dengue}
 ID=${1:-}
 if [[ -n "$ID" && ! "$ID" =~ ^[A-Za-z0-9-]+$ ]]; then

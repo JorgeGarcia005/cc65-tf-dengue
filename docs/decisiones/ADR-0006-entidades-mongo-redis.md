@@ -54,6 +54,8 @@ años, sexo en mayúscula). Así, `"loreto"` y `"LORETO"`, o `12 M` y `1 A`, com
   reales tienen tests de integración con la etiqueta `integracion`
   (`go test -race -tags integracion ./internal/almacen/...`), que corren contra
   `deploy/docker-compose.bd.yml`.
-- `deploy/docker-compose.bd.yml` contiene solo `mongo` y `redis`. Cuando se mergee el Compose del
-  clúster (#27), se incluye desde `deploy/docker-compose.yml`.
+- `mongo` y `redis` son servicios de `deploy/docker-compose.yml`, en la red interna del clúster.
+  `deploy/docker-compose.api.yml` (modo servicio) le pasa al coordinador `MONGO_URI` y `REDIS_ADDR`
+  y espera a que ambos estén sanos. `deploy/docker-compose.bd.yml` queda solo para los tests de
+  integración locales, porque publica los puertos en `127.0.0.1`.
 - `go.mod` agrega solo los dos drivers y sus dependencias transitivas.

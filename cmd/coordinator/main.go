@@ -85,6 +85,9 @@ func main() {
 	salida := flag.String("salida", "reports/entrenamiento_cluster.json", "reporte")
 	dirAPI := flag.String("api", "", "modo servicio: sirve la API REST en esta dirección (p. ej. :8080) en vez de entrenar una vez y salir")
 	rutaModelo := flag.String("modelo", "data/gold/modelo.json", "modo servicio: modelo inicial que publica la API")
+	uriMongo := flag.String("mongo", os.Getenv("MONGO_URI"), "modo servicio: URI de MongoDB (vacío = en memoria; por defecto $MONGO_URI)")
+	baseMongo := flag.String("base", "cc65_dengue", "modo servicio: base de datos de MongoDB")
+	dirRedis := flag.String("redis", os.Getenv("REDIS_ADDR"), "modo servicio: host:puerto de Redis (vacío = sin caché; por defecto $REDIS_ADDR)")
 	flag.Parse()
 
 	ln, err := net.Listen("tcp", *escucha)
@@ -93,7 +96,7 @@ func main() {
 	}
 	log.Printf("coordinador escuchando en %s; espera %d nodos", ln.Addr(), op.nodos)
 	if *dirAPI != "" {
-		if err := servicio(ln, *dirAPI, *rutaModelo, op); err != nil {
+		if err := servicio(ln, *dirAPI, *rutaModelo, *uriMongo, *baseMongo, *dirRedis, op); err != nil {
 			log.Fatal(err)
 		}
 		return
@@ -115,12 +118,18 @@ func main() {
 }
 
 // servicio corre el modo API hasta SIGTERM o SIGINT (docker compose stop).
-func servicio(ln net.Listener, dir, rutaModelo string, op opciones) error {
+func servicio(ln net.Listener, dir, rutaModelo, uriMongo, baseMongo, dirRedis string, op opciones) error {
 	modelo, err := os.ReadFile(rutaModelo)
 	if err != nil {
 		ln.Close()
 		return fmt.Errorf("modelo inicial: %w", err)
 	}
+	bd, cerrarBD, err := conectarBD(uriMongo, baseMongo, dirRedis, log.Printf)
+	if err != nil {
+		ln.Close()
+		return err
+	}
+	defer cerrarBD() // después de ejecutarAPI, que ya cerró el servidor
 	lnHTTP, err := net.Listen("tcp", dir)
 	if err != nil {
 		ln.Close()
@@ -128,7 +137,7 @@ func servicio(ln net.Listener, dir, rutaModelo string, op opciones) error {
 	}
 	ctx, parar := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
 	defer parar()
-	err = ejecutarAPI(ctx, ln, lnHTTP, op, modelo, log.Printf)
+	err = ejecutarAPI(ctx, ln, lnHTTP, op, modelo, bd, log.Printf)
 	log.Printf("coordinador detenido")
 	return err
 }

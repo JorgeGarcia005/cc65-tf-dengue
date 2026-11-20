@@ -66,7 +66,7 @@ func servicioDePrueba(t *testing.T, modelo []byte, op opciones) (base, dirCluste
 	ln, lnHTTP := escuchar(t), escuchar(t)
 	ctx, cancelar := context.WithCancel(context.Background())
 	fin := make(chan error, 1)
-	go func() { fin <- ejecutarAPI(ctx, ln, lnHTTP, op, modelo, silencio) }()
+	go func() { fin <- ejecutarAPI(ctx, ln, lnHTTP, op, modelo, baseDatos{}, silencio) }()
 	detenido := false
 	var errFin error
 	detener = func() error {
@@ -286,7 +286,7 @@ func TestServicioRechazaModeloYShardsIncompatibles(t *testing.T) {
 	modelo, _, _ := modeloYGold(t, 1_000, 2)
 	dirOtro, _ := goldDePrueba(t, 1_000, 2) // 8 variables, el modelo tiene otras
 	ln, lnHTTP := escuchar(t), escuchar(t)
-	err := ejecutarAPI(context.Background(), ln, lnHTTP, opciones{gold: dirOtro, nodos: 2}, modelo, silencio)
+	err := ejecutarAPI(context.Background(), ln, lnHTTP, opciones{gold: dirOtro, nodos: 2}, modelo, baseDatos{}, silencio)
 	if err == nil || !strings.Contains(err.Error(), "variables") {
 		t.Fatalf("err = %v, se esperaba el aviso de variables incompatibles", err)
 	}

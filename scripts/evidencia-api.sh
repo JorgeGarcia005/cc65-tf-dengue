@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Evidencia del issue #28 (H2 del PR #39): la API vive en el coordinador del
-# clúster en Docker y se prueba desde el anfitrión. Requiere el gold real
-# (scripts/evidencia-cluster.sh antes) y la rama feature/28-api.
+# Evidencia de los issues #28 y #29: la API vive en el coordinador del clúster
+# en Docker, con MongoDB y Redis, y se prueba desde el anfitrión. Requiere el gold real
+# (scripts/evidencia-cluster.sh antes).
 #
 #   & "C:\Program Files\Git\bin\bash.exe" scripts/evidencia-api.sh
 set -euo pipefail
@@ -38,6 +38,7 @@ trap '"${dc[@]}" down --remove-orphans >/dev/null 2>&1 || true' EXIT
   for _ in $(seq 1 600); do
     e=$(curl -sS "$url$ubic"); echo "$e" | grep -q '"estado":"en_curso"' || break; sleep 2
   done
+  echo "$ubic" > "$out/.entrenamiento"
   echo "GET $ubic"; echo "$e"
   curl -sS "$url/api/v1/modelo" | head -c 300; echo; } 2>&1 | tee "$out/04-entrenamiento.txt"
 
@@ -46,9 +47,17 @@ trap '"${dc[@]}" down --remove-orphans >/dev/null 2>&1 || true' EXIT
     -d '{"departamento":"LORETO","ano":2024,"semana":10,"edad":30,"tipo_edad":"A","sexo":"F"}' "$url/api/v1/predicciones"
 } 2>&1 | tee "$out/05-prediccion.txt"
 
-{ paso "6. Cierre con SIGTERM: docker compose stop coordinator"
+ent_id=$(basename "$(cat "$out/.entrenamiento")")
+{ paso "6. MongoDB y Redis: cadena del entrenamiento $ent_id (issue #29)"
+  # Segunda consulta igual: debe salir de la caché de Redis.
+  curl -sS -o /dev/null -w "repetida: %{http_code} en %{time_total} s\n" -X POST -H 'Content-Type: application/json' \
+    -d '{"departamento":"LORETO","ano":2024,"semana":10,"edad":30,"tipo_edad":"A","sexo":"F"}' "$url/api/v1/predicciones"
+  "${dc[@]}" logs coordinator | grep -E 'MongoDB|Redis' || true
+  bash scripts/evidencia-bd.sh "$ent_id"; } 2>&1 | tee "$out/06-bd.txt"
+
+{ paso "7. Cierre con SIGTERM: docker compose stop coordinator"
   "${dc[@]}" stop coordinator
   "${dc[@]}" ps -a
-  "${dc[@]}" logs coordinator | tail -25; } 2>&1 | tee "$out/06-cierre.txt"
+  "${dc[@]}" logs coordinator | tail -25; } 2>&1 | tee "$out/07-cierre.txt"
 
 paso "Listo: evidencia en $out/"
