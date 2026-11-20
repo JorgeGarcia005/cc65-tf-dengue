@@ -2,6 +2,7 @@ package main
 
 import (
 	"math"
+	"strings"
 	"testing"
 
 	"github.com/JorgeGarcia005/cc65-tf-dengue/internal/ml"
@@ -56,5 +57,38 @@ func TestAgruparPorSemana(t *testing.T) {
 			math.Abs(g.TasaObservada-q.obs) > 1e-12 || math.Abs(g.RiesgoMedio-q.pred) > 1e-12 {
 			t.Errorf("grupo %d = %+v, quiere semana %d, %d casos, obs %.3f, pred %.3f", k, g, q.semana, q.casos, q.obs, q.pred)
 		}
+	}
+}
+
+func TestCompararReportesExigeElMismoModeloBitABit(t *testing.T) {
+	ref := `{"epocas":2,"tasa_aprendizaje":2,"lambda":0.0001,"peso_positivos":3.9854236970378705,"peso_negativos":0.5717272910643448,
+		"pesos":[0.1,-0.30000000000000004,5e-324],"sesgo":-0,"perdida_por_epoca":[0.6931471805599453,0.61]}`
+	if err := compararReportes([]byte(ref), []byte(ref)); err != nil {
+		t.Fatalf("un reporte debe ser igual a sí mismo: %v", err)
+	}
+	// El reporte del clúster trae otros campos; solo cuenta el modelo.
+	conExtras := ref[:len(ref)-1] + `,"cluster":{"reasignaciones":2},"nodos_pedidos":3}`
+	if err := compararReportes([]byte(ref), []byte(conExtras)); err != nil {
+		t.Fatalf("campos adicionales no deben importar: %v", err)
+	}
+	distintos := map[string][2]string{
+		"un peso en el último bit": {"-0.30000000000000004", "-0.3"},
+		"el signo del cero":        {`"sesgo":-0`, `"sesgo":0`},
+		"una pérdida":              {"0.61]", "0.62]"},
+		"las épocas":               {`"epocas":2`, `"epocas":3`},
+		"la tasa":                  {`"tasa_aprendizaje":2`, `"tasa_aprendizaje":1`},
+		"un peso de menos":         {",5e-324]", "]"},
+	}
+	for nombre, c := range distintos {
+		otro := strings.Replace(ref, c[0], c[1], 1)
+		if otro == ref {
+			t.Fatalf("%s: el caso no cambia nada", nombre)
+		}
+		if err := compararReportes([]byte(ref), []byte(otro)); err == nil {
+			t.Errorf("cambia %s y no se detecta", nombre)
+		}
+	}
+	if err := compararReportes([]byte(`{}`), []byte(`{}`)); err == nil {
+		t.Error("dos reportes vacíos no demuestran nada: esperaba error")
 	}
 }

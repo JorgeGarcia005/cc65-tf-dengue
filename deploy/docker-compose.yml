@@ -1,0 +1,73 @@
+# Clúster de entrenamiento: un coordinador (parameter server) y N nodos de ML.
+#
+#   go run ./cmd/gold -shards 3                      # una vez: gold y shards en data/gold
+#   docker compose -f deploy/docker-compose.yml up --build --exit-code-from coordinator
+#
+# Variables (todas opcionales; ver deploy/README.md):
+#   NODOS      nodos de ML que se levantan y que el coordinador espera   (3)
+#   EPOCAS     épocas de entrenamiento                                   (600)
+#   TASA       tasa de aprendizaje                                       (2)
+#   LAMBDA     regularización L2                                         (0.0001)
+#   VERIFICAR  repite en secuencial y exige pesos idénticos bit a bit    (false)
+#   PROGRESO   registra la pérdida cada tantas épocas                    (50)
+#   WORKERS    goroutines del worker pool de cada nodo; 0 = núcleos      (0)
+#   GOLD       carpeta del anfitrión con shard_<s>.bin                   (../data/gold)
+#   USUARIO    uid:gid del coordinador, que escribe en ../reports        (65532:65532)
+#   API        modo servicio: dirección de la API REST, p. ej. :8080     (vacío = entrena una vez y sale)
+#   PUERTO_API puerto del anfitrión que publica la API (docker-compose.api.yml) (8080)
+#
+# Modo servicio (API con Swagger en http://localhost:8080/docs; entrena con
+# POST /api/v1/entrenamientos y se detiene con `docker compose stop`). El
+# archivo extra publica el puerto solo en este modo:
+#   API=:8080 docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.api.yml up --build
+name: cc65-tf
+
+x-imagen: &imagen
+  image: cc65-tf
+  build:
+    context: ..
+    dockerfile: deploy/Dockerfile
+
+services:
+  coordinator:
+    <<: *imagen
+    user: "${USUARIO:-65532:65532}"
+    command:
+      - /usr/local/bin/coordinator
+      - -escucha=:9000
+      - -gold=/datos
+      - -nodos=${NODOS:-3}
+      - -epocas=${EPOCAS:-600}
+      - -tasa=${TASA:-2}
+      - -lambda=${LAMBDA:-0.0001}
+      - -verificar=${VERIFICAR:-false}
+      - -progreso=${PROGRESO:-50}
+      - -timeout-registro=${TIMEOUT_REGISTRO:-120s}
+      - -timeout-epoca=${TIMEOUT_EPOCA:-60s}
+      - -salida=/reports/entrenamiento_cluster.json
+      - -api=${API:-}
+      - -modelo=/datos/modelo.json
+    volumes:
+      - ${GOLD:-../data/gold}:/datos:ro
+      - ../reports:/reports
+    expose:
+      - "9000"
+    networks: [cluster]
+
+  node:
+    <<: *imagen
+    # Sin nombre de contenedor fijo: `--scale node=N` crea node-1 … node-N.
+    command:
+      - /usr/local/bin/node
+      - -coordinador=coordinator:9000
+      - -workers=${WORKERS:-0}
+    volumes:
+      - ${GOLD:-../data/gold}:/datos:ro
+    depends_on: [coordinator]
+    deploy:
+      replicas: ${NODOS:-3}
+    networks: [cluster]
+
+networks:
+  # Red interna: el puerto 9000 no se publica en el anfitrión.
+  cluster: {}

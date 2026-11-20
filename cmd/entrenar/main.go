@@ -4,6 +4,7 @@
 // Uso:
 //
 //	go run ./cmd/entrenar -epocas 600 -tasa 2
+//	go run ./cmd/entrenar -comparar reports/entrenamiento_cluster.json
 package main
 
 import (
@@ -75,7 +76,23 @@ func main() {
 	umbral := flag.Float64("umbral", 0.5, "umbral de clasificación")
 	salida := flag.String("salida", "reports/entrenamiento.json", "reporte")
 	modelo := flag.String("modelo", "data/gold/modelo.json", "pesos entrenados (para la API)")
+	comparar := flag.String("comparar", "", "no entrena: compara bit a bit este reporte (p. ej. el del clúster) con el de -salida")
 	flag.Parse()
+	if *comparar != "" {
+		ref, err := os.ReadFile(*salida)
+		if err != nil {
+			log.Fatal(err)
+		}
+		otro, err := os.ReadFile(*comparar)
+		if err != nil {
+			log.Fatal(err)
+		}
+		if err := compararReportes(ref, otro); err != nil {
+			log.Fatalf("%s y %s difieren: %v", *salida, *comparar, err)
+		}
+		fmt.Printf("%s y %s: mismos hiperparámetros, pesos, sesgo e historia de pérdida, idénticos bit a bit\n", *salida, *comparar)
+		return
+	}
 
 	train := leerGold(filepath.Join(*dir, "train.bin"))
 	test := leerGold(filepath.Join(*dir, "test.bin"))
@@ -255,4 +272,57 @@ func escribirJSON(ruta string, v any) {
 func Calibrar(p, ajuste float64) float64 {
 	p = math.Min(math.Max(p, 1e-15), 1-1e-15)
 	return ml.Sigmoide(math.Log(p/(1-p)) - ajuste)
+}
+
+// modeloEntrenado es lo que comparten el reporte de este comando y el del
+// coordinador del clúster.
+type modeloEntrenado struct {
+	Epocas   int       `json:"epocas"`
+	Tasa     float64   `json:"tasa_aprendizaje"`
+	Lambda   float64   `json:"lambda"`
+	PesoPos  float64   `json:"peso_positivos"`
+	PesoNeg  float64   `json:"peso_negativos"`
+	Pesos    []float64 `json:"pesos"`
+	Sesgo    float64   `json:"sesgo"`
+	Historia []float64 `json:"perdida_por_epoca"`
+}
+
+// compararReportes exige que dos reportes de entrenamiento describan el mismo
+// modelo bit a bit: mismos hiperparámetros, pesos, sesgo y pérdida por época.
+// JSON conserva los 64 bits de cada float64, así que la comparación es exacta.
+func compararReportes(ref, otro []byte) error {
+	var a, b modeloEntrenado
+	if err := json.Unmarshal(ref, &a); err != nil {
+		return fmt.Errorf("referencia: %w", err)
+	}
+	if err := json.Unmarshal(otro, &b); err != nil {
+		return fmt.Errorf("reporte a comparar: %w", err)
+	}
+	if len(a.Pesos) == 0 || len(a.Historia) == 0 {
+		return fmt.Errorf("la referencia no tiene pesos o historia")
+	}
+	if a.Epocas != b.Epocas {
+		return fmt.Errorf("épocas: %d vs %d", a.Epocas, b.Epocas)
+	}
+	vectores := []struct {
+		nombre string
+		x, y   []float64
+	}{
+		{"hiperparámetros (tasa, lambda, pesos por clase)",
+			[]float64{a.Tasa, a.Lambda, a.PesoPos, a.PesoNeg}, []float64{b.Tasa, b.Lambda, b.PesoPos, b.PesoNeg}},
+		{"pesos", a.Pesos, b.Pesos},
+		{"sesgo", []float64{a.Sesgo}, []float64{b.Sesgo}},
+		{"pérdida por época", a.Historia, b.Historia},
+	}
+	for _, v := range vectores {
+		if len(v.x) != len(v.y) {
+			return fmt.Errorf("%s: %d valores vs %d", v.nombre, len(v.x), len(v.y))
+		}
+		for j := range v.x {
+			if math.Float64bits(v.x[j]) != math.Float64bits(v.y[j]) {
+				return fmt.Errorf("%s: posición %d: %.17g vs %.17g", v.nombre, j, v.x[j], v.y[j])
+			}
+		}
+	}
+	return nil
 }

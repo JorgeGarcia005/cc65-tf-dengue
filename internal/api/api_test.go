@@ -16,6 +16,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -591,4 +592,44 @@ func partirFlujo(s string) []string {
 		}
 	}
 	return append(partes, strings.TrimSpace(s[ini:]))
+}
+
+// entrenadorLento ignora la cancelación durante un rato antes de devolver,
+// como una época del clúster que tiene que terminar.
+type entrenadorLento struct {
+	empezo    chan struct{}
+	retraso   time.Duration
+	terminado atomic.Bool
+}
+
+func (e *entrenadorLento) Entrenar(ctx context.Context, p ParametrosEntrenamiento, progreso func(int, float64)) ([]float64, error) {
+	close(e.empezo)
+	<-ctx.Done()
+	time.Sleep(e.retraso)
+	e.terminado.Store(true)
+	return nil, ctx.Err()
+}
+
+// PR-39 H9: Cerrar espera a la goroutine del entrenamiento y después no
+// admite otro.
+func TestCerrarEsperaAlEntrenamientoEnCursoYNoAdmiteOtro(t *testing.T) {
+	ent := &entrenadorLento{empezo: make(chan struct{}), retraso: 300 * time.Millisecond}
+	s, ts := servidorDePrueba(t, Opciones{Entrenador: ent})
+	cod, cuerpo := pedir(t, "POST", ts.URL+"/api/v1/entrenamientos", "")
+	if cod != http.StatusAccepted {
+		t.Fatalf("POST = %d %v", cod, cuerpo)
+	}
+	<-ent.empezo
+	s.Cerrar()
+	if !ent.terminado.Load() {
+		t.Fatal("Cerrar volvió antes de que terminara el entrenamiento")
+	}
+	_, e := pedir(t, "GET", ts.URL+"/api/v1/entrenamientos/"+cuerpo["id"].(string), "")
+	if e["estado"] != Fallido {
+		t.Fatalf("estado tras el cierre = %v, se esperaba %q registrado antes de volver", e["estado"], Fallido)
+	}
+	if cod, _ := pedir(t, "POST", ts.URL+"/api/v1/entrenamientos", ""); cod != http.StatusServiceUnavailable {
+		t.Fatalf("POST tras Cerrar = %d, se esperaba 503", cod)
+	}
+	s.Cerrar() // idempotente
 }

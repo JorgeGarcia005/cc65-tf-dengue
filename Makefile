@@ -3,7 +3,7 @@ SHELL := /bin/bash
 
 GO_FILES := $(shell find . -name '*.go' -not -path './web/*' -not -path './.git/*' 2>/dev/null)
 
-.PHONY: check fmt vet test skills data bench bench-api informe
+.PHONY: check fmt vet test skills data bench bench-api informe imagen cluster prueba-caida
 
 ## check: todo lo que el CI exige antes de abrir un PR
 check: skills fmt vet test
@@ -36,6 +36,18 @@ bench:
 
 bench-api:
 	@go run ./cmd/benchapi
+
+## imagen: construye la imagen única del proyecto (todos los cmd/)
+imagen:
+	docker build -f deploy/Dockerfile -t cc65-tf .
+
+## cluster: entrena en Docker con coordinador + NODOS nodos (requiere data/gold con shards)
+cluster:
+	USUARIO="$$(id -u):$$(id -g)" docker compose -f deploy/docker-compose.yml up --build --exit-code-from coordinator
+
+## prueba-caida: mata un nodo a mitad del entrenamiento y exige el mismo modelo
+prueba-caida:
+	@USUARIO="$$(id -u):$$(id -g)" bash scripts/prueba-caida.sh
 
 ## informe: secciones con cifras, figuras y el Word (requiere entregables/plantilla.docx)
 informe:
