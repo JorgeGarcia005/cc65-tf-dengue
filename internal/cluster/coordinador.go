@@ -110,11 +110,17 @@ type Coordinador struct {
 	reasign   int
 	fallo     error
 
+	calcNodo map[int]int64 // µs de cómputo de la época en curso, por nodo
+	calcSuma int64         // y la suma de todos los shards
+
 	muEstado sync.RWMutex
 	estado   Estado
+	tiempos  Tiempos
 
 	muConns sync.Mutex
 	conns   map[int]*protocolo.Conexion // todas las abiertas, para Cerrar
+	// bytes de las conexiones ya cerradas, para que Tiempos no los pierda
+	bytesEnvCerradas, bytesRecCerradas int64
 }
 
 // Nuevo valida las opciones y empieza a aceptar nodos en ln.
@@ -154,6 +160,7 @@ func Nuevo(ln net.Listener, op Opciones) (*Coordinador, error) {
 		eventos:   make(chan evento),
 		hecho:     make(chan struct{}),
 		porID:     map[int]int{},
+		calcNodo:  map[int]int64{},
 		duenio:    make([]int, len(op.Shards)),
 		asignado:  make([]bool, len(op.Shards)),
 		listo:     make([]bool, len(op.Shards)),
@@ -197,6 +204,9 @@ func (c *Coordinador) leer(id int, pc *protocolo.Conexion) {
 	defer func() {
 		pc.Cerrar()
 		c.muConns.Lock()
+		e, r := pc.Bytes()
+		c.bytesEnvCerradas += e
+		c.bytesRecCerradas += r
 		delete(c.conns, id)
 		c.muConns.Unlock()
 	}()
@@ -268,6 +278,9 @@ func (c *Coordinador) GradienteErr(w []float64) (ml.Gradiente, error) {
 	if len(w) != c.op.D+1 {
 		return ml.Gradiente{}, fmt.Errorf("cluster: len(w) = %d, se esperaban %d", len(w), c.op.D+1)
 	}
+	ini := time.Now()
+	clear(c.calcNodo)
+	c.calcSuma = 0
 	c.w = w
 	for s := range c.listo {
 		c.listo[s], c.enviado[s] = false, false
@@ -298,8 +311,21 @@ func (c *Coordinador) GradienteErr(w []float64) (ml.Gradiente, error) {
 	}
 	// Barrera cumplida: están los parciales de los B bloques. Reducción en
 	// orden global de bloque, igual que la versión secuencial.
+	iniRed := time.Now()
 	g := ml.Finalizar(ml.ReducirEnOrden(c.parciales, c.op.D), c.op.Config, w)
+	fin := time.Now()
 	c.epoca++
+	c.muEstado.Lock()
+	c.tiempos.Epocas++
+	c.tiempos.SegEpoca += fin.Sub(ini).Seconds()
+	c.tiempos.SegReduccion += fin.Sub(iniRed).Seconds()
+	var calcMax int64
+	for _, us := range c.calcNodo {
+		calcMax = max(calcMax, us)
+	}
+	c.tiempos.SegCalculoMax += float64(calcMax) / 1e6
+	c.tiempos.SegCalculoSuma += float64(c.calcSuma) / 1e6
+	c.muEstado.Unlock()
 	c.publicar(g.Perdida)
 	return g, nil
 }
@@ -498,6 +524,8 @@ func (c *Coordinador) atender(ev evento) bool {
 		}
 		copy(c.parciales[sh.BloqueInicial:], m.Parciales)
 		c.listo[m.Shard] = true
+		c.calcNodo[j] += m.MicrosCalculo // un nodo con varios shards los calcula en serie
+		c.calcSuma += m.MicrosCalculo
 		return true
 	case protocolo.Error:
 		c.descartar(j, "el nodo informó: "+m.Detalle)
@@ -546,6 +574,38 @@ func (c *Coordinador) Cerrar() {
 		c.muConns.Unlock()
 	})
 	c.wg.Wait()
+}
+
+// Tiempos acumula, sobre las épocas completadas, cuánto duró cada época en el
+// coordinador y qué parte fue cómputo en los nodos y reducción; los bytes son
+// los de todas las conexiones con nodos, también las ya cerradas (los totales
+// solo crecen). Lo usa el benchmark del clúster (#32):
+// red y espera = época − cómputo del nodo más lento − reducción.
+type Tiempos struct {
+	Epocas         int     `json:"epocas"`
+	SegEpoca       float64 `json:"seg_epoca"`
+	SegCalculoMax  float64 `json:"seg_calculo_max"`  // suma, por época, del nodo más lento (sus shards en serie)
+	SegCalculoSuma float64 `json:"seg_calculo_suma"` // suma de todos los shards
+	SegReduccion   float64 `json:"seg_reduccion"`    // ReducirEnOrden + Finalizar
+	BytesEnviados  int64   `json:"bytes_enviados"`
+	BytesRecibidos int64   `json:"bytes_recibidos"`
+}
+
+// Tiempos devuelve los acumulados hasta ahora; es seguro llamarlo desde
+// cualquier goroutine.
+func (c *Coordinador) Tiempos() Tiempos {
+	c.muEstado.RLock()
+	t := c.tiempos
+	c.muEstado.RUnlock()
+	c.muConns.Lock()
+	t.BytesEnviados, t.BytesRecibidos = c.bytesEnvCerradas, c.bytesRecCerradas
+	for _, pc := range c.conns {
+		e, r := pc.Bytes()
+		t.BytesEnviados += e
+		t.BytesRecibidos += r
+	}
+	c.muConns.Unlock()
+	return t
 }
 
 // Estado devuelve una copia del estado publicado; es seguro llamarlo desde

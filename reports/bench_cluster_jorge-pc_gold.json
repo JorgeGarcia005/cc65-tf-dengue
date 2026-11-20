@@ -1,0 +1,188 @@
+{
+  "generado": "2026-11-20T01:13:15-05:00",
+  "fuente": "gold(data/gold/train.bin, filas=765297, features=31)",
+  "maquina": {
+    "arquitectura": "amd64",
+    "cpu": "AMD Ryzen 5 3600 6-Core Processor",
+    "go": "go1.27.3",
+    "gomaxprocs": 12,
+    "num_cpu": 12,
+    "so": "windows"
+  },
+  "protocolo": {
+    "calentamiento": "1 entrenamiento descartado (carga de shards)",
+    "desglose": "medias aritméticas: red y espera = época − cómputo del nodo más lento (sus shards en serie) − reducción; JSON medido aparte (CPU de un hilo, k pasadas agrupadas): total de los shards y shard más pesado (incluido en red y espera)",
+    "epocas_por_repeticion": 30,
+    "estimador": "media recortada 20 % + IC95 bootstrap (2000)",
+    "karp_flatt": "e = (1/S − 1/p) / (1 − 1/p), p = nodos / nodos de la base",
+    "lambda": 0.0001,
+    "nodos": [
+      1,
+      2,
+      3,
+      4,
+      5
+    ],
+    "red": "TCP en 127.0.0.1 (loopback), protocolo JSON por línea real",
+    "repeticiones": 5,
+    "tasa": 2,
+    "verificacion": "cada repetición se compara bit a bit con el secuencial antes de registrarse",
+    "workers_por_nodo": 1
+  },
+  "mediciones": [
+    {
+      "nodos": 1,
+      "seg_por_epoca": {
+        "n": 5,
+        "media_recortada": 0.09199710222222222,
+        "recorte": 0.2,
+        "mediana": 0.09210602,
+        "desviacion": 0.0010859298153569165,
+        "min": 0.09114166666666666,
+        "max": 0.09402463666666666,
+        "ic95_inf": 0.09132325888888888,
+        "ic95_sup": 0.09341603888888889
+      },
+      "speedup": 1,
+      "eficiencia": 1,
+      "desglose_por_epoca": {
+        "seg_epoca": 0.092224842,
+        "seg_calculo_nodo_mas_lento": 0.08960248,
+        "seg_calculo_todos_los_nodos": 0.08960248,
+        "seg_reduccion": 0,
+        "seg_red_y_espera": 0.002622362000000003,
+        "seg_json_cpu_todos_los_shards": 0.0023401888888888887,
+        "seg_json_shard_mas_pesado": 0.0023401888888888887,
+        "fraccion_red_y_espera": 0.028434442858682296
+      },
+      "bytes_por_epoca": 115224.86666666667,
+      "equivalente_bit_a_bit": true,
+      "repeticiones": 5,
+      "epocas_por_repeticion": 30
+    },
+    {
+      "nodos": 2,
+      "seg_por_epoca": {
+        "n": 5,
+        "media_recortada": 0.04964468777777778,
+        "recorte": 0.2,
+        "mediana": 0.04953425,
+        "desviacion": 0.0010120331857250973,
+        "min": 0.04917569333333334,
+        "max": 0.05166991666666667,
+        "ic95_inf": 0.04923462111111112,
+        "ic95_sup": 0.05112905666666667
+      },
+      "speedup": 1.8531107020760127,
+      "eficiencia": 0.9265553510380063,
+      "karp_flatt": 0.07926633727786969,
+      "desglose_por_epoca": {
+        "seg_epoca": 0.04994926733333333,
+        "seg_calculo_nodo_mas_lento": 0.04849025333333333,
+        "seg_calculo_todos_los_nodos": 0.0964381066666666,
+        "seg_reduccion": 0.0000066646666666666665,
+        "seg_red_y_espera": 0.0014523493333333348,
+        "seg_json_cpu_todos_los_shards": 0.002253327192982456,
+        "seg_json_shard_mas_pesado": 0.0011998166666666666,
+        "fraccion_red_y_espera": 0.02907648922337883
+      },
+      "bytes_por_epoca": 116015.23333333332,
+      "equivalente_bit_a_bit": true,
+      "repeticiones": 5,
+      "epocas_por_repeticion": 30
+    },
+    {
+      "nodos": 3,
+      "seg_por_epoca": {
+        "n": 5,
+        "media_recortada": 0.03537703,
+        "recorte": 0.2,
+        "mediana": 0.035319569999999995,
+        "desviacion": 0.0005822958948774335,
+        "min": 0.03441578333333333,
+        "max": 0.035979906666666665,
+        "ic95_inf": 0.034717045555555555,
+        "ic95_sup": 0.035859058888888885
+      },
+      "speedup": 2.6004755690972994,
+      "eficiencia": 0.8668251896990998,
+      "karp_flatt": 0.07681757053410569,
+      "desglose_por_epoca": {
+        "seg_epoca": 0.035298662,
+        "seg_calculo_nodo_mas_lento": 0.03429709333333333,
+        "seg_calculo_todos_los_nodos": 0.09908177333333332,
+        "seg_reduccion": 0,
+        "seg_red_y_espera": 0.0010015686666666745,
+        "seg_json_cpu_todos_los_shards": 0.002194892042440318,
+        "seg_json_shard_mas_pesado": 0.0007526346153846153,
+        "fraccion_red_y_espera": 0.02837412553106615
+      },
+      "bytes_por_epoca": 116806.6,
+      "equivalente_bit_a_bit": true,
+      "repeticiones": 5,
+      "epocas_por_repeticion": 30
+    },
+    {
+      "nodos": 4,
+      "seg_por_epoca": {
+        "n": 5,
+        "media_recortada": 0.027584067777777777,
+        "recorte": 0.2,
+        "mediana": 0.027604506666666664,
+        "desviacion": 0.000047107860844378984,
+        "min": 0.027529719999999997,
+        "max": 0.02764202,
+        "ic95_inf": 0.027534046666666662,
+        "ic95_sup": 0.027629678888888887
+      },
+      "speedup": 3.335153573554396,
+      "eficiencia": 0.833788393388599,
+      "karp_flatt": 0.066448357052921,
+      "desglose_por_epoca": {
+        "seg_epoca": 0.027584788666666655,
+        "seg_calculo_nodo_mas_lento": 0.02668697333333332,
+        "seg_calculo_todos_los_nodos": 0.1007882866666667,
+        "seg_reduccion": 0.000006697333333333333,
+        "seg_red_y_espera": 0.000891118000000003,
+        "seg_json_cpu_todos_los_shards": 0.0022288802625152625,
+        "seg_json_shard_mas_pesado": 0.0005723685714285714,
+        "fraccion_red_y_espera": 0.03230468831094676
+      },
+      "bytes_por_epoca": 117596.96666666667,
+      "equivalente_bit_a_bit": true,
+      "repeticiones": 5,
+      "epocas_por_repeticion": 30
+    },
+    {
+      "nodos": 5,
+      "seg_por_epoca": {
+        "n": 5,
+        "media_recortada": 0.02248283222222222,
+        "recorte": 0.2,
+        "mediana": 0.02249454,
+        "desviacion": 0.0010110854087975627,
+        "min": 0.02231219,
+        "max": 0.02469324666666667,
+        "ic95_inf": 0.022348782222222224,
+        "ic95_sup": 0.02397282777777778
+      },
+      "speedup": 4.091882255443401,
+      "eficiencia": 0.8183764510886802,
+      "karp_flatt": 0.05548288586191212,
+      "desglose_por_epoca": {
+        "seg_epoca": 0.022890786666666676,
+        "seg_calculo_nodo_mas_lento": 0.022107839999999983,
+        "seg_calculo_todos_los_nodos": 0.10434858000000005,
+        "seg_reduccion": 0,
+        "seg_red_y_espera": 0.0007829466666666937,
+        "seg_json_cpu_todos_los_shards": 0.0022869570806539263,
+        "seg_json_shard_mas_pesado": 0.0004727641025641026,
+        "fraccion_red_y_espera": 0.034203571859188764
+      },
+      "bytes_por_epoca": 118388.33333333334,
+      "equivalente_bit_a_bit": true,
+      "repeticiones": 5,
+      "epocas_por_repeticion": 30
+    }
+  ]
+}

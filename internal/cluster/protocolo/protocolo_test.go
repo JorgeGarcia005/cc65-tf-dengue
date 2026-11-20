@@ -353,6 +353,7 @@ func TestMensajeDeTipoDesconocidoOIncompletoSeRechaza(t *testing.T) {
 		"listo sin filas":            `{"tipo":"listo","num_bloques":3,"d":2}`,
 		"época sin pesos":            `{"tipo":"epoca","epoca":1}`,
 		"gradiente sin parciales":    `{"tipo":"gradiente","epoca":1}`,
+		"us_calculo negativo":        `{"tipo":"gradiente","us_calculo":-1,"parciales":[{"grad":[1,2],"perdida":0,"peso":1}]}`,
 		"parciales desiguales":       `{"tipo":"gradiente","parciales":[{"grad":[1,2],"perdida":0,"peso":1},{"grad":[1,2,3],"perdida":0,"peso":1}]}`,
 		"época negativa":             `{"tipo":"epoca","epoca":-1,"w":[0,0]}`,
 		"config con lambda negativo": `{"tipo":"asignacion","ruta":"x","num_bloques":3,"tam_bloque":8,"d":2,"config":{"lambda":-0.1,"peso_pos":1,"peso_neg":1}}`,
@@ -447,4 +448,46 @@ func TestEscritoresConcurrentesNoMezclanLineas(t *testing.T) {
 		}
 		wg.Wait()
 	})
+}
+
+// PR-42 H9: Bytes cuenta lo escrito y lo leído por la conexión, y se puede
+// leer desde otra goroutine mientras se envía y recibe (go test -race).
+func TestConexionCuentaBytesEnviadosYRecibidos(t *testing.T) {
+	a, b := net.Pipe()
+	ca, cb := Nueva(a), Nueva(b)
+	defer ca.Cerrar()
+	defer cb.Cerrar()
+	m := Mensaje{Tipo: Epoca, Epoca: 1, Shard: 0, W: []float64{0.5, -1, 2}}
+	linea, err := Codificar(&m)
+	if err != nil {
+		t.Fatal(err)
+	}
+	listo := make(chan struct{})
+	go func() {
+		defer close(listo)
+		for range 3 {
+			ca.Bytes() // lectura concurrente
+		}
+	}()
+	enviado := make(chan struct{})
+	go func() {
+		defer close(enviado)
+		for range 2 {
+			if err := ca.Enviar(m, time.Second); err != nil {
+				t.Error(err)
+			}
+		}
+	}()
+	for range 2 {
+		if _, err := cb.Recibir(time.Second); err != nil {
+			t.Fatal(err)
+		}
+	}
+	<-enviado
+	<-listo
+	env, _ := ca.Bytes()
+	_, rec := cb.Bytes()
+	if env != int64(2*len(linea)) || rec != env {
+		t.Fatalf("enviados %d, recibidos %d; se esperaban %d", env, rec, 2*len(linea))
+	}
 }

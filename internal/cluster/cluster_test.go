@@ -700,3 +700,68 @@ func TestSinFugasDeGoroutinesAlTerminarOAbortar(t *testing.T) {
 		time.Sleep(10 * time.Millisecond)
 	}
 }
+
+// Benchmark del clúster (#32): el coordinador separa cómputo, reducción y el
+// resto de cada época, y cuenta los bytes de las conexiones.
+func TestTiemposSeparanComputoReduccionYBytes(t *testing.T) {
+	e := nuevoEscenario(t, 3, 8)
+	cp := nuevoCluster(t, e, 10*time.Second)
+	cp.registrar(3, func() {
+		for i := range 3 {
+			cp.nodoReal(fmt.Sprintf("nodo-%d", i), 1)
+		}
+	})
+	res, err := cp.entrenar(30 * time.Second)
+	cp.exigirIgualAlSecuencial(res, err)
+	tm := cp.c.Tiempos()
+	cp.c.Terminar()
+	if tm.Epocas != 8 {
+		t.Fatalf("épocas medidas = %d, se esperaban 8", tm.Epocas)
+	}
+	if !(tm.SegCalculoMax > 0 && tm.SegCalculoMax <= tm.SegCalculoSuma && tm.SegCalculoMax <= tm.SegEpoca) {
+		t.Fatalf("cómputo inconsistente: %+v", tm)
+	}
+	// La reducción dura decenas de µs: con el reloj de Windows puede medirse 0.
+	if !(tm.SegReduccion >= 0 && tm.SegReduccion < tm.SegEpoca) {
+		t.Fatalf("reducción inconsistente: %+v", tm)
+	}
+	// Cada época envía los pesos a 3 shards y recibe 3 gradientes.
+	if tm.BytesEnviados < int64(8*3*(e.ds.D+1)) || tm.BytesRecibidos <= tm.BytesEnviados/2 {
+		t.Fatalf("bytes inconsistentes: %+v", tm)
+	}
+}
+
+// PR-42 H2: los bytes de una conexión cerrada no se pierden, así que los
+// totales solo crecen aunque un nodo caiga o el clúster se cierre.
+func TestTiemposConservaLosBytesDeConexionesCerradas(t *testing.T) {
+	e := nuevoEscenario(t, 2, 4)
+	cp := nuevoCluster(t, e, 10*time.Second)
+	cp.registrar(2, func() {
+		cp.nodoReal("nodo-0", 1)
+		cp.nodoReal("nodo-1", 1)
+	})
+	res, err := cp.entrenar(30 * time.Second)
+	cp.exigirIgualAlSecuencial(res, err)
+	antes := cp.c.Tiempos()
+	cp.c.Terminar()
+	cp.c.Cerrar()
+	despues := cp.c.Tiempos()
+	if despues.BytesEnviados < antes.BytesEnviados || despues.BytesRecibidos < antes.BytesRecibidos || antes.BytesRecibidos == 0 {
+		t.Fatalf("los bytes bajaron al cerrar: antes %+v, después %+v", antes, despues)
+	}
+}
+
+// PR-42 H6: con un nodo que calcula varios shards, el cómputo del más lento
+// es la suma de sus shards (los calcula en serie), no el shard más largo.
+func TestTiemposSumanLosShardsDeUnMismoNodo(t *testing.T) {
+	e := nuevoEscenario(t, 3, 4)
+	cp := nuevoCluster(t, e, 10*time.Second)
+	cp.registrar(1, func() { cp.nodoReal("solo", 1) })
+	res, err := cp.entrenar(30 * time.Second)
+	cp.exigirIgualAlSecuencial(res, err)
+	tm := cp.c.Tiempos()
+	cp.c.Terminar()
+	if tm.SegCalculoMax != tm.SegCalculoSuma {
+		t.Fatalf("un solo nodo: cómputo del más lento %v, suma de shards %v", tm.SegCalculoMax, tm.SegCalculoSuma)
+	}
+}

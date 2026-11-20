@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"time"
 
 	"github.com/JorgeGarcia005/cc65-tf-dengue/internal/cluster/protocolo"
 	"github.com/JorgeGarcia005/cc65-tf-dengue/internal/gold"
@@ -124,6 +125,8 @@ func (n *Nodo) calcular(m protocolo.Mensaje) protocolo.Mensaje {
 	if len(m.W) != a.D+1 {
 		return fallo(m, "llegaron %d pesos, el shard necesita %d", len(m.W), a.D+1)
 	}
+	ini := time.Now()
+	parciales := n.pool.Parciales(a.Dataset, m.W)
 	return protocolo.Mensaje{Tipo: protocolo.Gradiente, Epoca: m.Epoca, Shard: m.Shard,
-		BloqueInicial: a.BloqueInicial, Parciales: n.pool.Parciales(a.Dataset, m.W)}
+		BloqueInicial: a.BloqueInicial, Parciales: parciales, MicrosCalculo: time.Since(ini).Microseconds()}
 }

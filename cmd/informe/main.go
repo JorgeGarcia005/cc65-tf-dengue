@@ -512,6 +512,63 @@ func main() {
 		figuraSpeedup("Speedup del cálculo del gradiente", curvasGradiente(m.Bench)))
 	escribirFigura("docs/informe/pc3/fig/speedup_loader.svg",
 		figuraSpeedup("Speedup de la limpieza concurrente", curvasLoader(l.Bench)))
+
+	// PC4
+	if cs := curvasCluster(); len(cs) > 0 {
+		escribirFigura("docs/informe/pc4/fig/speedup_cluster.svg",
+			figuraSpeedupEjes("Speedup del entrenamiento distribuido por número de nodos", cs,
+				"Nodos (1 worker cada uno, TCP)", "Ideal (speedup = nodos)", true))
+	}
+}
+
+// benchCluster es lo que el informe usa de reports/bench_cluster_*.json.
+type benchCluster struct {
+	Fuente  string `json:"fuente"`
+	Maquina struct {
+		CPU    string `json:"cpu"`
+		SO     string `json:"so"`
+		NumCPU int    `json:"num_cpu"`
+	} `json:"maquina"`
+	Mediciones []struct {
+		Nodos   int     `json:"nodos"`
+		Speedup float64 `json:"speedup"`
+	} `json:"mediciones"`
+}
+
+// curvasCluster toma, por máquina, el benchmark del clúster sobre el gold real
+// si existe (si no, el del sintético).
+func curvasCluster() []curvaSpeedup {
+	archivos, _ := filepath.Glob("reports/bench_cluster_*.json")
+	slices.Sort(archivos)
+	elegido := map[string]benchCluster{}
+	var orden []string
+	for _, a := range archivos {
+		var b benchCluster
+		leer(a, &b)
+		k := b.Maquina.CPU + "|" + b.Maquina.SO + "|" + fmt.Sprint(b.Maquina.NumCPU)
+		previo, ok := elegido[k]
+		if !ok {
+			orden = append(orden, k)
+		}
+		if !ok || (strings.HasPrefix(b.Fuente, "gold") && !strings.HasPrefix(previo.Fuente, "gold")) {
+			elegido[k] = b
+		}
+	}
+	var cs []curvaSpeedup
+	for _, k := range orden {
+		b := elegido[k]
+		datos := "sintético"
+		if strings.HasPrefix(b.Fuente, "gold") {
+			datos = "gold real"
+		}
+		c := curvaSpeedup{Nombre: nombreMaquina(b.Maquina.CPU, b.Maquina.NumCPU, b.Maquina.SO) + " · " + datos}
+		for _, m := range b.Mediciones {
+			c.Workers = append(c.Workers, m.Nodos)
+			c.Speedup = append(c.Speedup, m.Speedup)
+		}
+		cs = append(cs, c)
+	}
+	return cs
 }
 
 // curvasGradiente toma, por máquina y sistema operativo, la medición sobre el
