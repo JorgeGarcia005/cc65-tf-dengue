@@ -45,6 +45,12 @@ func ejecutarAPI(ctx context.Context, ln, lnHTTP net.Listener, op opciones, mode
 		return err
 	}
 	defer c.Cerrar()
+	// Antes de api.Nuevo, que guarda el modelo del archivo como vigente en un
+	// almacén vacío: uno incompatible no debe quedar persistido.
+	if base.Esquema.D() != p.d {
+		lnHTTP.Close()
+		return fmt.Errorf("el modelo tiene %d variables y los shards %d: regenera el gold y el modelo juntos", base.Esquema.D(), p.d)
+	}
 	ctx, cancelarNodos := context.WithCancel(ctx)
 	defer cancelarNodos()
 	ent := &entrenadorCluster{calc: c, d: p.d, lambda: op.lambda, progreso: op.progreso, logf: logf}
