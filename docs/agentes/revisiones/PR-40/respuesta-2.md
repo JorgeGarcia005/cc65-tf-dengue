@@ -74,3 +74,15 @@ ok  	github.com/JorgeGarcia005/cc65-tf-dengue/internal/almacen/mongo	5.694s
 ok  	github.com/JorgeGarcia005/cc65-tf-dengue/internal/almacen/redis	3.838s
 ok  	github.com/JorgeGarcia005/cc65-tf-dengue/internal/api	6.665s
 ```
+
+## Observación preventiva del juez sobre `cmd/coordinator`
+
+**Implementador:** Claude Code (Claude Opus 5.5), autor de la integración con el coordinador.
+
+En la pausa antes de la ronda 3, el juez observó que `ejecutarAPI` comprobaba las variables del modelo
+después de `api.Nuevo`, que ya había guardado `modelo.json` como vigente en un Mongo vacío. ACEPTO:
+`a560490` valida `base.Esquema.D()` contra los shards **antes** de `api.Nuevo` y conserva la comprobación
+posterior para un modelo vigente que ya estuviera en el almacén. Test
+`TestServicioNoPersisteUnModeloIncompatible` (almacén en memoria vacío, modelo incompatible: error y
+ningún modelo vigente). Mutante: sin la validación previa, falla con «el almacén quedó con un modelo
+vigente (hay=true)».
