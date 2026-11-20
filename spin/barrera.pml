@@ -26,8 +26,11 @@
  * Propiedades:
  *   - seguridad (pan con -DNOCLAIM): sin deadlocks ni estados finales
  *     inválidos; la barrera solo avanza con los N shards; si no se aborta se
- *     completan todas las épocas; y solo se aborta si TODOS los nodos cayeron
- *     o fueron sospechados: nunca se descarta a un nodo vivo y no sospechado.
+ *     completan todas las épocas; nunca se envía una época a un nodo
+ *     descartado; entre los nodos sanos la carga difiere a lo sumo en 1; y
+ *     nunca se descarta a un nodo vivo salvo por una sospecha o por un canal
+ *     lleno (variables fantasma), así que solo se aborta si todos cayeron o
+ *     fueron sospechados o saturados.
  *   - vivacidad (LTL `termina`): toda corrida termina.
  *
  * Mutantes (se compilan con -D; los corre verificar.sh y deben FALLAR):
@@ -36,14 +39,25 @@
  *                   todos los del nodo caído (sin `cubrir`) → no termina
  *   MUT_PLAZO_GLOBAL al vencer un plazo se descarta al dueño de todo shard
  *                   pendiente (plazo global)               → descarta a un nodo vivo
+ *   MUT_PRIMER_SANO el shard va al primer nodo sano y no al de menor carga
+ *                   (con N = 4)                            → rompe el balanceo
  *
  * Verificación: bash verificar.sh   (o los comandos de README.md)
  */
 
-#define N         3   /* nodos = shards iniciales */
+/* Parámetros (se pueden cambiar con -D; verificar.sh corre N = 3 y N = 4) */
+#ifndef N
+#define N         3   /* nodos = shards iniciales (3 o 4) */
+#endif
+#ifndef EPOCAS
 #define EPOCAS    2
+#endif
+#ifndef CAIDAS
 #define CAIDAS    2   /* nodos que pueden caer (EOF o colgarse) en la corrida */
+#endif
+#ifndef SOSPECHAS
 #define SOSPECHAS 1   /* plazos que vencen sobre un nodo vivo (nodo lento) */
+#endif
 
 #ifndef CAP
 #define CAP N
@@ -58,6 +72,8 @@ chan aCoord   = [3*N] of { mtype, byte, byte, byte };
 /* variables fantasma: lo que el coordinador NO sabe, para las propiedades */
 bool vivo[N];          /* el nodo no cayó */
 bool sospechado[N];    /* su plazo venció estando vivo */
+bool saturado[N];      /* un envío lo encontró con el canal lleno (equivale a
+                        * que venza el plazo de escritura: cuenta como caída) */
 byte caidas = 0;
 
 bool terminado = false;
@@ -93,7 +109,7 @@ proctype Coordinador() {
 #define DESCARTAR(jj) \
 	if \
 	:: !descartado[jj] -> descartado[jj] = true; carga[jj] = 0; \
-	   assert(!vivo[jj] || sospechado[jj]) /* nunca a un nodo vivo y no sospechado */ \
+	   assert(!vivo[jj] || sospechado[jj] || saturado[jj]) /* nunca a un nodo vivo sin motivo */ \
 	:: else -> skip \
 	fi
 
@@ -115,14 +131,18 @@ proctype Coordinador() {
 			/* la época se difunde al dueño actual; si su canal está lleno se
 			 * lo descarta y cubrir() reasigna */
 			j = duenio[s];
-#ifdef MUT_BLOQUEANTE
-			aNodo[j] ! EPOCA(e, s, j)
-#else
 			if
-			:: full(aNodo[j]) -> DESCARTAR(j)
-			:: nfull(aNodo[j]) -> aNodo[j] ! EPOCA(e, s, j)
-			fi
+			:: descartado[j] -> skip  /* lo reasigna cubrir(), como en coordinador.go */
+			:: else ->
+#ifdef MUT_BLOQUEANTE
+				aNodo[j] ! EPOCA(e, s, j)
+#else
+				if
+				:: full(aNodo[j]) -> saturado[j] = true; DESCARTAR(j)
+				:: nfull(aNodo[j]) -> assert(!descartado[j]); aNodo[j] ! EPOCA(e, s, j)
+				fi
 #endif
+			fi
 		}
 		goto cubrir;
 barrera:
@@ -150,10 +170,16 @@ barrera:
 		:: (!listo[0] && !vivo[duenio[0]] && !descartado[duenio[0]]) -> x = 0; goto vencer
 		:: (!listo[1] && !vivo[duenio[1]] && !descartado[duenio[1]]) -> x = 1; goto vencer
 		:: (!listo[2] && !vivo[duenio[2]] && !descartado[duenio[2]]) -> x = 2; goto vencer
+#if N > 3
+		:: (!listo[3] && !vivo[duenio[3]] && !descartado[duenio[3]]) -> x = 3; goto vencer
+#endif
 		/* sospecha falsa: vence el plazo de un nodo vivo (lento) */
 		:: (sospechas < SOSPECHAS && !listo[0] && !descartado[duenio[0]]) -> x = 0; sospechas++; sospechado[duenio[0]] = true; goto vencer
 		:: (sospechas < SOSPECHAS && !listo[1] && !descartado[duenio[1]]) -> x = 1; sospechas++; sospechado[duenio[1]] = true; goto vencer
 		:: (sospechas < SOSPECHAS && !listo[2] && !descartado[duenio[2]]) -> x = 2; sospechas++; sospechado[duenio[2]] = true; goto vencer
+#if N > 3
+		:: (sospechas < SOSPECHAS && !listo[3] && !descartado[duenio[3]]) -> x = 3; sospechas++; sospechado[duenio[3]] = true; goto vencer
+#endif
 		od;
 
 vencer:
@@ -200,7 +226,11 @@ asignar:
 		mejor = N;
 		for (k : 0 .. N-1) {
 			if
+#ifdef MUT_PRIMER_SANO
+			:: !descartado[k] && mejor == N -> mejor = k
+#else
 			:: !descartado[k] && (mejor == N || carga[k] < carga[mejor]) -> mejor = k
+#endif
 			:: else -> skip
 			fi
 		}
@@ -215,8 +245,8 @@ asignar:
 		carga[j]++;
 #else
 		if
-		:: full(aNodo[j]) -> DESCARTAR(j); goto asignar
-		:: nfull(aNodo[j]) -> aNodo[j] ! EPOCA(e, s, j);
+		:: full(aNodo[j]) -> saturado[j] = true; DESCARTAR(j); goto asignar
+		:: nfull(aNodo[j]) -> assert(!descartado[j]); aNodo[j] ! EPOCA(e, s, j);
 			duenio[s] = j;
 			carga[j]++
 		fi;
@@ -232,6 +262,12 @@ avanzar:
 		skip;
 		for (k : 0 .. N-1) {
 			assert(listo[k])
+		}
+		/* balanceo: entre los nodos sanos, la carga difiere a lo sumo en 1 */
+		for (k : 0 .. N-1) {
+			for (j : 0 .. N-1) {
+				assert(descartado[k] || descartado[j] || carga[k] <= carga[j] + 1)
+			}
 		}
 		e++;
 		epocasCompletas = e
@@ -252,7 +288,7 @@ cierre:
 	if
 	:: abortado ->
 		for (k : 0 .. N-1) {
-			assert(!vivo[k] || sospechado[k])
+			assert(!vivo[k] || sospechado[k] || saturado[k])
 		}
 	:: else -> skip
 	fi;
