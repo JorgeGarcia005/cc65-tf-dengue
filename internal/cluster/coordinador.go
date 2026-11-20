@@ -1,6 +1,7 @@
 package cluster
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"math"
@@ -229,6 +230,14 @@ func (c *Coordinador) entregar(ev evento) bool {
 // EsperarNodos bloquea hasta que haya n nodos sanos registrados o venza
 // TimeoutRegistro (ErrRegistro).
 func (c *Coordinador) EsperarNodos(n int) error {
+	return c.EsperarNodosContext(context.Background(), n)
+}
+
+// EsperarNodosContext es EsperarNodos, pero además vuelve con ctx.Err() si se
+// cancela ctx: un servicio que recibe SIGTERM mientras espera nodos no queda
+// bloqueado hasta TimeoutRegistro (PR-39 H8). Los nodos ya registrados siguen
+// sanos y reciben `fin` con Terminar.
+func (c *Coordinador) EsperarNodosContext(ctx context.Context, n int) error {
 	c.muBucle.Lock()
 	defer c.muBucle.Unlock()
 	limite := time.NewTimer(c.op.TimeoutRegistro)
@@ -241,6 +250,8 @@ func (c *Coordinador) EsperarNodos(n int) error {
 			return fmt.Errorf("%w: %d de %d nodos en %v", ErrRegistro, c.sanos(), n, c.op.TimeoutRegistro)
 		case <-c.hecho:
 			return ErrCerrado
+		case <-ctx.Done():
+			return fmt.Errorf("cluster: espera de nodos cancelada con %d de %d: %w", c.sanos(), n, ctx.Err())
 		}
 	}
 	return nil

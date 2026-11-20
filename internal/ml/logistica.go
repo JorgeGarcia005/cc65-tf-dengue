@@ -317,3 +317,11 @@ func EntrenarFalible(calc CalculadorFalible, d int, e Entrenamiento) (Resultado,
 
 // Probabilidad es σ(xᵀw + b) para una fila.
 func Probabilidad(w, x []float64) float64 { return Sigmoide(Puntaje(w, x)) }
+
+// Calibrar corrige una probabilidad entrenada con pesos por clase: resta al
+// logit el ajuste ln(PesoPos/PesoNeg) para volver a la escala de la tasa real.
+// La usan el reporte de cmd/entrenar y la API de predicción.
+func Calibrar(p, ajuste float64) float64 {
+	p = math.Min(math.Max(p, 1e-15), 1-1e-15)
+	return Sigmoide(math.Log(p/(1-p)) - ajuste)
+}

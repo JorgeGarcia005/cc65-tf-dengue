@@ -5,7 +5,8 @@
 .claude
 data
 reports
-docs
+docs/*
+!docs/api
 spin
 web
 entregables

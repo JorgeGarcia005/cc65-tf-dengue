@@ -27,6 +27,17 @@ jobs:
           echo "AGENTS.md: $n caracteres"
           test "$n" -le 12000
 
+  openapi:
+    name: OpenAPI 3 válido
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Validar docs/api/openapi.yaml
+        run: npx --yes @redocly/cli@1.25.0 lint --extends=minimal docs/api/openapi.yaml
+
   go:
     name: Go (gofmt, vet, test -race)
     runs-on: ubuntu-24.04
