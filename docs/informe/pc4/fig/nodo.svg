@@ -1,0 +1,134 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="820" height="520" viewBox="0 0 820 520" font-family="Arial, Helvetica, sans-serif">
+<title>Funcionamiento interno de un nodo</title>
+<defs>
+  <marker id="f" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+    <path d="M0,0 L10,5 L0,10 z" fill="#0b0b0b"/>
+  </marker>
+</defs>
+<rect width="820" height="520" fill="#ffffff"/>
+
+<!-- Coordinador (fuera del nodo) -->
+<rect x="10" y="95" width="120" height="52" rx="6" fill="#cde2fb" stroke="#2a78d6" stroke-width="2"/>
+<text x="70" y="118" font-size="12" font-weight="bold" text-anchor="middle" fill="#0b0b0b">Coordinador</text>
+<text x="70" y="134" font-size="11" text-anchor="middle" fill="#0b0b0b">:9000</text>
+
+<!-- Contenedor del nodo -->
+<rect x="150" y="10" width="660" height="500" rx="8" fill="#f7f6f3" stroke="#2a78d6" stroke-width="1.5" stroke-dasharray="6 4"/>
+<text x="162" y="28" font-size="12" font-weight="bold" fill="#2a78d6">Nodo (cmd/node · internal/cluster/nodo.go)</text>
+
+<!-- 1. Conectar y registrarse -->
+<rect x="330" y="36" width="300" height="44" rx="6" fill="#ffffff" stroke="#52514e" stroke-width="1.5"/>
+<text x="480" y="53" font-size="12" font-weight="bold" text-anchor="middle" fill="#0b0b0b">1 · Conectar y registrarse</text>
+<text x="480" y="70" font-size="11" text-anchor="middle" fill="#0b0b0b">dial a coordinator:9000 (reintenta hasta 60 s)</text>
+
+<!-- 2. Esperar mensaje -->
+<rect x="330" y="100" width="300" height="40" rx="6" fill="#ffffff" stroke="#52514e" stroke-width="1.5"/>
+<text x="480" y="117" font-size="12" font-weight="bold" text-anchor="middle" fill="#0b0b0b">2 · Esperar el siguiente mensaje</text>
+<text x="480" y="132" font-size="11" text-anchor="middle" fill="#0b0b0b">pc.Recibir → según m.Tipo</text>
+<line x1="480" y1="80" x2="480" y2="98" stroke="#0b0b0b" stroke-width="1.5" marker-end="url(#f)"/>
+
+<!-- Bifurcación -->
+<g stroke="#0b0b0b" stroke-width="1.5" fill="none">
+  <polyline points="480,140 480,158"/>
+  <polyline points="265,158 715,158"/>
+  <line x1="265" y1="158" x2="265" y2="183" marker-end="url(#f)"/>
+  <line x1="500" y1="158" x2="500" y2="183" marker-end="url(#f)"/>
+  <line x1="715" y1="158" x2="715" y2="183" marker-end="url(#f)"/>
+</g>
+<g font-size="11" font-weight="bold" fill="#0b0b0b">
+  <text x="271" y="176">asignacion</text>
+  <text x="506" y="176">epoca</text>
+  <text x="721" y="176">fin</text>
+</g>
+
+<!-- asignacion → cargar -->
+<rect x="170" y="185" width="190" height="150" rx="6" fill="#ffffff" stroke="#2a78d6" stroke-width="1.5"/>
+<g font-size="11" fill="#0b0b0b">
+  <text x="182" y="204" font-size="12" font-weight="bold">cargar</text>
+  <text x="182" y="222">LeerShard(ruta)</text>
+  <text x="182" y="238">verifica sha256 y cabecera</text>
+  <text x="182" y="252">(bloques, tamaño, D)</text>
+  <text x="182" y="270">shards[s] ← shard en memoria</text>
+  <text x="182" y="288">crea ml.Pool con W workers</text>
+  <text x="182" y="302">(una vez por proceso)</text>
+  <text x="182" y="324" font-weight="bold">→ listo{bloques, filas, D}</text>
+</g>
+
+<!-- epoca → calcular -->
+<rect x="380" y="185" width="240" height="230" rx="6" fill="#ffffff" stroke="#2a78d6" stroke-width="1.5"/>
+<g font-size="11" fill="#0b0b0b">
+  <text x="392" y="204" font-size="12" font-weight="bold">calcular</text>
+  <text x="392" y="222">shard cargado y len(w) = D + 1</text>
+  <text x="392" y="240">Pool.Parciales(shard, w):</text>
+</g>
+<!-- Mini worker pool -->
+<rect x="392" y="248" width="216" height="118" rx="4" fill="#cde2fb" stroke="#2a78d6" stroke-width="1"/>
+<g font-size="10" fill="#0b0b0b" text-anchor="middle">
+  <text x="500" y="262">bloques 0 … K−1 → chan int (fan-out)</text>
+  <rect x="402" y="270" width="58" height="34" rx="3" fill="#ffffff" stroke="#2a78d6"/>
+  <text x="431" y="284">worker 1</text><text x="431" y="297">búfer propio</text>
+  <rect x="471" y="270" width="58" height="34" rx="3" fill="#ffffff" stroke="#2a78d6"/>
+  <text x="500" y="284">worker 2</text><text x="500" y="297">búfer propio</text>
+  <text x="550" y="291">…</text>
+  <rect x="562" y="270" width="40" height="34" rx="3" fill="#ffffff" stroke="#2a78d6"/>
+  <text x="582" y="291">W</text>
+  <g fill="#ffffff" stroke="#2a78d6">
+    <rect x="410" y="318" width="34" height="18"/><rect x="448" y="318" width="34" height="18"/>
+    <rect x="486" y="318" width="34" height="18"/><rect x="556" y="318" width="34" height="18"/>
+  </g>
+  <text x="427" y="331">p<tspan dy="2.5" font-size="7.5">0</tspan></text><text x="465" y="331">p<tspan dy="2.5" font-size="7.5">1</tspan></text><text x="503" y="331">p<tspan dy="2.5" font-size="7.5">2</tspan></text>
+  <text x="538" y="331">…</text><text x="573" y="331">p<tspan dy="2.5" font-size="7.5">K−1</tspan></text>
+  <text x="500" y="355">un parcial por bloque, sin reducir</text>
+</g>
+<g font-size="11" fill="#0b0b0b">
+  <text x="392" y="386" font-weight="bold">→ gradiente{e, s, bloque inicial,</text>
+  <text x="392" y="402" font-weight="bold">   parciales, µs de cálculo}</text>
+</g>
+
+<!-- fin -->
+<rect x="640" y="185" width="150" height="92" rx="6" fill="#ffffff" stroke="#52514e" stroke-width="1.5"/>
+<g font-size="11" fill="#0b0b0b">
+  <text x="652" y="204" font-size="12" font-weight="bold">terminar</text>
+  <text x="652" y="222">cierra el pool</text>
+  <text x="652" y="238">y sale del bucle</text>
+  <text x="652" y="256">abortado → error;</text>
+  <text x="652" y="270">completo → salida 0</text>
+</g>
+
+<!-- 3. Enviar respuesta -->
+<rect x="170" y="440" width="450" height="46" rx="6" fill="#ffffff" stroke="#52514e" stroke-width="1.5"/>
+<text x="395" y="458" font-size="12" font-weight="bold" text-anchor="middle" fill="#0b0b0b">3 · Enviar la respuesta (pc.Enviar)</text>
+<text x="395" y="476" font-size="11" text-anchor="middle" fill="#0b0b0b">un gradiente con NaN o ±Inf no se envía: se responde error</text>
+<g stroke="#0b0b0b" stroke-width="1.5" fill="none">
+  <line x1="265" y1="335" x2="265" y2="438" marker-end="url(#f)"/>
+  <line x1="500" y1="415" x2="500" y2="438" marker-end="url(#f)"/>
+  <!-- Bucle: siguiente mensaje -->
+  <polyline points="620,463 795,463 795,120 632,120" marker-end="url(#f)"/>
+</g>
+<text x="702" y="455" font-size="11" fill="#52514e" text-anchor="middle">siguiente mensaje</text>
+
+<!-- Tráfico con el coordinador -->
+<g stroke="#0b0b0b" stroke-width="1.6" fill="none">
+  <polyline points="328,58 70,58 70,93" marker-end="url(#f)"/>
+  <line x1="132" y1="120" x2="328" y2="120" marker-end="url(#f)"/>
+  <polyline points="168,463 70,463 70,149" marker-end="url(#f)"/>
+</g>
+<g font-size="11" fill="#0b0b0b">
+  <text x="160" y="52">registro{nombre, versión, W}</text>
+  <text x="160" y="114">asignacion · epoca · fin</text>
+  <text x="62" y="300" transform="rotate(-90 62 300)" text-anchor="middle">listo · gradiente · error</text>
+</g>
+
+<!-- Nota -->
+<g font-size="10.5" fill="#52514e">
+  <text x="640" y="300">Una sola goroutine atiende</text>
+  <text x="640" y="314">la conexión: lee, calcula y</text>
+  <text x="640" y="328">responde en orden. El</text>
+  <text x="640" y="342">paralelismo está dentro de</text>
+  <text x="640" y="356">ml.Pool, uno por proceso para</text>
+  <text x="640" y="370">todos sus shards (ADR-0005).</text>
+  <text x="640" y="390">Si la conexión se pierde, el</text>
+  <text x="640" y="404">nodo vuelve al paso 1 y entra</text>
+  <text x="640" y="418">como reserva.</text>
+</g>
+</svg>
