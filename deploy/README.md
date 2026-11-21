@@ -6,7 +6,9 @@ MongoDB, Redis, la API y la SPA se agregan a este mismo archivo en los issues #2
 
 ## Imagen
 
-`deploy/Dockerfile` construye **una sola imagen** (`cc65-tf`) con todos los comandos de `cmd/`:
+`deploy/Dockerfile` construye **una sola imagen** (`cc65-tf`) con los dos comandos que corren en
+contenedores, `coordinator` y `node`. El resto de `cmd/` (`gold`, `entrenar`, `benchapi`,
+`informe`…) se ejecuta en el host con `go run`:
 
 - dos etapas: `golang:1.24` compila y `gcr.io/distroless/static-debian12:nonroot` ejecuta;
 - binarios estáticos (`CGO_ENABLED=0`) con `-trimpath -ldflags="-s -w"`;
