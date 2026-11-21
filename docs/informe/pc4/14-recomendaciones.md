@@ -16,6 +16,6 @@
   vigilancia entomológica por distrito, si están disponibles como datos abiertos, aportaría más que un
   modelo más complejo. Los resultados deben presentarse siempre como priorización de zonas y grupos, no
   como diagnóstico individual.
-- **Vigilar el tamaño de la imagen.** La imagen única está cerca de su límite de 40 MB; antes de agregar
-  otro binario conviene separar en una imagen aparte las herramientas que no se despliegan (benchmarks,
-  generación del informe).
+- **Servir la SPA de TB2 en su propia imagen.** La imagen del backend lleva solo el coordinador y el nodo;
+  la SPA (React) conviene servirla desde una imagen estática aparte, para que el backend siga pequeño y
+  cada parte se despliegue por separado.

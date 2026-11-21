@@ -3,16 +3,16 @@
 ## 10.1 Rutas y documentación
 
 El coordinador, en modo servicio, expone la API con `net/http` de la biblioteca estándar. El contrato está
-en `docs/api/openapi.yaml` (OpenAPI 3.0.3, validado en el CI) y se sirve con **Swagger UI** en `/docs`. Un
+en `docs/api/openapi.yaml` (OpenAPI 3.0.3; OpenAPI Initiative, 2020; validado en el CI) y se sirve con **Swagger UI** en `/docs`. Un
 test exige que cada ruta del servidor esté documentada.
 
 | Método y ruta | Qué hace | Respuestas |
 |---|---|---|
 | `GET /healthz` | Salud del servicio y versión del modelo publicado | 200 |
 | `GET /api/v1/modelo` | Modelo publicado: versión, pesos por variable, umbral, departamentos | 200 |
-| `POST /api/v1/predicciones` | Riesgo calibrado de que un caso sea con signos de alarma o grave, a partir de departamento, año, semana epidemiológica, edad y sexo | 200, 400 (consulta inválida, con mensaje en español) |
-| `GET /api/v1/cluster` | Foto del clúster: nodos, estado, carga, época y pérdida | 200 |
-| `POST /api/v1/entrenamientos` | Lanza un entrenamiento distribuido en los nodos (cuerpo opcional: épocas, tasa, λ) | 202 con `Location`, 409 si ya hay uno en curso, 503 si el clúster no tiene sus nodos |
+| `POST /api/v1/predicciones` | Riesgo calibrado de que un caso sea con signos de alarma o grave, a partir de departamento, año, semana epidemiológica, edad y sexo | 200, 400 (consulta inválida, con mensaje en español), 413 (cuerpo demasiado grande) |
+| `GET /api/v1/cluster` | Foto del clúster: nodos, estado, carga, época y pérdida | 200, 503 (el servicio corre sin clúster) |
+| `POST /api/v1/entrenamientos` | Lanza un entrenamiento distribuido en los nodos (cuerpo opcional: épocas, tasa, λ) | 202 con `Location`, 400 (parámetros inválidos), 409 si ya hay uno en curso, 503 si no hay clúster |
 | `GET /api/v1/entrenamientos/{id}` | Progreso o resultado: época, pérdida por época, nodos y versión del modelo publicado | 200, 404 |
 
 La consulta se valida con las mismas reglas que la limpieza (sección 6) y se transforma con el mismo
@@ -34,9 +34,10 @@ esquema de variables guardado en el modelo, así que la API predice exactamente 
 
 ## 10.3 Latencia medida
 
-`go run ./cmd/benchapi -exigir-p95 100ms` envía 2000 predicciones con 16 clientes concurrentes en dos
-corridas: con la **caché fría** (consultas distintas: se calcula y se guarda en Redis) y con la **caché
-caliente** (las mismas consultas, ya en Redis). Mide en el cliente, como Postman, hasta leer la respuesta
+`go run ./cmd/benchapi -exigir-p95 100ms` envía, con 16 clientes concurrentes, dos corridas de 2000
+peticiones: con la **caché fría** (2000 consultas distintas: se calcula y se guarda en Redis) y con la
+**caché caliente** (2000 peticiones sobre 32 consultas precalentadas, que ya están en Redis). Las dos
+corridas usan mitades disjuntas del espacio de consultas, así que ninguna consulta fría estaba en la caché. Mide en el cliente, como Postman, hasta leer la respuesta
 completa, y falla si el p95 de alguna corrida no baja de 100 ms o si la fría tuvo aciertos de caché o la
 caliente no salió entera de Redis.
 

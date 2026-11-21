@@ -85,9 +85,9 @@ plantea así (ADR-0003):
 
 | Enfoque | Cómo distribuye el entrenamiento | Qué toma este trabajo y qué no |
 |---|---|---|
-| MapReduce (Dean & Ghemawat, 2008) y Spark (Zaharia et al., 2016) | Cada iteración del descenso de gradiente es un trabajo *map* (gradiente por partición) y *reduce* (suma); Spark mantiene los datos en memoria entre iteraciones | Se toma la idea de calcular por partición y sumar. No se usa un motor genérico: para una regresión logística, un coordinador propio en Go evita relanzar tareas en cada época y permite fijar el orden de la suma |
+| MapReduce (Dean y Ghemawat, 2008) y Spark (Zaharia et al., 2016) | Cada iteración del descenso de gradiente es un trabajo *map* (gradiente por partición) y *reduce* (suma); Spark mantiene los datos en memoria entre iteraciones | Se toma la idea de calcular por partición y sumar. No se usa un motor genérico: para una regresión logística, un coordinador propio en Go evita relanzar tareas en cada época y permite fijar el orden de la suma |
 | *Parameter server* (Li et al., 2014) | Los nodos calculan gradientes sobre su partición y un servidor central mantiene los pesos; admite actualizaciones asíncronas | Se adopta la topología en estrella en su variante **síncrona**: la asíncrona cambia el resultado según el orden de llegada de los nodos |
-| *Ring all-reduce* (Sergeev & Del Balso, 2018) | Los nodos suman los gradientes entre sí en anillo, sin servidor central | Se descarta: el orden de la suma dependería del anillo y, con pocos nodos y mensajes pequeños, el servidor central no es el cuello de botella (sección 9) |
+| *Ring all-reduce* (Sergeev y Del Balso, 2018) | Los nodos suman los gradientes entre sí en anillo, sin servidor central | Se descarta: el orden de la suma dependería del anillo y, con pocos nodos y mensajes pequeños, el servidor central no es el cuello de botella (sección 9) |
 
 Frente a estos sistemas, pensados para escalar a miles de máquinas, este trabajo prioriza la
 **reproducibilidad**: el modelo distribuido es idéntico bit a bit al secuencial con cualquier número de

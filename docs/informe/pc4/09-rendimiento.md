@@ -49,7 +49,8 @@ Fuente: `reports/bench_cluster_deez_gold.json` (AMD Ryzen 7 5800X 8-Core Process
   fijo (depende de las filas, no de los nodos); con más nodos solo se agrega el envío de los pesos, que
   pesan poco. Por eso los bytes por época casi no cambian.
 - **La fracción serial es baja y no crece.** Karp-Flatt se mantiene en unas centésimas: lo que no se
-  reparte (difundir los pesos, la barrera y la reducción) es pequeño frente al cómputo. La eficiencia baja
+  reparte (difundir los pesos, la barrera y la reducción) es pequeño frente al cómputo. Por la ley de
+  Amdahl (Amdahl, 1967), es esa fracción la que pone el techo al *speedup* cuando se agregan nodos. La eficiencia baja
   levemente porque ese costo fijo pesa más cuando la época se acorta.
 - **El límite, en una sola máquina.** Los nodos comparten la CPU del equipo, así que a partir de tantos
   nodos como núcleos físicos el *speedup* deja de crecer; en un clúster real cada nodo tendría su propia

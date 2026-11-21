@@ -18,9 +18,10 @@ del OpenAPI y la verificación con Spin.
 
 ## 12.2 Clúster en Docker con los datos reales
 
-`docker compose -f deploy/docker-compose.yml up --build --exit-code-from coordinator` con el gold real y
-tres nodos: registro de los nodos, pérdida por época y verificación contra el secuencial dentro del
-contenedor.
+`NODOS=3 VERIFICAR=true docker compose -f deploy/docker-compose.yml up --build --exit-code-from coordinator`
+con el gold real: registro de los tres nodos, pérdida por época y verificación contra el secuencial
+dentro del contenedor (sin `VERIFICAR=true` el coordinador solo entrena y la comparación se hace después
+con `cmd/entrenar -comparar`).
 
 <!-- captura: Clúster de un coordinador y tres nodos en Docker Compose -->
 

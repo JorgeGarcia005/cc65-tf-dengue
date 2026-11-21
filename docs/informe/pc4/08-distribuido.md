@@ -360,8 +360,9 @@ haya reasignado el shard y que los pesos sean idénticos bit a bit a los secuenc
 
 El coordinador y los nodos son binarios de la misma imagen (sección 4.2). En Compose, el coordinador espera
 a los N nodos que declara `NODOS`, todos leen sus shards del mismo volumen de solo lectura y la red del
-clúster es interna: solo el puerto de la API se publica, y solo en modo servicio. Con `-verificar`, el
-coordinador repite el entrenamiento en secuencial dentro del contenedor y falla si los pesos difieren.
+clúster es interna: solo el puerto de la API se publica, y solo en modo servicio. Con `VERIFICAR=true`
+(flag `-verificar`), el coordinador repite el entrenamiento en secuencial dentro del contenedor y falla si
+los pesos difieren.
 
 ## 8.7 Verificación formal con Spin
 

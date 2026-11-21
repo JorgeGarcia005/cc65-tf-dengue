@@ -20,7 +20,7 @@ entrenamiento, partida en shards para los nodos).
 Estas reglas son comunes a todo el código y las revisa el agente juez en cada Pull Request:
 
 1. **Go para todo el backend y núcleo con biblioteca estándar:** la concurrencia se expresa con goroutines
-   y canales (Donovan & Kernighan, 2015). El loader, el modelo de ML, el protocolo
+   y canales (Donovan y Kernighan, 2015). El loader, el modelo de ML, el protocolo
    TCP y la API usan solo la biblioteca estándar de Go. Los únicos terceros permitidos son los drivers de
    MongoDB y Redis. No se usa ninguna biblioteca de ML.
 2. **Determinismo:** los bloques de datos tienen límites fijos, independientes del número de workers o
@@ -35,14 +35,17 @@ Estas reglas son comunes a todo el código y las revisa el agente juez en cada P
 
 ## 4.2 Despliegue
 
-Todo el backend se construye en **una sola imagen** Docker (`deploy/Dockerfile`: compilación estática de los
-binarios de `cmd/` sobre `distroless/static`, usuario sin privilegios) y se levanta con Docker Compose
-(`deploy/docker-compose.yml`): un coordinador, N réplicas del nodo (`--scale node=N`), MongoDB y Redis en una
-red interna. El gold y los shards se montan en un volumen de solo lectura. Hay dos modos:
+El coordinador y los nodos corren en contenedores construidos desde **una sola imagen** Docker
+(`deploy/Dockerfile`): compila de forma estática solo los dos binarios que se despliegan, `coordinator` y
+`node`, sobre `distroless/static` y con un usuario sin privilegios. Las herramientas de carga, benchmark e
+informe (`cmd/loader`, `cmd/benchmark`, `cmd/informe`…) se ejecutan en el anfitrión con `go run`. Docker
+Compose (`deploy/docker-compose.yml`) levanta un coordinador, N nodos (`NODOS=N`: el coordinador espera
+exactamente esos N), MongoDB y Redis en una red interna; el gold y los shards se montan en un volumen de
+solo lectura. Hay dos modos:
 
 | Modo | Comando | Para qué |
 |---|---|---|
-| Entrenamiento único | `docker compose -f deploy/docker-compose.yml up --build --exit-code-from coordinator` | Entrena una vez en el clúster, verifica contra el secuencial y escribe `reports/entrenamiento_cluster.json` |
+| Entrenamiento único | `NODOS=3 VERIFICAR=true docker compose -f deploy/docker-compose.yml up --build --exit-code-from coordinator` | Entrena una vez en el clúster, escribe `reports/entrenamiento_cluster.json` y, con `VERIFICAR=true`, repite el entrenamiento en secuencial dentro del contenedor y falla si los pesos difieren |
 | Servicio | `API=:8080 docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.api.yml up --build` | Sirve la API REST (Swagger en `/docs`) conectada a MongoDB y Redis y entrena en el clúster con cada `POST /api/v1/entrenamientos` |
 
 ## 4.3 Dónde está cada punto de los entregables
