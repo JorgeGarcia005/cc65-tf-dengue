@@ -62,7 +62,9 @@ if [ "$n" -eq 0 ]; then
   echo "FALTA: claves pred:${version}:* en Redis"
   exit 1
 fi
-primera=$(printf '%s\n' "$claves" | head -1)
+# Sin pipe: con pipefail, `printf | head -1` muere por SIGPIPE (141) si hay
+# más claves de las que caben en el buffer del pipe (~2000 tras benchapi).
+primera=${claves%%$'\n'*}
 ttl=$("${COMPOSE[@]}" exec -T redis redis-cli TTL "$primera" | tr -d '\r')
 echo "   claves pred:${version}:*: $n; $primera con TTL ${ttl} s"
 if [ "$ttl" -le 0 ]; then
