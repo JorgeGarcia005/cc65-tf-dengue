@@ -17,6 +17,18 @@ objeciones (`protocolo-tcp-juez.md`) y la decisión quedó en `docs/decisiones/A
 | *Ring all-reduce* entre nodos | Descartada | Los nodos tendrían que conocerse entre sí y el orden de la suma dependería del anillo; con pocos nodos y mensajes de unas decenas de kilobytes por época, la red no es el cuello de botella (sección 9) |
 | Reducción local en cada nodo | Descartada | Menos tráfico, pero rompe la equivalencia bit a bit (sección 8.2) |
 
+![Topología de red del clúster: estrella con el coordinador al centro, en la red interna de Docker](fig/topologia.svg)
+
+**Cómo interactúan los nodos.** La figura muestra el clúster tal como lo levanta
+`deploy/docker-compose.yml`. Todos los contenedores comparten la red interna `cluster` y se encuentran por
+nombre de servicio. El coordinador es el centro de la estrella: escucha en el puerto TCP 9000, que no se
+publica fuera de la red interna. Cada nodo inicia **una sola conexión TCP persistente** a
+`coordinator:9000`, se registra y, por esa misma conexión, recibe la asignación de su shard y los pesos de
+cada época, y devuelve sus parciales. Los nodos no se conocen ni se comunican entre sí: toda la
+coordinación (asignación, barrera, reasignación y reducción) pasa por el coordinador, que además es el único
+que habla con MongoDB y Redis y el único que publica un puerto al anfitrión (la API, en modo servicio).
+Los shards llegan a cada nodo por un volumen de solo lectura; por la red solo viajan pesos y parciales.
+
 La medición de la sección 9 confirma la elección: la red y la espera en la barrera son una fracción
 pequeña de cada época y los bytes por época casi no cambian con el número de nodos, así que la estrella no
 satura al coordinador en la escala del problema.
@@ -81,9 +93,22 @@ frenar la época. Toda escritura lleva plazo
    g = (Σ G_k) / (Σ s_i) + λ·w, con k = 0, …, B − 1.
 9. Devolver g a `ml.EntrenarFalible`, que actualiza w ← w − η·g, igual que el entrenamiento secuencial.
 
+La figura siguiente es el mismo algoritmo como diagrama de flujo: a la izquierda, el bucle de
+entrenamiento, que es el mismo del secuencial; a la derecha, lo que hace el coordinador dentro de una época.
+
+![Diagrama de flujo del entrenamiento distribuido: bucle de épocas y una época en el coordinador](fig/flujo.svg)
+
 **Algoritmo 2.** El nodo (`(*Nodo).Servir`): registrarse; por cada `asignacion`, leer el archivo del
 shard, verificar su huella y responder `listo`; por cada `epoca`, calcular con su *worker pool* un parcial
 por bloque del shard y responder `gradiente`; terminar con `fin`.
+
+![Funcionamiento interno de un nodo: conexión, carga del shard y cálculo con el worker pool](fig/nodo.svg)
+
+Dentro del nodo, una sola goroutine atiende la conexión: lee un mensaje, lo procesa y responde, en orden.
+El paralelismo está en el `ml.Pool`, el mismo *worker pool* de la sección 7.3, creado una vez por proceso
+y compartido por todos los shards que el nodo reciba (ADR-0005). Para cada época, el pool reparte los
+bloques del shard entre W goroutines con búfer propio y devuelve un parcial por bloque, sin reducirlos,
+para que el coordinador sume en orden global (sección 8.2).
 
 El código fuente de los pasos centrales se copia del repositorio al generar el informe (no a mano), así
 que es exactamente el que se ejecutó en las pruebas y en las mediciones.

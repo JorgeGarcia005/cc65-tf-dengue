@@ -1,0 +1,108 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="820" height="500" viewBox="0 0 820 500" font-family="Arial, Helvetica, sans-serif">
+<title>Topología de red del clúster: estrella con el coordinador al centro</title>
+<defs>
+  <marker id="f" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+    <path d="M0,0 L10,5 L0,10 z" fill="#0b0b0b"/>
+  </marker>
+  <marker id="g" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+    <path d="M0,0 L10,5 L0,10 z" fill="#52514e"/>
+  </marker>
+</defs>
+<rect width="820" height="500" fill="#ffffff"/>
+
+<!-- Anfitrión y red interna -->
+<rect x="10" y="10" width="640" height="480" rx="8" fill="none" stroke="#8a8984" stroke-width="1.5" stroke-dasharray="6 4"/>
+<text x="22" y="29" font-size="12" font-weight="bold" fill="#52514e">Anfitrión con Docker · docker compose, proyecto cc65-tf</text>
+<rect x="24" y="40" width="612" height="438" rx="6" fill="#f7f6f3" stroke="#b4b2ab" stroke-width="1"/>
+<text x="36" y="58" font-size="11" fill="#52514e">red interna «cluster» (bridge): los contenedores se encuentran por nombre de servicio</text>
+
+<!-- Nodos -->
+<g font-size="12" fill="#0b0b0b" text-anchor="middle">
+  <rect x="40" y="72" width="140" height="52" rx="6" fill="#cde2fb" stroke="#2a78d6" stroke-width="2"/>
+  <text x="110" y="94" font-weight="bold">node-1</text><text x="110" y="111" font-size="11">worker pool · shard 0</text>
+  <rect x="40" y="148" width="140" height="52" rx="6" fill="#cde2fb" stroke="#2a78d6" stroke-width="2"/>
+  <text x="110" y="170" font-weight="bold">node-2</text><text x="110" y="187" font-size="11">worker pool · shard 1</text>
+  <text x="110" y="236" font-size="18">⋮</text>
+  <rect x="40" y="262" width="140" height="52" rx="6" fill="#cde2fb" stroke="#2a78d6" stroke-width="2"/>
+  <text x="110" y="284" font-weight="bold">node-N</text><text x="110" y="301" font-size="11">worker pool · shard N−1</text>
+</g>
+
+<!-- Coordinador (centro de la estrella) -->
+<rect x="300" y="150" width="175" height="100" rx="6" fill="#cde2fb" stroke="#2a78d6" stroke-width="2.5"/>
+<g font-size="11" fill="#0b0b0b" text-anchor="middle">
+  <text x="387" y="172" font-size="13" font-weight="bold">coordinator</text>
+  <text x="387" y="190">parameter server síncrono</text>
+  <text x="387" y="208">TCP :9000 (solo red interna)</text>
+  <text x="387" y="226">HTTP :8080 (modo servicio)</text>
+  <text x="387" y="243" fill="#52514e">gold y shards: solo lectura</text>
+</g>
+
+<!-- Enlaces nodo → coordinador (el nodo inicia la conexión) -->
+<g stroke="#0b0b0b" stroke-width="1.6" fill="none">
+  <line x1="180" y1="98" x2="298" y2="172" marker-end="url(#f)"/>
+  <line x1="180" y1="174" x2="298" y2="196" marker-end="url(#f)"/>
+  <line x1="180" y1="288" x2="298" y2="232" marker-end="url(#f)"/>
+</g>
+<g font-size="10.5" fill="#0b0b0b">
+  <text x="196" y="118" transform="rotate(32 196 118)">TCP</text>
+  <text x="206" y="176" transform="rotate(10 206 176)">TCP</text>
+  <text x="200" y="272" transform="rotate(-25 200 272)">TCP</text>
+</g>
+
+<!-- Bases de datos (modo servicio) -->
+<g font-size="12" fill="#0b0b0b" text-anchor="middle">
+  <rect x="490" y="290" width="135" height="50" rx="6" fill="#e8f3e2" stroke="#3a8a2e" stroke-width="2"/>
+  <text x="557" y="311" font-weight="bold">mongo :27017</text><text x="557" y="328" font-size="11">persistente</text>
+  <rect x="490" y="360" width="135" height="50" rx="6" fill="#e8f3e2" stroke="#3a8a2e" stroke-width="2"/>
+  <text x="557" y="381" font-weight="bold">redis :6379</text><text x="557" y="398" font-size="11">caché de predicciones</text>
+</g>
+<g stroke="#52514e" stroke-width="1.4" fill="none">
+  <polyline points="462,250 462,315 488,315" marker-end="url(#g)"/>
+  <polyline points="440,250 440,385 488,385" marker-end="url(#g)"/>
+</g>
+<text x="557" y="428" font-size="10.5" fill="#52514e" text-anchor="middle">solo en modo servicio</text>
+<text x="557" y="442" font-size="10.5" fill="#52514e" text-anchor="middle">(docker-compose.api.yml)</text>
+
+<!-- Volumen de datos -->
+<rect x="40" y="410" width="250" height="56" rx="6" fill="#ffffff" stroke="#52514e" stroke-width="1.5" stroke-dasharray="4 3"/>
+<g font-size="11" fill="#0b0b0b">
+  <text x="52" y="430" font-weight="bold">Volumen ../data/gold → /datos (ro)</text>
+  <text x="52" y="447">shard_0.bin … shard_N−1.bin, montado</text>
+  <text x="52" y="461">en el coordinador y en cada nodo</text>
+</g>
+
+<!-- Nota de interacción -->
+<g font-size="11" fill="#52514e">
+  <text x="40" y="336">Cada nodo abre una conexión TCP persistente a</text>
+  <text x="40" y="350">coordinator:9000 y se registra; por ella recibe asignacion</text>
+  <text x="40" y="364">y epoca, y responde listo y gradiente (JSON por línea).</text>
+  <text x="40" y="378">Los nodos no se hablan entre sí: todo pasa por el centro.</text>
+  <text x="40" y="392">NODOS=N: nodos que levanta Compose y espera el coordinador.</text>
+</g>
+
+<!-- Cliente externo -->
+<rect x="668" y="160" width="140" height="74" rx="6" fill="#ffffff" stroke="#52514e" stroke-width="1.5"/>
+<g font-size="11" fill="#0b0b0b" text-anchor="middle">
+  <text x="738" y="181" font-size="12" font-weight="bold">Cliente</text>
+  <text x="738" y="199">Postman · benchapi</text>
+  <text x="738" y="215">Swagger /docs</text>
+  <text x="738" y="229" fill="#52514e">SPA (TB2)</text>
+</g>
+<line x1="666" y1="205" x2="477" y2="205" stroke="#0b0b0b" stroke-width="1.6" marker-end="url(#f)"/>
+<g font-size="10.5" fill="#0b0b0b" text-anchor="middle">
+  <text x="566" y="190">HTTP REST</text>
+  <text x="566" y="222">localhost:8080 → :8080</text>
+  <text x="566" y="236" fill="#52514e">único puerto publicado</text>
+</g>
+
+<!-- Leyenda -->
+<g font-size="10.5" fill="#52514e">
+  <line x1="668" y1="300" x2="700" y2="300" stroke="#0b0b0b" stroke-width="1.6" marker-end="url(#f)"/>
+  <text x="706" y="304">quien inicia</text>
+  <text x="706" y="317">la conexión</text>
+  <rect x="668" y="330" width="30" height="16" rx="3" fill="#cde2fb" stroke="#2a78d6" stroke-width="2"/>
+  <text x="706" y="342">imagen cc65-tf</text>
+  <rect x="668" y="356" width="30" height="16" rx="3" fill="#e8f3e2" stroke="#3a8a2e" stroke-width="2"/>
+  <text x="706" y="368">imagen oficial</text>
+</g>
+</svg>
