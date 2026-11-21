@@ -388,7 +388,7 @@ de diseño y debe dar un contraejemplo:
 | mutante: plazo global | seguridad | 70 | 1 | > 0 (contraejemplo) |
 | mutante: primer nodo sano (N=4) | seguridad | 5 269 | 1 | > 0 (contraejemplo) |
 
-Fuente: `reports/spin.json` (Spin Version 6.5.2 -- 6 December 2019, gcc 13.3.0, `bash spin/verificar.sh`).
+Fuente: `reports/spin.json` (Spin Version 6.5.2 -- 6 December 2019, gcc 14.2.0, `bash spin/verificar.sh`).
 <!-- /generado -->
 
 El mutante del plazo global es el error que señaló el juez en el debate de diseño (un nodo vivo descartado
