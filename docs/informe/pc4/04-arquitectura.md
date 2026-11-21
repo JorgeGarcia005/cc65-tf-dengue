@@ -7,6 +7,9 @@ entrenamiento, partida en shards para los nodos).
 
 ![Arquitectura de la solución: implementado en PC3 y PC4, planificado para TB2](fig/arquitectura.svg)
 
+Esta es la vista general. El detalle del clúster está en la sección 8: su topología de red (8.1), el
+diagrama de flujo del algoritmo distribuido y el funcionamiento interno de un nodo (8.4).
+
 | Parte | Componente | Patrón de concurrencia | Estado |
 |---|---|---|---|
 | A | Cargador concurrente (`cmd/loader`, `internal/ingest`) | *Worker pool* sobre bloques de bytes alineados a fin de línea, slots por bloque y concatenación en orden | Implementado (PC3) |
