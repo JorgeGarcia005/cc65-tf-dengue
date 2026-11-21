@@ -63,6 +63,9 @@ func generarPC4(s sintesis) {
 			p4.SpinMutantes++
 		}
 	}
+	// En la PC4 el clúster ya no es un diseño: la sección 7.4 apunta a la 8.
+	reemplazarEn(filepath.Join(dir, "07-modelo.md"), "## 7.4 Distribución en el clúster (diseño para PC4)",
+		"## 7.4 Distribución en el clúster (implementada en la sección 8)")
 	escribir(filepath.Join(dir, "01-resumen.md"), plantillaResumenPC4, p4)
 	escribir(filepath.Join(dir, "13-conclusiones.md"), plantillaConclusionesPC4, p4)
 	cambiados, err := regenerarRegiones(dir)
@@ -71,6 +74,25 @@ func generarPC4(s sintesis) {
 	}
 	for _, c := range cambiados {
 		log.Printf("regiones regeneradas en %s", c)
+	}
+}
+
+// reemplazarEn cambia viejo por nuevo en el archivo; falla si viejo no está
+// (así un cambio en la plantilla de la PC3 no pasa inadvertido).
+func reemplazarEn(ruta, viejo, nuevo string) {
+	b, err := os.ReadFile(ruta)
+	if err != nil {
+		log.Fatal(err)
+	}
+	s := string(b)
+	if !strings.Contains(s, viejo) {
+		if strings.Contains(s, nuevo) {
+			return
+		}
+		log.Fatalf("%s: no se encontró %q", ruta, viejo)
+	}
+	if err := os.WriteFile(ruta, []byte(strings.Replace(s, viejo, nuevo, 1)), 0o644); err != nil {
+		log.Fatal(err)
 	}
 }
 

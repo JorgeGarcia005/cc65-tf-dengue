@@ -52,7 +52,7 @@ idéntico bit a bit (la suma en punto flotante no es asociativa).
 El gradiente del pool es **idéntico bit a bit** al secuencial
 sobre los datos reales (verificado por `cmd/entrenar`); `TestEquivalencia` lo exige con 1 a 64 workers.
 
-## 7.4 Distribución en el clúster (diseño para PC4)
+## 7.4 Distribución en el clúster (implementada en la sección 8)
 
 El entrenamiento de 765 297 filas se reparte en **3 shards** de bloques
 contiguos (4096 filas por bloque, 187 bloques):
