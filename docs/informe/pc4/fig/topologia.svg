@@ -44,7 +44,7 @@
   <line x1="180" y1="288" x2="298" y2="232" marker-end="url(#f)"/>
 </g>
 <g font-size="10.5" fill="#0b0b0b">
-  <text x="196" y="118" transform="rotate(32 196 118)">TCP</text>
+  <text x="208" y="108" transform="rotate(32 208 108)">TCP</text>
   <text x="206" y="176" transform="rotate(10 206 176)">TCP</text>
   <text x="200" y="272" transform="rotate(-25 200 272)">TCP</text>
 </g>

@@ -76,8 +76,8 @@
     <rect x="410" y="318" width="34" height="18"/><rect x="448" y="318" width="34" height="18"/>
     <rect x="486" y="318" width="34" height="18"/><rect x="556" y="318" width="34" height="18"/>
   </g>
-  <text x="427" y="331">p₀</text><text x="465" y="331">p₁</text><text x="503" y="331">p₂</text>
-  <text x="538" y="331">…</text><text x="573" y="331">pₖ₋₁</text>
+  <text x="427" y="331">p<tspan dy="2.5" font-size="7.5">0</tspan></text><text x="465" y="331">p<tspan dy="2.5" font-size="7.5">1</tspan></text><text x="503" y="331">p<tspan dy="2.5" font-size="7.5">2</tspan></text>
+  <text x="538" y="331">…</text><text x="573" y="331">p<tspan dy="2.5" font-size="7.5">K−1</tspan></text>
   <text x="500" y="355">un parcial por bloque, sin reducir</text>
 </g>
 <g font-size="11" fill="#0b0b0b">
@@ -116,7 +116,7 @@
 <g font-size="11" fill="#0b0b0b">
   <text x="160" y="52">registro{nombre, versión, W}</text>
   <text x="160" y="114">asignacion · epoca · fin</text>
-  <text x="78" y="300" transform="rotate(-90 78 300)" text-anchor="middle">listo · gradiente · error</text>
+  <text x="62" y="300" transform="rotate(-90 62 300)" text-anchor="middle">listo · gradiente · error</text>
 </g>
 
 <!-- Nota -->

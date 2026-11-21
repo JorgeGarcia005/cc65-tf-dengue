@@ -37,19 +37,20 @@
 <text x="180" y="614" font-size="11" text-anchor="middle">fin(abortado) a los nodos · error</text>
 
 <!-- Fin -->
-<rect x="440" y="148" width="360" height="40" rx="20" fill="#cde2fb" stroke="#2a78d6" stroke-width="2"/>
-<text x="620" y="165" font-size="12" font-weight="bold" text-anchor="middle">Fin</text>
-<text x="620" y="180" font-size="11" text-anchor="middle">fin(completo) a los nodos · modelo y reports/*.json</text>
+<rect x="440" y="140" width="360" height="56" rx="20" fill="#cde2fb" stroke="#2a78d6" stroke-width="2"/>
+<text x="620" y="156" font-size="12" font-weight="bold" text-anchor="middle">Fin: devuelve w y la pérdida</text>
+<text x="620" y="171" font-size="11" text-anchor="middle">modo único: reports/*.json y fin(completo) a los nodos</text>
+<text x="620" y="186" font-size="11" text-anchor="middle">modo API: publica el modelo; los nodos siguen conectados</text>
 
 <!-- Columna derecha: una época en el coordinador -->
 <text x="600" y="222" font-size="11" font-weight="bold" fill="#52514e" text-anchor="middle">Una época en el coordinador (GradienteErr, Algoritmo 1)</text>
-<polygon points="600,280 700,310 600,340 500,310" fill="#fff6dd" stroke="#b07d00" stroke-width="1.5"/>
-<text x="600" y="306" font-size="11.5" text-anchor="middle">¿quedan shards</text>
-<text x="600" y="320" font-size="11.5" text-anchor="middle">pendientes?</text>
+<polygon points="602,280 702,310 602,340 502,310" fill="#fff6dd" stroke="#b07d00" stroke-width="1.5"/>
+<text x="602" y="306" font-size="11.5" text-anchor="middle">¿quedan shards</text>
+<text x="602" y="320" font-size="11.5" text-anchor="middle">pendientes?</text>
 
-<rect x="470" y="360" width="260" height="40" rx="6" fill="#ffffff" stroke="#52514e" stroke-width="1.5"/>
-<text x="600" y="377" font-size="12" font-weight="bold" text-anchor="middle">Esperar</text>
-<text x="600" y="392" font-size="11" text-anchor="middle">el siguiente evento o el plazo más cercano</text>
+<rect x="472" y="360" width="260" height="40" rx="6" fill="#ffffff" stroke="#52514e" stroke-width="1.5"/>
+<text x="602" y="377" font-size="12" font-weight="bold" text-anchor="middle">Esperar</text>
+<text x="602" y="392" font-size="11" text-anchor="middle">el siguiente evento o el plazo más cercano</text>
 
 <g font-size="10.5" fill="#0b0b0b">
   <rect x="405" y="436" width="125" height="78" rx="6" fill="#ffffff" stroke="#2a78d6" stroke-width="1.5"/>
@@ -72,10 +73,10 @@
   <text x="683" y="508">venció (1.ª pasada)</text>
 </g>
 
-<rect x="405" y="540" width="395" height="50" rx="6" fill="#ffffff" stroke="#2a78d6" stroke-width="1.5"/>
+<rect x="405" y="540" width="395" height="56" rx="6" fill="#ffffff" stroke="#2a78d6" stroke-width="1.5"/>
 <text x="602" y="558" font-size="12" font-weight="bold" text-anchor="middle">cubrir() · 2.ª pasada</text>
 <text x="602" y="575" font-size="11" text-anchor="middle">cada shard sin dueño → nodo sano de menor carga</text>
-<text x="602" y="587" font-size="10" fill="#52514e" text-anchor="middle">(empate: menor índice) · envía asignacion si hace falta, y epoca</text>
+<text x="602" y="586" font-size="10" fill="#52514e" text-anchor="middle">(empate: menor índice) · envía asignacion si hace falta, y epoca</text>
 
 <!-- Flechas -->
 <g stroke="#0b0b0b" stroke-width="1.5" fill="none">
@@ -83,19 +84,20 @@
   <line x1="180" y1="118" x2="180" y2="136" marker-end="url(#f)"/>
   <line x1="180" y1="198" x2="180" y2="216" marker-end="url(#f)"/>
   <line x1="260" y1="168" x2="438" y2="168" marker-end="url(#f)"/>
-  <polyline points="305,243 600,243 600,278" marker-end="url(#f)"/>
-  <polyline points="500,310 180,310 180,428" marker-end="url(#f)"/>
-  <line x1="600" y1="340" x2="600" y2="358" marker-end="url(#f)"/>
-  <polyline points="600,400 600,418 467,418 467,434" marker-end="url(#f)"/>
+  <polyline points="305,243 602,243 602,278" marker-end="url(#f)"/>
+  <path d="M502,310 L338,310 A6,6 0 0 0 326,310 L180,310 L180,428" marker-end="url(#f)"/>
+  <line x1="602" y1="340" x2="602" y2="358" marker-end="url(#f)"/>
+  <polyline points="602,400 602,418 467,418 467,434" marker-end="url(#f)"/>
   <line x1="602" y1="418" x2="602" y2="434" marker-end="url(#f)"/>
-  <polyline points="600,418 737,418 737,434" marker-end="url(#f)"/>
+  <polyline points="602,418 737,418 737,434" marker-end="url(#f)"/>
   <line x1="467" y1="514" x2="467" y2="538" marker-end="url(#f)"/>
   <line x1="602" y1="514" x2="602" y2="538" marker-end="url(#f)"/>
   <line x1="737" y1="514" x2="737" y2="538" marker-end="url(#f)"/>
-  <polyline points="800,565 812,565 812,310 702,310" marker-end="url(#f)"/>
+  <polyline points="800,568 812,568 812,310 704,310" marker-end="url(#f)"/>
   <line x1="180" y1="486" x2="180" y2="504" marker-end="url(#f)"/>
   <polyline points="55,528 35,528 35,168 98,168" marker-end="url(#f)"/>
-  <polyline points="405,580 340,580 340,602 307,602" marker-end="url(#f)"/>
+  <polyline points="403,575 332,575"/>
+  <polyline points="305,258 332,258 332,602 307,602" marker-end="url(#f)"/>
 </g>
 <g font-size="11" fill="#0b0b0b" font-weight="bold">
   <text x="270" y="162">no</text>
@@ -105,7 +107,7 @@
 </g>
 <g font-size="10.5" fill="#52514e">
   <text x="190" y="304">todos los parciales llegaron</text>
-  <text x="372" y="572" text-anchor="middle">sin nodo sano</text>
+  <text x="326" y="520" transform="rotate(-90 326 520)" text-anchor="middle">sin nodo sano (cualquier cubrir)</text>
   <text x="27" y="380" transform="rotate(-90 27 380)" text-anchor="middle">siguiente época</text>
   <text x="756" y="302" text-anchor="middle">repetir</text>
 </g>
