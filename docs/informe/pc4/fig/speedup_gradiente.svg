@@ -29,34 +29,17 @@
 <text x="330.0" y="378.0" font-size="12" fill="#52514e" text-anchor="middle">Workers (goroutines)</text>
 <text x="10.0" y="46.0" font-size="12" fill="#52514e" text-anchor="start">Speedup</text>
 <polyline points="60.0,317.6 168.0,295.2 276.0,250.4 384.0,160.8 453.5,60.0" fill="none" stroke="#52514e" stroke-width="1.5" stroke-dasharray="4 3"/>
-<polyline points="60.0,317.6 168.0,307.4 276.0,303.2" fill="none" stroke="#2a78d6" stroke-width="2" stroke-linejoin="round"/>
-<circle cx="60.0" cy="317.6" r="4" fill="#2a78d6" stroke="#ffffff" stroke-width="2"/>
-<circle cx="168.0" cy="307.4" r="4" fill="#2a78d6" stroke="#ffffff" stroke-width="2"/>
-<circle cx="276.0" cy="303.2" r="4" fill="#2a78d6" stroke="#ffffff" stroke-width="2"/>
-<text x="286.0" y="307.2" font-size="11" fill="#0b0b0b" text-anchor="start">máx. 1,64×</text>
-<polyline points="60.0,318.1 168.0,296.9 276.0,256.3 384.0,190.7 492.0,113.7 600.0,94.5" fill="none" stroke="#eb6834" stroke-width="2" stroke-linejoin="round"/>
-<circle cx="60.0" cy="318.1" r="4" fill="#eb6834" stroke="#ffffff" stroke-width="2"/>
-<circle cx="168.0" cy="296.9" r="4" fill="#eb6834" stroke="#ffffff" stroke-width="2"/>
-<circle cx="276.0" cy="256.3" r="4" fill="#eb6834" stroke="#ffffff" stroke-width="2"/>
-<circle cx="384.0" cy="190.7" r="4" fill="#eb6834" stroke="#ffffff" stroke-width="2"/>
-<circle cx="492.0" cy="113.7" r="4" fill="#eb6834" stroke="#ffffff" stroke-width="2"/>
-<circle cx="600.0" cy="94.5" r="4" fill="#eb6834" stroke="#ffffff" stroke-width="2"/>
+<polyline points="60.0,318.1 168.0,296.9 276.0,256.3 384.0,190.7 492.0,113.7 600.0,94.5" fill="none" stroke="#2a78d6" stroke-width="2" stroke-linejoin="round"/>
+<circle cx="60.0" cy="318.1" r="4" fill="#2a78d6" stroke="#ffffff" stroke-width="2"/>
+<circle cx="168.0" cy="296.9" r="4" fill="#2a78d6" stroke="#ffffff" stroke-width="2"/>
+<circle cx="276.0" cy="256.3" r="4" fill="#2a78d6" stroke="#ffffff" stroke-width="2"/>
+<circle cx="384.0" cy="190.7" r="4" fill="#2a78d6" stroke="#ffffff" stroke-width="2"/>
+<circle cx="492.0" cy="113.7" r="4" fill="#2a78d6" stroke="#ffffff" stroke-width="2"/>
+<circle cx="600.0" cy="94.5" r="4" fill="#2a78d6" stroke="#ffffff" stroke-width="2"/>
 <text x="610.0" y="98.5" font-size="11" fill="#0b0b0b" text-anchor="start">máx. 10,96×</text>
-<polyline points="60.0,317.7 168.0,296.7 276.0,255.2 384.0,189.4 492.0,119.1 600.0,113.0" fill="none" stroke="#1baf7a" stroke-width="2" stroke-linejoin="round"/>
-<circle cx="60.0" cy="317.7" r="4" fill="#1baf7a" stroke="#ffffff" stroke-width="2"/>
-<circle cx="168.0" cy="296.7" r="4" fill="#1baf7a" stroke="#ffffff" stroke-width="2"/>
-<circle cx="276.0" cy="255.2" r="4" fill="#1baf7a" stroke="#ffffff" stroke-width="2"/>
-<circle cx="384.0" cy="189.4" r="4" fill="#1baf7a" stroke="#ffffff" stroke-width="2"/>
-<circle cx="492.0" cy="119.1" r="4" fill="#1baf7a" stroke="#ffffff" stroke-width="2"/>
-<circle cx="600.0" cy="113.0" r="4" fill="#1baf7a" stroke="#ffffff" stroke-width="2"/>
-<text x="610.0" y="117.0" font-size="11" fill="#0b0b0b" text-anchor="start">máx. 10,13×</text>
-<rect x="64.0" y="62.0" width="290" height="70.0" fill="#ffffff"/>
+<rect x="64.0" y="62.0" width="290" height="38.0" fill="#ffffff"/>
 <line x1="70.0" y1="74.0" x2="88.0" y2="74.0" stroke="#52514e" stroke-width="1.5" stroke-dasharray="4 3"/>
 <text x="94.0" y="78.0" font-size="11" fill="#0b0b0b" text-anchor="start">Ideal (speedup = workers)</text>
 <line x1="70.0" y1="90.0" x2="88.0" y2="90.0" stroke="#2a78d6" stroke-width="2"/>
-<text x="94.0" y="94.0" font-size="11" fill="#0b0b0b" text-anchor="start">Intel Xeon (CI), 2 hilos, Linux · sintético</text>
-<line x1="70.0" y1="106.0" x2="88.0" y2="106.0" stroke="#eb6834" stroke-width="2"/>
-<text x="94.0" y="110.0" font-size="11" fill="#0b0b0b" text-anchor="start">AMD Ryzen 7 5800X, 16 hilos, Linux · gold real</text>
-<line x1="70.0" y1="122.0" x2="88.0" y2="122.0" stroke="#1baf7a" stroke-width="2"/>
-<text x="94.0" y="126.0" font-size="11" fill="#0b0b0b" text-anchor="start">AMD Ryzen 7 5800X, 16 hilos, Windows · gold real</text>
+<text x="94.0" y="94.0" font-size="11" fill="#0b0b0b" text-anchor="start">AMD Ryzen 7 5800X, 16 hilos, Linux · gold real</text>
 </svg>

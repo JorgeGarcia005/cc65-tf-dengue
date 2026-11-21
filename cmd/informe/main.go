@@ -513,14 +513,22 @@ func main() {
 	escribirFigura("docs/informe/pc3/fig/speedup_loader.svg",
 		figuraSpeedup("Speedup de la limpieza concurrente", curvasLoader(l.Bench)))
 
-	// PC4: las secciones 5–7 y sus figuras son las de la PC3 (mismos datos).
+	// PC4: las secciones 5–7 y sus figuras son las de la PC3 (mismos datos),
+	// salvo que 6.3 y 7.7 muestran solo los benchmarks de maquinaPC4.
 	if _, err := os.Stat("docs/informe/pc4"); err == nil {
-		for _, sec := range []string{"05-datos.md", "06-limpieza.md", "07-modelo.md"} {
-			copiarSeccion("docs/informe/pc3/"+sec, "docs/informe/pc4/"+sec)
-		}
-		for _, f := range []string{"casos_por_ano", "riesgo_departamento", "riesgo_semana", "speedup_gradiente", "speedup_loader"} {
+		copiarSeccion("docs/informe/pc3/05-datos.md", "docs/informe/pc4/05-datos.md")
+		for _, f := range []string{"casos_por_ano", "riesgo_departamento", "riesgo_semana"} {
 			copiarSeccion("docs/informe/pc3/fig/"+f+".svg", "docs/informe/pc4/fig/"+f+".svg")
 		}
+		l4, m4 := l, m
+		l4.Bench = deMaquina(l.Bench, func(b benchLoader) string { return b.Archivo })
+		m4.Bench = deMaquina(m.Bench, func(b benchGrad) string { return b.Archivo })
+		escribir("docs/informe/pc4/06-limpieza.md", plantillaLimpieza, l4)
+		escribir("docs/informe/pc4/07-modelo.md", plantillaModelo, m4)
+		escribirFigura("docs/informe/pc4/fig/speedup_gradiente.svg",
+			figuraSpeedup("Speedup del cálculo del gradiente", curvasGradiente(m4.Bench)))
+		escribirFigura("docs/informe/pc4/fig/speedup_loader.svg",
+			figuraSpeedup("Speedup de la limpieza concurrente", curvasLoader(l4.Bench)))
 		generarPC4(s)
 	}
 	if cs := curvasCluster(); len(cs) > 0 {

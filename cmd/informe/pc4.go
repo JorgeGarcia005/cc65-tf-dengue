@@ -76,6 +76,34 @@ func generarPC4(s sintesis) {
 
 // copiarSeccion copia una sección generada de la PC3 a la PC4 con otro número
 // de sección (las secciones 5–7 conservan su número).
+// maquinaPC4 es la etiqueta de los reports/bench_{loader,gradiente}_*.json que
+// muestran las secciones 6.3 y 7.7 del informe de la PC4: el Ryzen 7 5800X de
+// José en Linux (WSL Debian). La PC3 conserva todas las máquinas.
+const maquinaPC4 = "deez-wsl-debian"
+
+// etiquetaBench devuelve la máquina de un reporte de benchmark:
+// bench_<tipo>_<máquina>[_gold].json → <máquina>.
+func etiquetaBench(archivo string) string {
+	s := strings.TrimSuffix(strings.TrimSuffix(archivo, ".json"), "_gold")
+	_, maquina, _ := strings.Cut(strings.TrimPrefix(s, "bench_"), "_")
+	return maquina
+}
+
+// deMaquina deja solo los benchmarks de maquinaPC4 y falla si no hay ninguno,
+// para que el informe no salga con la sección vacía.
+func deMaquina[T any](bs []T, archivo func(T) string) []T {
+	var out []T
+	for _, b := range bs {
+		if etiquetaBench(archivo(b)) == maquinaPC4 {
+			out = append(out, b)
+		}
+	}
+	if len(out) == 0 {
+		log.Fatalf("no hay benchmarks de %s en reports/", maquinaPC4)
+	}
+	return out
+}
+
 func copiarSeccion(desde, hasta string) {
 	b, err := os.ReadFile(desde)
 	if err != nil {
