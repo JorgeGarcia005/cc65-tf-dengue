@@ -33,7 +33,7 @@
 <circle cx="60.0" cy="284.0" r="4" fill="#2a78d6" stroke="#ffffff" stroke-width="2"/>
 <circle cx="168.0" cy="246.6" r="4" fill="#2a78d6" stroke="#ffffff" stroke-width="2"/>
 <circle cx="276.0" cy="245.8" r="4" fill="#2a78d6" stroke="#ffffff" stroke-width="2"/>
-<text x="286.0" y="249.8" font-size="11" fill="#0b0b0b" text-anchor="start">máx, 1.68×</text>
+<text x="286.0" y="249.8" font-size="11" fill="#0b0b0b" text-anchor="start">máx. 1,68×</text>
 <polyline points="60.0,284.0 168.0,248.8 276.0,206.8 384.0,171.3 492.0,158.3 600.0,158.3" fill="none" stroke="#eb6834" stroke-width="2" stroke-linejoin="round"/>
 <circle cx="60.0" cy="284.0" r="4" fill="#eb6834" stroke="#ffffff" stroke-width="2"/>
 <circle cx="168.0" cy="248.8" r="4" fill="#eb6834" stroke="#ffffff" stroke-width="2"/>
@@ -41,7 +41,7 @@
 <circle cx="384.0" cy="171.3" r="4" fill="#eb6834" stroke="#ffffff" stroke-width="2"/>
 <circle cx="492.0" cy="158.3" r="4" fill="#eb6834" stroke="#ffffff" stroke-width="2"/>
 <circle cx="600.0" cy="158.3" r="4" fill="#eb6834" stroke="#ffffff" stroke-width="2"/>
-<text x="610.0" y="162.3" font-size="11" fill="#0b0b0b" text-anchor="start">máx, 3.25×</text>
+<text x="610.0" y="162.3" font-size="11" fill="#0b0b0b" text-anchor="start">máx. 3,25×</text>
 <polyline points="60.0,284.0 168.0,259.9 276.0,218.3 384.0,174.0 492.0,145.2 600.0,141.6" fill="none" stroke="#1baf7a" stroke-width="2" stroke-linejoin="round"/>
 <circle cx="60.0" cy="284.0" r="4" fill="#1baf7a" stroke="#ffffff" stroke-width="2"/>
 <circle cx="168.0" cy="259.9" r="4" fill="#1baf7a" stroke="#ffffff" stroke-width="2"/>
@@ -49,7 +49,7 @@
 <circle cx="384.0" cy="174.0" r="4" fill="#1baf7a" stroke="#ffffff" stroke-width="2"/>
 <circle cx="492.0" cy="145.2" r="4" fill="#1baf7a" stroke="#ffffff" stroke-width="2"/>
 <circle cx="600.0" cy="141.6" r="4" fill="#1baf7a" stroke="#ffffff" stroke-width="2"/>
-<text x="610.0" y="145.6" font-size="11" fill="#0b0b0b" text-anchor="start">máx, 3.54×</text>
+<text x="610.0" y="145.6" font-size="11" fill="#0b0b0b" text-anchor="start">máx. 3,54×</text>
 <rect x="64.0" y="62.0" width="290" height="70.0" fill="#ffffff"/>
 <line x1="70.0" y1="74.0" x2="88.0" y2="74.0" stroke="#52514e" stroke-width="1.5" stroke-dasharray="4 3"/>
 <text x="94.0" y="78.0" font-size="11" fill="#0b0b0b" text-anchor="start">Ideal (speedup = workers)</text>

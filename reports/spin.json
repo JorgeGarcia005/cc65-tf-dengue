@@ -1,7 +1,7 @@
 {
-  "generado": "2026-11-20T00:47:43-05:00",
+  "generado": "2026-11-21T02:41:56-05:00",
   "spin": "Spin Version 6.5.2 -- 6 December 2019",
-  "gcc": "13.3.0",
+  "gcc": "14.2.0",
   "ok": true,
   "corridas": [
     {"corrida":"modelo N=3 (canal de capacidad N)","defines":"","chequeo":"seguridad","estados":17949492,"errores":0,"esperado":"0","ok":true},
