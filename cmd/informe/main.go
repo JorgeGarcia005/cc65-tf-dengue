@@ -512,6 +512,80 @@ func main() {
 		figuraSpeedup("Speedup del cálculo del gradiente", curvasGradiente(m.Bench)))
 	escribirFigura("docs/informe/pc3/fig/speedup_loader.svg",
 		figuraSpeedup("Speedup de la limpieza concurrente", curvasLoader(l.Bench)))
+
+	// PC4: las secciones 5–7 y sus figuras son las de la PC3 (mismos datos),
+	// salvo que 6.3 y 7.7 muestran solo los benchmarks de maquinaPC4.
+	if _, err := os.Stat("docs/informe/pc4"); err == nil {
+		copiarSeccion("docs/informe/pc3/05-datos.md", "docs/informe/pc4/05-datos.md")
+		for _, f := range []string{"casos_por_ano", "riesgo_departamento", "riesgo_semana"} {
+			copiarSeccion("docs/informe/pc3/fig/"+f+".svg", "docs/informe/pc4/fig/"+f+".svg")
+		}
+		l4, m4 := l, m
+		l4.Bench = deMaquina(l.Bench, func(b benchLoader) string { return b.Archivo })
+		m4.Bench = deMaquina(m.Bench, func(b benchGrad) string { return b.Archivo })
+		escribir("docs/informe/pc4/06-limpieza.md", plantillaLimpieza, l4)
+		escribir("docs/informe/pc4/07-modelo.md", plantillaModelo, m4)
+		escribirFigura("docs/informe/pc4/fig/speedup_gradiente.svg",
+			figuraSpeedup("Speedup del cálculo del gradiente", curvasGradiente(m4.Bench)))
+		escribirFigura("docs/informe/pc4/fig/speedup_loader.svg",
+			figuraSpeedup("Speedup de la limpieza concurrente", curvasLoader(l4.Bench)))
+		generarPC4(s)
+	}
+	if cs := curvasCluster(); len(cs) > 0 {
+		escribirFigura("docs/informe/pc4/fig/speedup_cluster.svg",
+			figuraSpeedupEjes("Speedup del entrenamiento distribuido por número de nodos", cs,
+				"Nodos (1 worker cada uno, TCP)", "Ideal (speedup = nodos)", true))
+	}
+}
+
+// benchCluster es lo que el informe usa de reports/bench_cluster_*.json.
+type benchCluster struct {
+	Fuente  string `json:"fuente"`
+	Maquina struct {
+		CPU    string `json:"cpu"`
+		SO     string `json:"so"`
+		NumCPU int    `json:"num_cpu"`
+	} `json:"maquina"`
+	Mediciones []struct {
+		Nodos   int     `json:"nodos"`
+		Speedup float64 `json:"speedup"`
+	} `json:"mediciones"`
+}
+
+// curvasCluster toma, por máquina, el benchmark del clúster sobre el gold real
+// si existe (si no, el del sintético).
+func curvasCluster() []curvaSpeedup {
+	archivos, _ := filepath.Glob("reports/bench_cluster_*.json")
+	slices.Sort(archivos)
+	elegido := map[string]benchCluster{}
+	var orden []string
+	for _, a := range archivos {
+		var b benchCluster
+		leer(a, &b)
+		k := b.Maquina.CPU + "|" + b.Maquina.SO + "|" + fmt.Sprint(b.Maquina.NumCPU)
+		previo, ok := elegido[k]
+		if !ok {
+			orden = append(orden, k)
+		}
+		if !ok || (strings.HasPrefix(b.Fuente, "gold") && !strings.HasPrefix(previo.Fuente, "gold")) {
+			elegido[k] = b
+		}
+	}
+	var cs []curvaSpeedup
+	for _, k := range orden {
+		b := elegido[k]
+		datos := "sintético"
+		if strings.HasPrefix(b.Fuente, "gold") {
+			datos = "gold real"
+		}
+		c := curvaSpeedup{Nombre: nombreMaquina(b.Maquina.CPU, b.Maquina.NumCPU, b.Maquina.SO) + " · " + datos}
+		for _, m := range b.Mediciones {
+			c.Workers = append(c.Workers, m.Nodos)
+			c.Speedup = append(c.Speedup, m.Speedup)
+		}
+		cs = append(cs, c)
+	}
+	return cs
 }
 
 // curvasGradiente toma, por máquina y sistema operativo, la medición sobre el

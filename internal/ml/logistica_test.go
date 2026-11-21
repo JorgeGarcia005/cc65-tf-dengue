@@ -1,8 +1,10 @@
 package ml
 
 import (
+	"errors"
 	"math"
 	"math/rand/v2"
+	"strings"
 	"testing"
 )
 
@@ -211,5 +213,39 @@ func TestConfigInvalidaEntraEnPanico(t *testing.T) {
 			}()
 			NuevoSecuencial(ds, cfg)
 		}()
+	}
+}
+
+type calculadorQueFalla struct {
+	Calculador
+	fallaEn, llamadas int
+}
+
+func (c *calculadorQueFalla) GradienteErr(w []float64) (Gradiente, error) {
+	if c.llamadas == c.fallaEn {
+		return Gradiente{}, errors.New("sin nodos")
+	}
+	c.llamadas++
+	return c.Gradiente(w), nil
+}
+
+// EntrenarFalible se detiene en la época que falla y devuelve lo avanzado, que
+// coincide con entrenar ese mismo número de épocas sin fallos.
+func TestEntrenarFalibleSeDetieneEnLaEpocaQueFalla(t *testing.T) {
+	ds, _ := Sintetico(2_000, 4, 3)
+	cfg := Config{TamBloque: 128, Lambda: 1e-3}
+	sec := NuevoSecuencial(ds, cfg)
+	res, err := EntrenarFalible(&calculadorQueFalla{Calculador: sec, fallaEn: 3}, ds.D, Entrenamiento{Epocas: 8, Tasa: 0.5})
+	if err == nil || !strings.Contains(err.Error(), "época 3") {
+		t.Fatalf("err = %v, quiere un error que nombre la época 3", err)
+	}
+	ref := Entrenar(sec, ds.D, Entrenamiento{Epocas: 3, Tasa: 0.5})
+	if len(res.Historia) != 3 {
+		t.Fatalf("historia con %d épocas, quiere 3", len(res.Historia))
+	}
+	for j := range ref.W {
+		if math.Float64bits(ref.W[j]) != math.Float64bits(res.W[j]) {
+			t.Fatalf("w[%d] difiere", j)
+		}
 	}
 }

@@ -1,0 +1,18 @@
+{
+  "generado": "2026-11-21T02:41:56-05:00",
+  "spin": "Spin Version 6.5.2 -- 6 December 2019",
+  "gcc": "14.2.0",
+  "ok": true,
+  "corridas": [
+    {"corrida":"modelo N=3 (canal de capacidad N)","defines":"","chequeo":"seguridad","estados":17949492,"errores":0,"esperado":"0","ok":true},
+    {"corrida":"modelo N=3 (canal de capacidad N)","defines":"","chequeo":"termina","estados":17814453,"errores":0,"esperado":"0","ok":true},
+    {"corrida":"modelo N=3, canal de capacidad 1","defines":"-DCAP=1","chequeo":"seguridad","estados":26025432,"errores":0,"esperado":"0","ok":true},
+    {"corrida":"modelo N=3, canal de capacidad 1","defines":"-DCAP=1","chequeo":"termina","estados":25707167,"errores":0,"esperado":"0","ok":true},
+    {"corrida":"modelo N=4, 1 época, sin sospechas","defines":"-DN=4 -DEPOCAS=1 -DSOSPECHAS=0","chequeo":"seguridad","estados":4923889,"errores":0,"esperado":"0","ok":true},
+    {"corrida":"modelo N=4, 1 época, sin sospechas","defines":"-DN=4 -DEPOCAS=1 -DSOSPECHAS=0","chequeo":"termina","estados":4920817,"errores":0,"esperado":"0","ok":true},
+    {"corrida":"mutante: envío bloqueante (capacidad 1)","defines":"-DMUT_BLOQUEANTE -DCAP=1","chequeo":"seguridad","estados":239247,"errores":1,"esperado":">0","ok":true},
+    {"corrida":"mutante: reasigna solo el shard vencido","defines":"-DMUT_UNA_PASADA","chequeo":"seguridad","estados":36613,"errores":1,"esperado":">0","ok":true},
+    {"corrida":"mutante: plazo global","defines":"-DMUT_PLAZO_GLOBAL","chequeo":"seguridad","estados":70,"errores":1,"esperado":">0","ok":true},
+    {"corrida":"mutante: primer nodo sano (N=4)","defines":"-DMUT_PRIMER_SANO -DN=4 -DEPOCAS=1 -DSOSPECHAS=0","chequeo":"seguridad","estados":5269,"errores":1,"esperado":">0","ok":true}
+  ]
+}

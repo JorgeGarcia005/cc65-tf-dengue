@@ -1,0 +1,47 @@
+{
+  "generado": "2026-11-21T02:20:23-05:00",
+  "maquina": "deez",
+  "so": "windows/amd64",
+  "cpus_cliente": 16,
+  "url": "http://localhost:18080",
+  "version_modelo": "e69395b36d2f",
+  "concurrencia": 16,
+  "semilla": 1795245623731022400,
+  "limite_p95_ms": 100,
+  "corridas": [
+    {
+      "nombre": "fria",
+      "descripcion": "consultas distintas: calcula el modelo y guarda en la caché",
+      "peticiones": 2000,
+      "errores": 0,
+      "cache_hits": 0,
+      "cache_misses": 2000,
+      "seg_total": 0.1820457,
+      "rps": 10986.252353117925,
+      "media_ms": 1.425737700000007,
+      "p50_ms": 1.3903,
+      "p95_ms": 2.2109,
+      "p99_ms": 2.7839,
+      "max_ms": 5.4944,
+      "con_cache": true,
+      "cumple_limite": true
+    },
+    {
+      "nombre": "caliente",
+      "descripcion": "las mismas consultas, ya en la caché",
+      "peticiones": 2000,
+      "errores": 0,
+      "cache_hits": 2000,
+      "cache_misses": 0,
+      "seg_total": 0.1540555,
+      "rps": 12982.334288616763,
+      "media_ms": 1.1960832499999998,
+      "p50_ms": 1.0977,
+      "p95_ms": 2.0611,
+      "p99_ms": 2.3429,
+      "max_ms": 3.0168,
+      "con_cache": true,
+      "cumple_limite": true
+    }
+  ]
+}

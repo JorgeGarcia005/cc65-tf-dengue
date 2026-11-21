@@ -157,9 +157,22 @@ func (p *paquete) bytes() ([]byte, error) {
 }
 
 var (
-	reParrafo   = regexp.MustCompile(`(?s)<w:p[ >].*?</w:p>`)
-	reTextoRun  = regexp.MustCompile(`(?s)<w:t(?: [^>]*)?>([^<]*)</w:t>`)
-	reSectPr    = regexp.MustCompile(`(?s)<w:sectPr>.*?</w:sectPr>`)
+	reParrafo  = regexp.MustCompile(`(?s)<w:p[ >].*?</w:p>`)
+	reTextoRun = regexp.MustCompile(`(?s)<w:t(?: [^>]*)?>([^<]*)</w:t>`)
+	// La carátula oficial trae <w:sectPr w:rsidR="…"> (#24): se aceptan atributos.
+	reSectPr = regexp.MustCompile(`(?s)<w:sectPr(?:\s[^>]*)?>.*?</w:sectPr>`)
+	// nsDocumento son los prefijos que usa el contenido generado (texto,
+	// ecuaciones, enlaces y figuras). asvg ya se declara en su elemento, pero
+	// se declara también en la raíz por si se edita a mano.
+	nsDocumento = [][2]string{
+		{"w", "http://schemas.openxmlformats.org/wordprocessingml/2006/main"},
+		{"m", "http://schemas.openxmlformats.org/officeDocument/2006/math"},
+		{"r", "http://schemas.openxmlformats.org/officeDocument/2006/relationships"},
+		{"wp", "http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing"},
+		{"a", "http://schemas.openxmlformats.org/drawingml/2006/main"},
+		{"pic", "http://schemas.openxmlformats.org/drawingml/2006/picture"},
+		{"asvg", "http://schemas.microsoft.com/office/drawing/2016/SVG/main"},
+	}
 	reEmbed     = regexp.MustCompile(`r:(?:embed|id)="([^"]+)"`)
 	reRelacion  = regexp.MustCompile(`<Relationship [^>]*/>`)
 	reAtributo  = func(nombre string) *regexp.Regexp { return regexp.MustCompile(nombre + `="([^"]*)"`) }
@@ -213,8 +226,12 @@ func armar(p *paquete, dir string, secciones []string, cambios reemplazos) ([]by
 		d.Convertir(s)
 	}
 
+	cabecera, err := declararNamespaces(doc[:ini+len("<w:body>")])
+	if err != nil {
+		return nil, nil, err
+	}
 	var b strings.Builder
-	b.WriteString(doc[:ini+len("<w:body>")])
+	b.WriteString(cabecera)
 	b.WriteString(caratula)
 	b.WriteString(indice())
 	b.WriteString(d.b.String())
@@ -388,12 +405,79 @@ func pngTransparente() []byte {
 func xmlBienFormado(s string) error {
 	dec := xml.NewDecoder(strings.NewReader(s))
 	for {
-		if _, err := dec.Token(); err == io.EOF {
+		tok, err := dec.Token()
+		if err == io.EOF {
 			return nil
 		} else if err != nil {
 			return err
 		}
+		// encoding/xml no falla con un prefijo sin declarar: lo deja en
+		// Name.Space tal cual, en vez del URI. LibreOffice sí falla («unbound
+		// prefix», #24). Un URI siempre tiene ':'; un prefijo nunca.
+		if e, ok := tok.(xml.StartElement); ok {
+			if sinDeclarar(e.Name) {
+				return fmt.Errorf("línea %d: prefijo %q sin declarar en <%s:%s>", lineaDe(dec, s), e.Name.Space, e.Name.Space, e.Name.Local)
+			}
+			for _, a := range e.Attr {
+				if a.Name.Space != "xmlns" && sinDeclarar(a.Name) {
+					return fmt.Errorf("línea %d: prefijo %q sin declarar en el atributo %s:%s", lineaDe(dec, s), a.Name.Space, a.Name.Space, a.Name.Local)
+				}
+			}
+		}
 	}
+}
+
+func sinDeclarar(n xml.Name) bool { return n.Space != "" && !strings.Contains(n.Space, ":") }
+
+func lineaDe(dec *xml.Decoder, s string) int {
+	return strings.Count(s[:min(int(dec.InputOffset()), len(s))], "\n") + 1
+}
+
+// declararNamespaces agrega a <w:document> las declaraciones de nsDocumento
+// que la plantilla no trae (#24). cabecera va del inicio hasta <w:body>.
+//
+// La etiqueta se lee con encoding/xml, no buscando el primer '>': un '>' entre
+// comillas es válido en un atributo (PR-47 H1). Si la plantilla ya declara uno
+// de esos prefijos con otro URI, el contenido generado cambiaría de
+// vocabulario sin que nada falle: se rechaza con el conflicto (PR-47 H3).
+func declararNamespaces(cabecera string) (string, error) {
+	dec := xml.NewDecoder(strings.NewReader(cabecera))
+	var raiz xml.StartElement
+	for {
+		tok, err := dec.RawToken()
+		if err != nil {
+			return "", fmt.Errorf("plantilla sin <w:document>: %w", err)
+		}
+		if e, ok := tok.(xml.StartElement); ok {
+			raiz = e
+			break
+		}
+	}
+	if raiz.Name.Space != "w" || raiz.Name.Local != "document" {
+		return "", fmt.Errorf("la raíz de la plantilla es <%s:%s>, se esperaba <w:document>", raiz.Name.Space, raiz.Name.Local)
+	}
+	declarados := map[string]string{}
+	for _, a := range raiz.Attr {
+		if a.Name.Space == "xmlns" {
+			declarados[a.Name.Local] = a.Value
+		}
+	}
+	var faltan strings.Builder
+	for _, ns := range nsDocumento {
+		uri, ok := declarados[ns[0]]
+		switch {
+		case !ok:
+			fmt.Fprintf(&faltan, ` xmlns:%s="%s"`, ns[0], ns[1])
+		case uri != ns[1]:
+			return "", fmt.Errorf("la plantilla declara xmlns:%s=%q y el contenido generado lo usa para %q", ns[0], uri, ns[1])
+		}
+	}
+	// InputOffset queda justo después del '>' (o "/>") que cierra la etiqueta.
+	fin := int(dec.InputOffset()) - 1
+	if strings.HasSuffix(cabecera[:fin], "/") {
+		fin--
+	}
+	return cabecera[:fin] + faltan.String() + cabecera[fin:], nil
 }
 
 // leerCodigos devuelve los códigos de alumno del flag (separados por coma) o,

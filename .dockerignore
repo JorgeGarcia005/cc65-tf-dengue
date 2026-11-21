@@ -1,0 +1,16 @@
+# El contexto de la imagen es la raíz del repo: solo hace falta el código Go.
+.git
+.github
+.agents
+.claude
+data
+reports
+docs/*
+!docs/api
+spin
+web
+entregables
+graphify-out
+deploy/.env
+**/*.test
+**/*.out

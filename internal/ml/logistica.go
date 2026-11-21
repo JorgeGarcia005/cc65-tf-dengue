@@ -98,10 +98,11 @@ func LimitesBloque(k, n, tam int) (ini, fin int) {
 }
 
 // Parcial son las sumas sin normalizar de un bloque (o de varios ya reducidos).
+// Las etiquetas JSON son su forma en el mensaje `gradiente` del clúster (ADR-0005).
 type Parcial struct {
-	Grad    []float64 // D+1 sumas: Σ sᵢ(σ(zᵢ)−yᵢ)xᵢⱼ y, al final, la del sesgo
-	Perdida float64   // Σ sᵢ·ℓ(zᵢ, yᵢ)
-	Peso    float64   // Σ sᵢ
+	Grad    []float64 `json:"grad"`    // D+1 sumas: Σ sᵢ(σ(zᵢ)−yᵢ)xᵢⱼ y, al final, la del sesgo
+	Perdida float64   `json:"perdida"` // Σ sᵢ·ℓ(zᵢ, yᵢ)
+	Peso    float64   `json:"peso"`    // Σ sᵢ
 }
 
 // NuevoParcial reserva un Parcial para d features.
@@ -123,7 +124,8 @@ type Gradiente struct {
 }
 
 // Calculador calcula el gradiente completo para unos pesos dados.
-// Lo implementan la versión secuencial, el worker pool y el coordinador del clúster.
+// Lo implementan la versión secuencial y el worker pool. El coordinador del
+// clúster implementa CalculadorFalible, porque puede quedarse sin nodos.
 type Calculador interface {
 	Gradiente(w []float64) Gradiente
 }
@@ -274,20 +276,52 @@ type Resultado struct {
 	Historia []float64
 }
 
+// CalculadorFalible es un Calculador cuyo cálculo puede fallar. Lo implementa
+// el coordinador del clúster: si se queda sin nodos sanos, la época no tiene
+// gradiente y el entrenamiento debe detenerse con un error.
+type CalculadorFalible interface {
+	GradienteErr(w []float64) (Gradiente, error)
+}
+
+type infalible struct{ Calculador }
+
+func (c infalible) GradienteErr(w []float64) (Gradiente, error) { return c.Gradiente(w), nil }
+
 // Entrenar ejecuta descenso de gradiente full-batch desde w = 0.
 // No sabe si el gradiente se calcula en uno, varios hilos o varios nodos.
 func Entrenar(calc Calculador, d int, e Entrenamiento) Resultado {
+	r, _ := EntrenarFalible(infalible{calc}, d, e)
+	return r
+}
+
+// EntrenarFalible es Entrenar para un calculador que puede fallar. Es el único
+// bucle de entrenamiento del proyecto: secuencial, worker pool y clúster
+// actualizan los pesos con exactamente las mismas operaciones. Si una época
+// falla devuelve el error junto con los pesos y la historia hasta la época
+// anterior.
+func EntrenarFalible(calc CalculadorFalible, d int, e Entrenamiento) (Resultado, error) {
 	w := make([]float64, d+1)
 	historia := make([]float64, 0, e.Epocas)
-	for range e.Epocas {
-		g := calc.Gradiente(w)
+	for epoca := range e.Epocas {
+		g, err := calc.GradienteErr(w)
+		if err != nil {
+			return Resultado{W: w, Historia: historia}, fmt.Errorf("ml: época %d: %w", epoca, err)
+		}
 		historia = append(historia, g.Perdida)
 		for j := range w {
 			w[j] -= e.Tasa * g.Grad[j]
 		}
 	}
-	return Resultado{W: w, Historia: historia}
+	return Resultado{W: w, Historia: historia}, nil
 }
 
 // Probabilidad es σ(xᵀw + b) para una fila.
 func Probabilidad(w, x []float64) float64 { return Sigmoide(Puntaje(w, x)) }
+
+// Calibrar corrige una probabilidad entrenada con pesos por clase: resta al
+// logit el ajuste ln(PesoPos/PesoNeg) para volver a la escala de la tasa real.
+// La usan el reporte de cmd/entrenar y la API de predicción.
+func Calibrar(p, ajuste float64) float64 {
+	p = math.Min(math.Max(p, 1e-15), 1-1e-15)
+	return Sigmoide(math.Log(p/(1-p)) - ajuste)
+}

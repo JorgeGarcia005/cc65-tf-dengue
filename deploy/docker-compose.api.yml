@@ -1,0 +1,18 @@
+# Modo servicio: publica la API del coordinador en el anfitrión y la conecta a
+# MongoDB (persistencia) y Redis (caché). Se usa junto con docker-compose.yml y
+# la variable API (ver ese archivo):
+#   API=:8080 docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.api.yml up --build
+# El modo de entrenamiento único no publica puertos ni usa las bases, así que
+# no choca con otro servicio que ya use el 8080 en la máquina.
+services:
+  coordinator:
+    ports:
+      - "${PUERTO_API:-8080}:8080"
+    environment:
+      MONGO_URI: mongodb://mongo:27017
+      REDIS_ADDR: redis:6379
+    depends_on:
+      mongo:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
