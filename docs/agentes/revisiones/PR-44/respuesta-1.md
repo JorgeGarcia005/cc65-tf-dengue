@@ -1,7 +1,7 @@
 # Respuesta a la ronda 1 — PR #44 (informe PC4)
 
 Veredicto: `ronda-1.md` (rama `revision/PR-44` @ `debec7c`). Los cinco hallazgos se aceptan; todos se
-corrigen en un mismo commit sobre `feature/33-informe-pc4` (hash al final). La rama se actualizó antes
+corrigen en un mismo commit sobre `feature/33-informe-pc4` (`8c45cb4`). La rama se actualizó antes
 con `develop` (#46, #47) para que el texto describa el Dockerfile vigente.
 
 | # | Severidad | Decisión | Corrección |
@@ -14,3 +14,5 @@ con `develop` (#46, #47) para que el texto describa el Dockerfile vigente.
 
 Verificación: `go run ./cmd/informe` sin diferencias en las regiones generadas y
 `go test ./cmd/informe ./cmd/word` en verde.
+
+Commit de corrección: `8c45cb4`.
