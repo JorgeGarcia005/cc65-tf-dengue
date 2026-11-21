@@ -10,13 +10,13 @@ dato disponible**:
   con cualquier número de nodos y también cuando un nodo cae a mitad del entrenamiento y su shard se
   reasigna. La distribución no cambia la respuesta, solo el tiempo.
 - **La distribución escala porque la época está dominada por el cómputo.** Con 5
-  nodos de un núcleo, la época baja de 92,0 ms a
-  22,5 ms (speedup de 4,09×,
-  eficiencia de 81,84 %). La red y la espera en la barrera ocupan
-  3,42 % de la época con 5 nodos y los bytes por época
+  nodos de un núcleo, la época baja de 72,3 ms a
+  15,1 ms (speedup de 4,80×,
+  eficiencia de 96,08 %). La red y la espera en la barrera ocupan
+  3,37 % de la época con 5 nodos y los bytes por época
   casi no cambian con los nodos: la fracción serial de Karp-Flatt se mantiene baja y no crece.
 - **La API cumple el requisito de latencia con margen.** Con 16 clientes concurrentes contra el
-  clúster en Docker, el p95 fue de 3,51 ms sin caché y de 2,88 ms
+  clúster en Docker, el p95 fue de 2,21 ms sin caché y de 2,06 ms
   desde Redis, sin errores: el cálculo de una predicción es un producto punto de pocas decenas de
   variables, y la caché recorta el resto.
 - **El modelo responde dónde, cuándo y en quién reforzar, con límites.** Con un AUC de 0,6221,

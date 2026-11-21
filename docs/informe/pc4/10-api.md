@@ -43,10 +43,10 @@ caliente no salió entera de Redis.
 <!-- generado:api -->
 | Corrida | Peticiones | Errores | HIT / MISS | Peticiones por segundo | p50 (ms) | p95 (ms) | p99 (ms) | Máx. (ms) | p95 < 100 ms |
 |---|---:|---:|---|---:|---:|---:|---:|---:|---|
-| Caché fría (consultas distintas) | 2 000 | 0 | 0 / 2 000 | 7 128 | 2,13 | 3,51 | 4,28 | 6,04 | sí |
-| Caché caliente (en Redis) | 2 000 | 0 | 2 000 / 0 | 8 809 | 1,68 | 2,88 | 3,45 | 4,88 | sí |
+| Caché fría (consultas distintas) | 2 000 | 0 | 0 / 2 000 | 10 986 | 1,39 | 2,21 | 2,78 | 5,49 | sí |
+| Caché caliente (en Redis) | 2 000 | 0 | 2 000 / 0 | 12 982 | 1,10 | 2,06 | 2,34 | 3,02 | sí |
 
-Fuente: `reports/bench_api_jorge-pc.json` (`go run ./cmd/benchapi -exigir-p95 100ms` contra el clúster en Docker Compose con el gold real, 16 clientes concurrentes, Windows; modelo `5cb7a4120775`).
+Fuente: `reports/bench_api_deez.json` (`go run ./cmd/benchapi -exigir-p95 100ms` contra el clúster en Docker Compose con el gold real, 16 clientes concurrentes, Windows; modelo `e69395b36d2f`).
 <!-- /generado -->
 
 La colección `docs/api/cc65-tf.postman_collection.json` tiene una petición por ruta con tests de estado y de

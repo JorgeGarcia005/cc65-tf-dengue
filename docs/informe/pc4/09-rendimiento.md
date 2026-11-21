@@ -29,13 +29,13 @@ Si e crece con p, el límite es la comunicación y no el cómputo.
 <!-- generado:cluster -->
 | Nodos | ms por época (IC 95 %) | Speedup | Eficiencia | Karp-Flatt | Cómputo del nodo más lento (ms) | Red y espera (ms) | JSON del shard más pesado (ms) | KB por época |
 |---:|---|---:|---:|---:|---:|---:|---:|---:|
-| 1 | 92,00 (91,32–93,42) | 1,00 | 1,00 | — | 89,60 | 2,62 | 2,340 | 112,5 |
-| 2 | 49,64 (49,23–51,13) | 1,85 | 0,93 | 0,079 | 48,49 | 1,45 | 1,200 | 113,3 |
-| 3 | 35,38 (34,72–35,86) | 2,60 | 0,87 | 0,077 | 34,30 | 1,00 | 0,753 | 114,1 |
-| 4 | 27,58 (27,53–27,63) | 3,34 | 0,83 | 0,066 | 26,69 | 0,89 | 0,572 | 114,8 |
-| 5 | 22,48 (22,35–23,97) | 4,09 | 0,82 | 0,055 | 22,11 | 0,78 | 0,473 | 115,6 |
+| 1 | 72,35 (70,91–76,89) | 1,00 | 1,00 | — | 70,85 | 2,36 | 1,961 | 112,5 |
+| 2 | 40,79 (40,57–41,04) | 1,77 | 0,89 | 0,128 | 39,50 | 1,29 | 1,055 | 113,3 |
+| 3 | 25,67 (23,94–28,30) | 2,82 | 0,94 | 0,032 | 24,97 | 0,90 | 0,646 | 114,1 |
+| 4 | 18,49 (18,22–18,79) | 3,91 | 0,98 | 0,007 | 17,84 | 0,64 | 0,502 | 114,8 |
+| 5 | 15,06 (14,89–15,70) | 4,80 | 0,96 | 0,010 | 14,69 | 0,51 | 0,418 | 115,6 |
 
-Fuente: `reports/bench_cluster_jorge-pc_gold.json` (AMD Ryzen 5 3600 6-Core Processor, 12 hilos, Windows, go1.27.3; 5 repeticiones de 30 épocas por número de nodos, 1 worker por nodo; cada repetición verificada bit a bit contra el secuencial).
+Fuente: `reports/bench_cluster_deez_gold.json` (AMD Ryzen 7 5800X 8-Core Processor, 16 hilos, Windows, go1.26.10; 5 repeticiones de 30 épocas por número de nodos, 1 worker por nodo; cada repetición verificada bit a bit contra el secuencial).
 <!-- /generado -->
 
 ![Speedup del entrenamiento distribuido por número de nodos](fig/speedup_cluster.svg)

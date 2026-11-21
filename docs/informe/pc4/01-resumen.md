@@ -16,10 +16,10 @@ documentada con OpenAPI/Swagger, y guarda modelos, entrenamientos y predicciones
 **Redis** como caché de predicciones.
 
 Con los datos reales, el clúster reproduce bit a bit el entrenamiento secuencial también cuando cae un
-nodo, y escala de 92,0 ms a
-22,5 ms por época con
-5 nodos (speedup de 4,09×). La API
-responde con un p95 de 3,51 ms con la caché fría y de 2,88 ms con
+nodo, y escala de 72,3 ms a
+15,1 ms por época con
+5 nodos (speedup de 4,80×). La API
+responde con un p95 de 2,21 ms con la caché fría y de 2,06 ms con
 la caché caliente, muy por debajo de los 100 ms exigidos. El protocolo del clúster se verificó con Spin
 (17 949 492 estados sin errores y 4 mutantes que sí fallan). El modelo (AUC de
 0,6221) señala el mayor riesgo en Madre de Dios (20,65 %), Loreto (19,78 %) y San Martín (19,17 %), en el grupo
