@@ -603,7 +603,7 @@
           "script": {
             "type": "text/javascript",
             "exec": [
-              "const demo = pm.collectionVariables.get(\"demo\") === \"true\";",
+              "const demo = pm.variables.get(\"demo\") === \"true\";",
               "pm.test(demo ? \"HTTP 202 en modo demo\" : \"HTTP 404 sin -demo\", function () { pm.response.to.have.status(demo ? 202 : 404); });",
               "pm.test(\"responde en menos de 100 ms\", function () { pm.expect(pm.response.responseTime).to.be.below(100); });"
             ]
