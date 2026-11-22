@@ -579,9 +579,22 @@ a {
 .inicio-columnas,
 .prediccion-columnas {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  /* min(…, 100%): en un móvil la columna no pide más que el ancho disponible (PR-85 H2). */
+  grid-template-columns: repeat(auto-fit, minmax(min(420px, 100%), 1fr));
   gap: 24px;
   align-items: start;
+}
+/* Los hijos de un grid no se encogen por debajo de su contenido sin min-width: 0;
+   las tablas anchas se desplazan dentro de su tarjeta en vez de estirar la página. */
+.vista-inicio > *,
+.vista-prediccion > *,
+.inicio-columnas > *,
+.prediccion-columnas > * {
+  min-width: 0;
+}
+.tabla-envoltura {
+  overflow-x: auto;
+  max-width: 100%;
 }
 .barras {
   list-style: none;
@@ -623,6 +636,11 @@ a {
 }
 .formulario input,
 .formulario select {
+  /* Un input tiene ancho intrínseco (~20 caracteres): sin esto, en un móvil
+     estira el formulario más allá de la pantalla. */
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
   font: inherit;
   padding: 8px 10px;
   border: 2px solid var(--tinta);
@@ -637,6 +655,13 @@ a {
   border: 0;
   padding: 0;
   margin: 0;
+}
+.formulario fieldset[aria-invalid='true'] {
+  border: 2px solid var(--error);
+  padding: 6px 10px;
+}
+.formulario input[type='radio'] {
+  width: auto;
 }
 .formulario .opcion {
   display: inline-flex;
