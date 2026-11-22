@@ -39,6 +39,7 @@ const (
 // Códigos de cierre (RFC 6455 §7.4.1).
 const (
 	CierreNormal      = 1000
+	CierreSaliendo    = 1001 // el servidor se apaga (SIGTERM)
 	CierreProtocolo   = 1002
 	CierreNoSoportado = 1003
 	CierreMuyGrande   = 1009
@@ -89,14 +90,19 @@ func Aceptar(w http.ResponseWriter, r *http.Request, origenPermitido func(string
 	if origenPermitido != nil && !origenPermitido(r.Header.Get("Origin")) {
 		return falla(http.StatusForbidden, "origen no permitido")
 	}
-	hj, ok := w.(http.Hijacker)
-	if !ok {
+	// NewResponseController llega al Hijacker aunque un middleware envuelva w.
+	nc, rw, err := http.NewResponseController(w).Hijack()
+	if err != nil {
 		return falla(http.StatusInternalServerError, "el servidor no permite tomar la conexión")
 	}
-	nc, rw, err := hj.Hijack()
-	if err != nil {
-		return nil, fmt.Errorf("ws: hijack: %w", err)
+	// Hijack no quita los plazos del http.Server (ReadTimeout/WriteTimeout de
+	// api.NuevoHTTP): sin esto la conexión moriría a los 15–30 s. Desde aquí cada
+	// escritura pone su propio plazo y la lectura espera lo que haga falta.
+	if err := nc.SetDeadline(time.Time{}); err != nil {
+		nc.Close()
+		return nil, fmt.Errorf("ws: quitar plazos: %w", err)
 	}
+	// rw.Reader puede traer bytes del cliente ya leídos por el servidor HTTP.
 	c := &Conn{nc: nc, r: rw.Reader, plazo: 10 * time.Second}
 	resp := "HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n" +
 		"Sec-WebSocket-Accept: " + ClaveAceptacion(clave) + "\r\n\r\n"

@@ -290,3 +290,79 @@ func TestHubConcurrenteSinFugas(t *testing.T) {
 		t.Fatalf("fuga de goroutines: %d antes, %d después", antes, n)
 	}
 }
+
+func TestPlazosHeredadosNoCortanLaConexion(t *testing.T) {
+	srv := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		c, err := Aceptar(w, r, nil)
+		if err != nil {
+			return
+		}
+		for {
+			m, err := c.LeerMensaje()
+			if err != nil {
+				return
+			}
+			_ = c.EscribirTexto(m)
+		}
+	}))
+	// Como api.NuevoHTTP, pero cortos. Regresión: la conexión tomada debe vivir
+	// más que ReadTimeout y WriteTimeout. (En Go 1.24 Hijack ya suelta el plazo de
+	// lectura y Conn pone uno propio en cada escritura; Aceptar además llama a
+	// SetDeadline(time.Time{}) para no depender de ese detalle interno.)
+	srv.Config.ReadTimeout, srv.Config.WriteTimeout = 150*time.Millisecond, 150*time.Millisecond
+	srv.Start()
+	defer srv.Close()
+	c, resp := conectar(t, srv.URL, map[string]string{"Sec-WebSocket-Extensions": "permessage-deflate; client_max_window_bits"})
+	if resp.StatusCode != 101 || resp.Header.Get("Sec-WebSocket-Extensions") != "" {
+		t.Fatalf("la extensión ofrecida debe declinarse omitiendo la cabecera: %d %q",
+			resp.StatusCode, resp.Header.Get("Sec-WebSocket-Extensions"))
+	}
+	time.Sleep(400 * time.Millisecond)
+	c.enviar(t, 0x81, []byte("sigo"), true, 4)
+	if op, p := c.recibir(t); op != opTexto || string(p) != "sigo" {
+		t.Fatalf("tras 400 ms la conexión debía seguir viva: %#x %q", op, p)
+	}
+}
+
+func TestHubCerrarManda1001(t *testing.T) {
+	antes := runtime.NumGoroutine()
+	h := NuevoHub(4)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		c, err := Aceptar(w, r, nil)
+		if err != nil {
+			return
+		}
+		h.Servir(c, h.Suscribir(), time.Hour)
+	}))
+	clientes := make([]*cliente, 3)
+	for i := range clientes {
+		clientes[i], _ = conectar(t, srv.URL, nil)
+	}
+	for h.Clientes() < 3 {
+		time.Sleep(time.Millisecond)
+	}
+	h.Cerrar()
+	for _, c := range clientes {
+		op, p := c.recibir(t)
+		if op != opCierre || binary.BigEndian.Uint16(p) != CierreSaliendo {
+			t.Fatalf("al cerrar el hub se esperaba el cierre 1001: %#x %v", op, p)
+		}
+		c.nc.Close()
+	}
+	if h.Clientes() != 0 {
+		t.Fatalf("quedan %d clientes", h.Clientes())
+	}
+	select {
+	case <-h.Suscribir().Hecho():
+	default:
+		t.Fatal("un cliente que se suscribe después de Cerrar debe nacer dado de baja")
+	}
+	srv.Close()
+	plazo := time.Now().Add(2 * time.Second)
+	for runtime.NumGoroutine() > antes && time.Now().Before(plazo) {
+		time.Sleep(10 * time.Millisecond)
+	}
+	if n := runtime.NumGoroutine(); n > antes {
+		t.Fatalf("fuga de goroutines tras Cerrar: %d antes, %d después", antes, n)
+	}
+}

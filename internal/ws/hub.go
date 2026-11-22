@@ -13,6 +13,7 @@ import (
 type Hub struct {
 	mu          sync.Mutex
 	clientes    map[*Cliente]struct{}
+	cerrado     bool
 	bufer       int
 	descartados atomic.Uint64
 }
@@ -21,6 +22,7 @@ type Hub struct {
 type Cliente struct {
 	ch          chan []byte
 	hecho       chan struct{}
+	saliendo    atomic.Bool // la baja vino de Hub.Cerrar: se cierra con 1001
 	baja        sync.Once
 	descartados atomic.Uint64
 }
@@ -31,12 +33,37 @@ func NuevoHub(bufer int) *Hub {
 }
 
 // Suscribir agrega un cliente.
+// Si el hub ya se cerró, el cliente nace dado de baja.
 func (h *Hub) Suscribir() *Cliente {
 	c := &Cliente{ch: make(chan []byte, h.bufer), hecho: make(chan struct{})}
 	h.mu.Lock()
-	h.clientes[c] = struct{}{}
+	cerrado := h.cerrado
+	if !cerrado {
+		h.clientes[c] = struct{}{}
+	}
 	h.mu.Unlock()
+	if cerrado {
+		c.saliendo.Store(true)
+		c.baja.Do(func() { close(c.hecho) })
+	}
 	return c
+}
+
+// Cerrar da de baja a todos los clientes y no acepta nuevos. http.Server.Shutdown
+// no cierra las conexiones tomadas con Hijack: la API llama a esto al recibir
+// SIGTERM y cada escritora manda el cierre 1001 (going away) y cierra el socket.
+func (h *Hub) Cerrar() {
+	h.mu.Lock()
+	h.cerrado = true
+	todos := make([]*Cliente, 0, len(h.clientes))
+	for c := range h.clientes {
+		todos = append(todos, c)
+	}
+	h.mu.Unlock()
+	for _, c := range todos {
+		c.saliendo.Store(true)
+		h.Desuscribir(c)
+	}
 }
 
 // Desuscribir quita al cliente. Es idempotente. El canal no se cierra (un
@@ -92,7 +119,13 @@ func (h *Hub) Servir(conn *Conn, c *Cliente, intervaloPing time.Duration) {
 	escritor := make(chan struct{})
 	go func() {
 		defer close(escritor)
-		defer conn.Cerrar(CierreNormal, "")
+		defer func() {
+			if c.saliendo.Load() {
+				conn.Cerrar(CierreSaliendo, "el servidor se apaga")
+			} else {
+				conn.Cerrar(CierreNormal, "")
+			}
+		}()
 		ping := time.NewTicker(intervaloPing)
 		defer ping.Stop()
 		for {
