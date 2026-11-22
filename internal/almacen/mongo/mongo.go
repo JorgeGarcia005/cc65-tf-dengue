@@ -1,6 +1,7 @@
-// Package mongo implementa almacen.Almacen sobre MongoDB con el driver
-// oficial (ADR-0003, ADR-0006). Colecciones: modelos, entrenamientos,
-// predicciones; los índices se crean al conectar (operación idempotente).
+// Package mongo implementa almacen.Almacen y almacen.Usuarios sobre MongoDB con
+// el driver oficial (ADR-0003, ADR-0006, ADR-0007). Colecciones: modelos,
+// entrenamientos, predicciones y usuarios; los índices se crean al conectar
+// (operación idempotente).
 package mongo
 
 import (
@@ -29,9 +30,13 @@ const DiasRegistroPredicciones = 90
 type Almacen struct {
 	cliente                         *drv.Client
 	modelos, entrenamientos, predic *drv.Collection
+	usuarios                        *drv.Collection
 }
 
-var _ almacen.Almacen = (*Almacen)(nil)
+var (
+	_ almacen.Almacen  = (*Almacen)(nil)
+	_ almacen.Usuarios = (*Almacen)(nil)
+)
 
 // Conectar abre el cliente, comprueba la conexión y crea los índices.
 func Conectar(ctx context.Context, uri, base string) (*Almacen, error) {
@@ -46,7 +51,8 @@ func Conectar(ctx context.Context, uri, base string) (*Almacen, error) {
 	}
 	db := cli.Database(base)
 	a := &Almacen{cliente: cli, modelos: db.Collection("modelos"),
-		entrenamientos: db.Collection("entrenamientos"), predic: db.Collection("predicciones")}
+		entrenamientos: db.Collection("entrenamientos"), predic: db.Collection("predicciones"),
+		usuarios: db.Collection("usuarios")}
 	if err := a.crearIndices(ctx); err != nil {
 		_ = cli.Disconnect(context.Background())
 		return nil, err
@@ -149,6 +155,29 @@ func (a *Almacen) RegistrarPrediccion(ctx context.Context, r almacen.RegistroPre
 		return fmt.Errorf("mongo: predicciones: %w", err)
 	}
 	return nil
+}
+
+// GuardarUsuario crea o reemplaza la cuenta. El _id (correo normalizado) es
+// único por definición en MongoDB: no hace falta otro índice.
+func (a *Almacen) GuardarUsuario(ctx context.Context, u almacen.Usuario) error {
+	u, err := almacen.PrepararUsuario(u)
+	if err != nil {
+		return err
+	}
+	return reemplazar(ctx, a.usuarios, u.Correo, u)
+}
+
+// Usuario busca por correo normalizado.
+func (a *Almacen) Usuario(ctx context.Context, correo string) (almacen.Usuario, bool, error) {
+	var u almacen.Usuario
+	err := a.usuarios.FindOne(ctx, bson.D{{Key: "_id", Value: almacen.NormalizarCorreo(correo)}}).Decode(&u)
+	if errors.Is(err, drv.ErrNoDocuments) {
+		return almacen.Usuario{}, false, nil
+	}
+	if err != nil {
+		return almacen.Usuario{}, false, fmt.Errorf("mongo: usuarios: %w", err)
+	}
+	return u, true, nil
 }
 
 // Cerrar desconecta el cliente.

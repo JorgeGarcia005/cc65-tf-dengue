@@ -17,6 +17,7 @@ type Memoria struct {
 	predicciones   []RegistroPrediccion // búfer circular
 	siguiente      int                  // posición donde se escribe el próximo
 	limite         int
+	usuarios       map[string]Usuario // por correo normalizado
 }
 
 // MaxPrediccionesMemoria es cuántas predicciones retiene NuevaMemoria.

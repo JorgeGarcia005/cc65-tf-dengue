@@ -13,6 +13,18 @@
     {
       "key": "entrenamiento_id",
       "value": ""
+    },
+    {
+      "key": "correo",
+      "value": "analista@vigia.pe"
+    },
+    {
+      "key": "clave",
+      "value": ""
+    },
+    {
+      "key": "token",
+      "value": ""
     }
   ],
   "item": [
@@ -44,6 +56,49 @@
           ]
         },
         "description": ""
+      }
+    },
+    {
+      "name": "Login (JWT)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+              "// PBKDF2 con 600 000 iteraciones tarda a propósito (ADR-0007): el límite de 100 ms es de la predicción.",
+              "pm.test(\"responde en menos de 1 s\", function () { pm.expect(pm.response.responseTime).to.be.below(1000); });",
+              "pm.test(\"devuelve token, rol y vencimiento\", function () { const r = pm.response.json(); pm.expect(r.token).to.be.a(\"string\"); pm.expect([\"admin\", \"analista\"]).to.include(r.rol); pm.collectionVariables.set(\"token\", r.token); });"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\"correo\": \"{{correo}}\", \"clave\": \"{{clave}}\"}"
+        },
+        "url": {
+          "raw": "{{base_url}}/api/v1/auth/login",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "auth",
+            "login"
+          ]
+        },
+        "description": "Define las variables correo y clave de la colección con una cuenta de deploy/.env. Guarda el token en la variable token para las rutas protegidas (#61)."
       }
     },
     {
