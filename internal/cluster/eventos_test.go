@@ -382,3 +382,60 @@ func TestCortarNodoEnLaEpocaKReasignaYEsIgualAlSecuencial(t *testing.T) {
 		t.Fatalf("cortar un nodo inexistente: %v", err)
 	}
 }
+
+// PR-84 H1: con el bucle en reposo, cortar dos veces el mismo nodo (seguido o
+// en paralelo) corta una sola vez y las demás devuelven ErrNodoDesconocido,
+// nunca el net.ErrClosed del socket; y un nodo que se reconecta con el mismo
+// nombre es el que se corta después.
+func TestCortarNodoEnReposoConcurrenteYTrasReconectar(t *testing.T) {
+	e := nuevoEscenario(t, 2, 1)
+	cp := nuevoCluster(t, e, 10*time.Second)
+	cp.registrar(2, func() {
+		cp.nodoReal("nodo-1", 1)
+		cp.esperarRegistrados(1)
+		cp.nodoReal("nodo-2", 1)
+	})
+	if err := cp.c.CortarNodo("nodo-1"); err != nil {
+		t.Fatalf("primer corte: %v", err)
+	}
+	if err := cp.c.CortarNodo("nodo-1"); !errors.Is(err, ErrNodoDesconocido) {
+		t.Fatalf("segundo corte en reposo: %v, quería ErrNodoDesconocido", err)
+	}
+
+	var wg sync.WaitGroup
+	errs := make([]error, 8)
+	for i := range errs {
+		wg.Add(1)
+		go func() { defer wg.Done(); errs[i] = cp.c.CortarNodo("nodo-2") }()
+	}
+	wg.Wait()
+	cortes := 0
+	for _, err := range errs {
+		switch {
+		case err == nil:
+			cortes++
+		case !errors.Is(err, ErrNodoDesconocido):
+			t.Fatalf("corte concurrente: %v", err)
+		}
+	}
+	if cortes != 1 {
+		t.Fatalf("%d cortes concurrentes con éxito, quería 1", cortes)
+	}
+
+	// El nodo vuelve con el mismo nombre (como cmd/node con -reconexiones).
+	cp.nodoReal("nodo-1", 1)
+	limite := time.Now().Add(5 * time.Second)
+	for {
+		err := cp.c.CortarNodo("nodo-1")
+		if err == nil {
+			break
+		}
+		if !errors.Is(err, ErrNodoDesconocido) {
+			t.Fatalf("cortar al nodo reconectado: %v", err)
+		}
+		if time.Now().After(limite) {
+			t.Fatal("el nodo reconectado nunca quedó disponible para cortar")
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+}

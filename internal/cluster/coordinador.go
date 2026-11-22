@@ -248,20 +248,34 @@ var ErrNodoDesconocido = errors.New("cluster: no hay un nodo conectado con ese n
 // en curso, el descarte se procesa al empezar el siguiente. Se puede llamar
 // desde cualquier goroutine, también desde el Observador.
 func (c *Coordinador) CortarNodo(nombre string) error {
-	c.muConns.Lock()
-	var pc *protocolo.Conexion
-	for id, n := range c.nombres {
-		if n == nombre {
-			pc = c.conns[id]
-			break
+	for {
+		// El nombre se retira bajo el mutex antes de cerrar: dos cortes
+		// concurrentes (o seguidos, con el bucle en reposo) no eligen la misma
+		// conexión, y un nodo que se reconecta con el mismo nombre (otro id) es
+		// el siguiente en cortarse (PR-84 H1). conns conserva la entrada hasta
+		// que la lectora termine, para Tiempos y Cerrar.
+		c.muConns.Lock()
+		var pc *protocolo.Conexion
+		for id, n := range c.nombres {
+			if n == nombre {
+				pc = c.conns[id]
+				delete(c.nombres, id)
+				break
+			}
 		}
+		c.muConns.Unlock()
+		if pc == nil {
+			return fmt.Errorf("%w: %q", ErrNodoDesconocido, nombre)
+		}
+		err := pc.Cerrar()
+		if errors.Is(err, net.ErrClosed) {
+			continue // ya la cerró el bucle (descarte) o Cerrar: probar con otra del mismo nombre
+		}
+		if err == nil {
+			c.op.Log("demo: se corta la conexión del nodo %s", nombre)
+		}
+		return err
 	}
-	c.muConns.Unlock()
-	if pc == nil {
-		return fmt.Errorf("%w: %q", ErrNodoDesconocido, nombre)
-	}
-	c.op.Log("demo: se corta la conexión del nodo %s", nombre)
-	return pc.Cerrar()
 }
 
 // entregar pasa un evento al bucle de épocas; devuelve false si el coordinador
