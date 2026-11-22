@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"os"
 	"slices"
-	"strings"
 	"testing"
 )
 
@@ -76,20 +75,15 @@ func TestEvaluacionYRiesgoConElReporteReal(t *testing.T) {
 	}
 }
 
-// PR-82 H3: el handler no borra el Vary: Origin que pone el middleware de CORS.
+// PR-82 H3: el handler no borra el Vary: Origin que pone el middleware de CORS
+// (el real desde #61, PR-83 H4).
 func TestEvaluacionConservaVaryDeCORS(t *testing.T) {
 	real, _ := os.ReadFile("../../reports/evaluacion.json")
-	cors := func(h http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			w.Header().Add("Vary", "Origin")
-			h.ServeHTTP(w, r)
-		})
-	}
-	_, ts := servidorDePrueba(t, Opciones{Evaluacion: real, Middleware: []Middleware{cors}})
-	res, _ := pedirDoc(t, ts.URL+"/api/v1/riesgo", nil)
-	vary := strings.Join(res.Header.Values("Vary"), ",")
-	if !strings.Contains(vary, "Origin") || !strings.Contains(vary, "Accept-Encoding") {
-		t.Fatalf("Vary = %q, quería Origin y Accept-Encoding", vary)
+	_, ts := servidorDePrueba(t, Opciones{Evaluacion: real, OrigenesCORS: []string{"http://localhost:8081"}})
+	res, _ := pedirDoc(t, ts.URL+"/api/v1/riesgo", map[string]string{"Origin": "http://localhost:8081"})
+	vary := res.Header.Values("Vary")
+	if !slices.Contains(vary, "Origin") || !slices.Contains(vary, "Accept-Encoding") || res.Header.Get("Access-Control-Allow-Origin") == "" {
+		t.Fatalf("Vary = %v, ACAO %q; quería Origin y Accept-Encoding", vary, res.Header.Get("Access-Control-Allow-Origin"))
 	}
 }
 

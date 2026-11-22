@@ -215,6 +215,7 @@ paths:
         "401": {$ref: "#/components/responses/NoAutenticado"}
         "403": {$ref: "#/components/responses/SinPermiso"}
         "409": {$ref: "#/components/responses/Error"}
+        "413": {$ref: "#/components/responses/Error"}
         "503": {$ref: "#/components/responses/Error"}
   /api/v1/entrenamientos/{id}:
     get:

@@ -247,12 +247,14 @@ func TestCORSRespuestasDecoradas(t *testing.T) {
 }
 
 func TestCORSOrigenesValidos(t *testing.T) {
-	got, err := ParsearOrigenes(" http://localhost:8081, HTTPS://Vigia.PE ,,http://localhost:8081")
-	if err != nil || !slices.Equal(got, []string{"http://localhost:8081", "https://vigia.pe"}) {
+	got, err := ParsearOrigenes(" http://localhost:8081, HTTPS://Vigia.PE ,,http://localhost:8081, http://[::1]:5173, http://192.168.1.20:8081")
+	if err != nil || !slices.Equal(got, []string{"http://localhost:8081", "https://vigia.pe", "http://[::1]:5173", "http://192.168.1.20:8081"}) {
 		t.Fatalf("ParsearOrigenes = %v, %v", got, err)
 	}
 	for _, malo := range []string{"*", "null", "localhost:8081", "ftp://a.pe", "http://a.pe/", "http://a.pe/ruta",
-		"http://a.pe?x=1", "http://u:p@a.pe", "http://*", "http://"} {
+		"http://a.pe?x=1", "http://u:p@a.pe", "http://*", "http://",
+		// PR-83 H3: host vacío, comodín parcial, puerto vacío o fuera de rango.
+		"http://:8081", "http://*.example.com", "http://localhost:", "http://localhost:99999", "http://localhost:0", "http://localhost:08081"} {
 		if _, err := ParsearOrigenes(malo); err == nil {
 			t.Errorf("ParsearOrigenes(%q) debía fallar", malo)
 		}
@@ -316,6 +318,24 @@ func TestCabecerasLimiteDeCuerpo413(t *testing.T) {
 			t.Errorf("POST %s con %d bytes: %d %s, quería 413", c.ruta, len(grande), res.StatusCode, b)
 		}
 	}
+	// PR-83 H2: un cuerpo grande que no es JSON también da 413 (no 400), y la
+	// respuesta conserva CORS para la SPA.
+	noJSON := strings.Repeat("a", 70_000)
+	for _, c := range []struct{ ruta, token string }{
+		{"/api/v1/predicciones", a.analista},
+		{"/api/v1/entrenamientos", a.admin},
+		{"/api/v1/auth/login", ""},
+	} {
+		res, b := a.pedir(t, "POST", c.ruta, c.token, noJSON, map[string]string{"Origin": origenSPA})
+		if res.StatusCode != http.StatusRequestEntityTooLarge || res.Header.Get("Access-Control-Allow-Origin") != origenSPA {
+			t.Errorf("POST %s con 70 000 bytes no JSON: %d %s (ACAO %q), quería 413 con CORS",
+				c.ruta, res.StatusCode, b, res.Header.Get("Access-Control-Allow-Origin"))
+		}
+	}
+	// Y la autorización va antes que el límite: sin token, 401 aunque el cuerpo sea grande.
+	if res, _ := a.pedir(t, "POST", "/api/v1/predicciones", "", noJSON, nil); res.StatusCode != http.StatusUnauthorized {
+		t.Errorf("POST grande sin token: %d, quería 401", res.StatusCode)
+	}
 	a.pedir(t, "POST", "/leer", "", grande, nil)
 	var mb *http.MaxBytesError
 	if !errors.As(errLeido, &mb) || mb.Limit != MaxCuerpo {
@@ -342,9 +362,9 @@ func seguridadDelOpenAPI(t *testing.T) (map[string]*operacionOpenAPI, bool) {
 	defer f.Close()
 	ops := map[string]*operacionOpenAPI{}
 	var (
-		seccion, ruta, esquemaSeg string
-		op                        *operacionOpenAPI
-		enRespuestas, esquemaOK   bool
+		seccion, subseccion, ruta, esquemaSeg string
+		op                                    *operacionOpenAPI
+		enRespuestas, tipoHTTP, esBearer      bool
 	)
 	sangria := func(l string) int { return len(l) - len(strings.TrimLeft(l, " ")) }
 	sc := bufio.NewScanner(f)
@@ -372,13 +392,19 @@ func seguridadDelOpenAPI(t *testing.T) (map[string]*operacionOpenAPI, bool) {
 			}
 		case seccion == "paths" && op != nil && n == 8 && enRespuestas && strings.HasPrefix(s, `"`):
 			op.codigos = append(op.codigos, s[1:4])
-		case seccion == "components" && n == 4:
+		case seccion == "components" && n == 2:
+			subseccion, esquemaSeg = strings.TrimSuffix(s, ":"), ""
+		case seccion == "components" && subseccion == "securitySchemes" && n == 4:
 			esquemaSeg = strings.TrimSuffix(s, ":")
-		case seccion == "components" && n == 6 && esquemaSeg == "bearerAuth" && s == "scheme: bearer":
-			esquemaOK = true
+		case seccion == "components" && subseccion == "securitySchemes" && n == 6 && esquemaSeg == "bearerAuth":
+			tipoHTTP = tipoHTTP || s == "type: http"
+			esBearer = esBearer || s == "scheme: bearer"
 		}
 	}
-	return ops, esquemaOK
+	if err := sc.Err(); err != nil {
+		t.Fatal(err)
+	}
+	return ops, tipoHTTP && esBearer
 }
 
 func TestOpenAPISeguridad(t *testing.T) {
@@ -401,6 +427,9 @@ func TestOpenAPISeguridad(t *testing.T) {
 			t.Errorf("%s es pública y el OpenAPI le exige bearerAuth", clave)
 		case r.Modo == Bearer && !op.bearer:
 			t.Errorf("%s exige token y el OpenAPI no declara security: bearerAuth", clave)
+		}
+		if r.Metodo == "POST" && !slices.Contains(op.codigos, "413") {
+			t.Errorf("%s es POST y no declara 413 (límite de %d bytes)", clave, MaxCuerpo)
 		}
 		if r.Modo != Bearer {
 			continue
@@ -481,5 +510,69 @@ func TestMatrizRolesCoincideConADR(t *testing.T) {
 		if !slices.Contains(pendientesADR, clave) {
 			t.Errorf("ADR-0007 tiene %s y Rutas() no", clave)
 		}
+	}
+}
+
+// PR-83 H3: mutar los roles que devuelve Rutas() no cambia la política.
+func TestMatrizRolesRutasDevuelveCopias(t *testing.T) {
+	for _, r := range Rutas() {
+		for i := range r.Roles {
+			r.Roles[i] = "intruso"
+		}
+	}
+	for _, r := range Rutas() {
+		for _, rol := range r.Roles {
+			if !rol.Valido() {
+				t.Fatalf("%s %s: el rol %q se filtró de una llamada anterior", r.Metodo, r.Ruta, rol)
+			}
+		}
+	}
+	if !slices.Equal(rolesTodos, []auth.Rol{auth.RolAdmin, auth.RolAnalista}) || !slices.Equal(soloAdmin, []auth.Rol{auth.RolAdmin}) {
+		t.Fatalf("roles globales alterados: %v %v", rolesTodos, soloAdmin)
+	}
+}
+
+// PR-83 H4: un 429 del login y un 500 por pánico también llevan CORS, para que
+// la SPA lea Retry-After y el mensaje de error.
+func TestCORSEnRespuestas429Y500(t *testing.T) {
+	panico := func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.URL.Path == "/panico" {
+				panic("prueba")
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
+	a := nuevaApiSegura(t, Opciones{Middleware: []Middleware{panico}, Log: func(string, ...any) {}})
+	var res *http.Response
+	for range 6 {
+		res, _ = a.pedir(t, "POST", "/api/v1/auth/login", "", `{"correo":"ana@diresa.pe","clave":"clave-equivocada"}`, map[string]string{"Origin": origenSPA})
+	}
+	if res.StatusCode != http.StatusTooManyRequests || res.Header.Get("Retry-After") == "" ||
+		res.Header.Get("Access-Control-Allow-Origin") != origenSPA ||
+		!strings.Contains(res.Header.Get("Access-Control-Expose-Headers"), "Retry-After") {
+		t.Fatalf("429: %d %v", res.StatusCode, res.Header)
+	}
+	res, b := a.pedir(t, "GET", "/panico", "", "", map[string]string{"Origin": origenSPA})
+	if res.StatusCode != http.StatusInternalServerError || res.Header.Get("Access-Control-Allow-Origin") != origenSPA ||
+		res.Header.Get("X-Content-Type-Options") != "nosniff" {
+		t.Fatalf("500 por pánico: %d %s %v", res.StatusCode, b, res.Header)
+	}
+}
+
+// PR-83 H4: Cache-Control de cada tipo de respuesta (ADR-0007, fila Cabeceras).
+func TestCabecerasCacheSegunRuta(t *testing.T) {
+	a := nuevaApiSegura(t, Opciones{})
+	for _, ruta := range []string{"/api/v1/riesgo", "/api/v1/evaluacion"} {
+		res, _ := a.pedir(t, "GET", ruta, a.analista, "", map[string]string{"Origin": origenSPA, "Accept-Encoding": "gzip"})
+		vary := res.Header.Values("Vary")
+		if res.StatusCode != 200 || res.Header.Get("Cache-Control") != "private, no-cache" ||
+			!slices.Contains(vary, "Origin") || !slices.Contains(vary, "Accept-Encoding") {
+			t.Errorf("GET %s: %d Cache-Control %q Vary %v", ruta, res.StatusCode, res.Header.Get("Cache-Control"), vary)
+		}
+	}
+	res, _ := a.pedir(t, "POST", "/api/v1/auth/login", "", cuerposMatriz["POST /api/v1/auth/login"], nil)
+	if res.StatusCode != 200 || res.Header.Get("Cache-Control") != "no-store" {
+		t.Errorf("login: %d Cache-Control %q, quería no-store", res.StatusCode, res.Header.Get("Cache-Control"))
 	}
 }

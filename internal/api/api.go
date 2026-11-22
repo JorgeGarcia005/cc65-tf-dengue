@@ -23,6 +23,7 @@
 package api
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -31,6 +32,7 @@ import (
 	"log"
 	"net/http"
 	"runtime/debug"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -290,7 +292,8 @@ func Rutas() []Ruta {
 		return Ruta{Metodo: metodo, Ruta: ruta, Documentar: doc, Modo: Publica, manejar: h}
 	}
 	con := func(metodo, ruta string, roles []auth.Rol, h func(*Servidor, http.ResponseWriter, *http.Request)) Ruta {
-		return Ruta{Metodo: metodo, Ruta: ruta, Documentar: true, Modo: Bearer, Roles: roles, manejar: h}
+		// Copia: quien recibe Rutas() no puede cambiar la política (PR-83 H3).
+		return Ruta{Metodo: metodo, Ruta: ruta, Documentar: true, Modo: Bearer, Roles: slices.Clone(roles), manejar: h}
 	}
 	return []Ruta{
 		pub("GET", "/healthz", true, (*Servidor).salud),
@@ -570,24 +573,30 @@ func responderError(w http.ResponseWriter, codigo int, msg string) {
 // español. Devuelve false si ya respondió. Si opcional, un cuerpo vacío es
 // válido y deja v como estaba (con sus valores por defecto).
 func leerJSON(w http.ResponseWriter, r *http.Request, v any, opcional bool) bool {
-	dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, MaxCuerpo))
+	// Se lee el cuerpo entero (≤ MaxCuerpo) antes de decodificar: así un cuerpo
+	// grande da 413 aunque no sea JSON. Si se decodificara en flujo, el error de
+	// sintaxis del primer byte saldría antes de llegar al límite (PR-83 H2).
+	cuerpo, err := io.ReadAll(http.MaxBytesReader(w, r.Body, MaxCuerpo))
+	if err != nil {
+		var grande *http.MaxBytesError
+		if errors.As(err, &grande) {
+			responderError(w, http.StatusRequestEntityTooLarge, fmt.Sprintf("el cuerpo supera %d bytes", MaxCuerpo))
+		} else {
+			responderError(w, http.StatusBadRequest, "no se pudo leer el cuerpo")
+		}
+		return false
+	}
+	dec := json.NewDecoder(bytes.NewReader(cuerpo))
 	dec.DisallowUnknownFields()
-	err := dec.Decode(v)
+	err = dec.Decode(v)
 	if err == nil {
 		// Decoder.More solo mira dentro de un arreglo u objeto: para exigir que
 		// el documento terminó hay que intentar leer otro valor y obtener EOF.
 		var resto json.RawMessage
-		if errResto := dec.Decode(&resto); errResto != io.EOF {
-			var grande *http.MaxBytesError
-			if errors.As(errResto, &grande) {
-				err = errResto
-			} else {
-				responderError(w, http.StatusBadRequest, "hay contenido después del objeto JSON")
-				return false
-			}
+		if dec.Decode(&resto) != io.EOF {
+			responderError(w, http.StatusBadRequest, "hay contenido después del objeto JSON")
+			return false
 		}
-	}
-	if err == nil {
 		return true
 	}
 	if errors.Is(err, io.EOF) && opcional {
@@ -596,13 +605,9 @@ func leerJSON(w http.ResponseWriter, r *http.Request, v any, opcional bool) bool
 	var (
 		sintaxis *json.SyntaxError
 		tipo     *json.UnmarshalTypeError
-		grande   *http.MaxBytesError
 		msg      string
-		codigo   = http.StatusBadRequest
 	)
 	switch {
-	case errors.As(err, &grande):
-		codigo, msg = http.StatusRequestEntityTooLarge, fmt.Sprintf("el cuerpo supera %d bytes", MaxCuerpo)
 	case errors.As(err, &sintaxis), errors.Is(err, io.ErrUnexpectedEOF):
 		msg = "JSON mal formado"
 	case errors.Is(err, io.EOF):
@@ -614,7 +619,7 @@ func leerJSON(w http.ResponseWriter, r *http.Request, v any, opcional bool) bool
 	default:
 		msg = "cuerpo inválido: " + err.Error()
 	}
-	responderError(w, codigo, msg)
+	responderError(w, http.StatusBadRequest, msg)
 	return false
 }
 

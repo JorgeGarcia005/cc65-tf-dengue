@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/url"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/JorgeGarcia005/cc65-tf-dengue/internal/auth"
@@ -70,12 +71,23 @@ func normalizarOrigen(o string) (string, error) {
 		return "", fmt.Errorf("origen CORS %q: %w", o, err)
 	case u.Scheme != "http" && u.Scheme != "https":
 		return "", fmt.Errorf("origen CORS %q: el esquema debe ser http o https", o)
-	case u.Host == "" || u.Hostname() == "*" || u.User != nil:
-		return "", fmt.Errorf("origen CORS %q: falta el host o no es válido", o)
+	case u.Hostname() == "" || strings.Contains(u.Hostname(), "*") || u.User != nil:
+		return "", fmt.Errorf("origen CORS %q: falta el host, lleva comodín o credenciales", o)
+	case strings.HasSuffix(u.Host, ":") || !puertoValido(u.Port()):
+		return "", fmt.Errorf("origen CORS %q: el puerto debe estar entre 1 y 65535", o)
 	case u.Path != "" || u.RawQuery != "" || u.Fragment != "" || strings.HasSuffix(o, "?") || strings.HasSuffix(o, "#"):
 		return "", fmt.Errorf("origen CORS %q: un origen no lleva ruta, consulta ni fragmento", o)
 	}
 	return strings.ToLower(u.Scheme + "://" + u.Host), nil
+}
+
+// puertoValido acepta un puerto vacío (el del esquema) o un número de 1 a 65535.
+func puertoValido(p string) bool {
+	if p == "" {
+		return true
+	}
+	n, err := strconv.Atoi(p)
+	return err == nil && n >= 1 && n <= 65535 && p[0] != '0'
 }
 
 // cabecerasSeguridad pone las cabeceras comunes a toda respuesta y limita el
