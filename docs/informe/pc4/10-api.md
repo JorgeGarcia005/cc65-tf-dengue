@@ -42,18 +42,25 @@ tumbar el proceso:
 <!-- generado:fuente:internal/api/api.go#(*Servidor).Handler -->
 ```go
 // internal/api/api.go
-// Handler arma el mux con los middlewares.
+// Handler arma la cadena de ADR-0007, de afuera hacia adentro: recuperar →
+// cabeceras de seguridad → CORS → Opciones.Middleware → mux → autenticación
+// y rol de la ruta → handler. La autenticación va por ruta (después de que el
+// mux la elige) para que cada una aplique su propio modo.
 func (s *Servidor) Handler() http.Handler {
 	mux := http.NewServeMux()
 	for _, r := range Rutas() {
 		manejar := r.manejar
-		mux.HandleFunc(r.Metodo+" "+r.Ruta, func(w http.ResponseWriter, req *http.Request) { manejar(s, w, req) })
+		var h http.Handler = http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) { manejar(s, w, req) })
+		if r.Modo == Bearer {
+			h = s.proteger(h, r.Roles)
+		}
+		mux.Handle(r.Metodo+" "+r.Ruta, h)
 	}
 	var h http.Handler = mux
 	for i := len(s.op.Middleware) - 1; i >= 0; i-- {
 		h = s.op.Middleware[i](h)
 	}
-	return s.recuperar(h)
+	return s.recuperar(cabecerasSeguridad(s.cors(h)))
 }
 ```
 <!-- /generado -->
