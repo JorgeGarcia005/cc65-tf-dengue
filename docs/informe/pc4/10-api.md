@@ -107,7 +107,9 @@ func (s *Servidor) predecir(w http.ResponseWriter, r *http.Request) {
 			s.op.Log("api: caché no disponible al leer: %v", err)
 		}
 		var p Prediccion
-		if ok && json.Unmarshal(b, &p) == nil {
+		// Una entrada guardada antes de #67 no trae contribuciones: se recalcula
+		// y se reemplaza, en vez de servirla incompleta.
+		if ok && json.Unmarshal(b, &p) == nil && len(p.Contribuciones) > 0 {
 			w.Header().Set("X-Cache", "HIT")
 			responderBytes(w, http.StatusOK, b)
 			s.registrar(registroDe(cn, p, true, inicio))
@@ -147,11 +149,20 @@ func (m *Modelo) prediccion(r ingest.Registro) Prediccion {
 	x := make([]float64, d)
 	m.Esquema.Llenar(r, x)
 	z := m.Pesos[d]
+	contribuciones := make([]Contribucion, d)
 	for j, v := range x {
-		z += m.Pesos[j] * v
+		// La conversión explícita redondea el producto (la especificación de Go
+		// permite fusionar x*y+z en una FMA): así Σ aportes reproduce z exacto.
+		aporte := float64(m.Pesos[j] * v)
+		if aporte == 0 {
+			aporte = 0 // -0 (peso negativo × 0) no cambia z, pero ensucia el JSON (PR-85 H3)
+		}
+		z += aporte
+		contribuciones[j] = Contribucion{Variable: m.Esquema.Nombres[j], Valor: v, Peso: m.Pesos[j], Aporte: aporte}
 	}
 	p := ml.Sigmoide(z)
 	pr := Prediccion{
+		Logit: z, Sesgo: m.Pesos[d], Contribuciones: contribuciones,
 		Riesgo:                ml.Calibrar(p, m.AjustePrior),
 		ProbabilidadPonderada: p,
 		Umbral:                m.Umbral,

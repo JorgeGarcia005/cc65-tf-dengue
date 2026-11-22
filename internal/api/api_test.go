@@ -20,6 +20,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/JorgeGarcia005/cc65-tf-dengue/internal/almacen"
 	"github.com/JorgeGarcia005/cc65-tf-dengue/internal/auth"
 	"github.com/JorgeGarcia005/cc65-tf-dengue/internal/cluster"
 	"github.com/JorgeGarcia005/cc65-tf-dengue/internal/features"
@@ -157,7 +158,7 @@ func TestPrediccionCoincideConElModeloEntrenado(t *testing.T) {
 	m.Esquema.Llenar(ingest.Registro{Departamento: "LORETO", Ano: 2024, Semana: 10, EdadAnios: 34, Sexo: 'M'}, x)
 	z := m.Pesos[len(x)]
 	for j := range x {
-		z += m.Pesos[j] * x[j]
+		z += float64(m.Pesos[j] * x[j]) // sin FMA, como el modelo (PR-85 H3)
 	}
 	p := ml.Sigmoide(z)
 	if got := v["probabilidad_ponderada"].(float64); math.Float64bits(got) != math.Float64bits(p) {
@@ -679,4 +680,63 @@ func TestCerrarEsperaAlEntrenamientoEnCursoYNoAdmiteOtro(t *testing.T) {
 		t.Fatalf("POST tras Cerrar = %d, se esperaba 503", cod)
 	}
 	s.Cerrar() // idempotente
+}
+
+// #67: las contribuciones explican la predicción: sesgo + Σ aportes (en ese
+// orden) es el logit bit a bit, y σ(logit) es la probabilidad ponderada.
+func TestPrediccionContribucionesSumanElLogit(t *testing.T) {
+	_, ts := servidorDePrueba(t, Opciones{})
+	m, _ := CargarModelo(modeloDePrueba(t))
+	cod, v := pedir(t, "POST", ts.URL+"/api/v1/predicciones", `{"departamento":"piura","ano":2023,"semana":14,"edad":8,"sexo":"f"}`)
+	if cod != http.StatusOK {
+		t.Fatalf("código %d: %v", cod, v)
+	}
+	b, _ := json.Marshal(v)
+	var p Prediccion
+	if err := json.Unmarshal(b, &p); err != nil {
+		t.Fatal(err)
+	}
+	if len(p.Contribuciones) != m.Esquema.D() {
+		t.Fatalf("%d contribuciones, el modelo tiene %d variables", len(p.Contribuciones), m.Esquema.D())
+	}
+	suma := p.Sesgo
+	for j, c := range p.Contribuciones {
+		if c.Variable != m.Esquema.Nombres[j] || c.Aporte != float64(c.Peso*c.Valor) || c.Peso != m.Pesos[j] || math.Signbit(c.Aporte) && c.Aporte == 0 {
+			t.Fatalf("contribución %d: %+v (variable del modelo %s, peso %v)", j, c, m.Esquema.Nombres[j], m.Pesos[j])
+		}
+		suma += c.Aporte
+	}
+	if math.Float64bits(suma) != math.Float64bits(p.Logit) || math.Float64bits(ml.Sigmoide(p.Logit)) != math.Float64bits(p.ProbabilidadPonderada) {
+		t.Fatalf("sesgo + Σ aportes = %v, logit %v; σ(logit) = %v, probabilidad %v", suma, p.Logit, ml.Sigmoide(p.Logit), p.ProbabilidadPonderada)
+	}
+	if p.Sesgo != m.Pesos[m.Esquema.D()] {
+		t.Fatalf("sesgo %v, el modelo tiene %v", p.Sesgo, m.Pesos[m.Esquema.D()])
+	}
+}
+
+// #67: una entrada de la caché sin contribuciones (guardada antes del cambio)
+// no se sirve: se recalcula (MISS) y se reemplaza.
+func TestCacheViejaSinContribucionesSeRecalcula(t *testing.T) {
+	cache := almacen.NuevaCacheMemoria(time.Now)
+	s, ts := servidorDePrueba(t, Opciones{Cache: cache})
+	var c Consulta
+	if err := json.Unmarshal([]byte(consultaLoreto), &c); err != nil {
+		t.Fatal(err)
+	}
+	reg, err := s.ModeloActual().registro(c)
+	if err != nil {
+		t.Fatal(err)
+	}
+	clave := almacen.ClavePrediccion(s.ModeloActual().Version, normalizada(reg))
+	vieja := `{"riesgo":0.5,"probabilidad_ponderada":0.5,"clase":1,"etiqueta":"x","umbral":0.5,"departamento_modelo":"LORETO","version_modelo":"` + s.ModeloActual().Version + `"}`
+	if err := cache.Guardar(context.Background(), clave, []byte(vieja), time.Hour); err != nil {
+		t.Fatal(err)
+	}
+	cache1, v := predecirConCabecera(t, ts.URL)
+	if cache1 != "MISS" || len(v["contribuciones"].([]any)) == 0 {
+		t.Fatalf("primera: X-Cache %s, contribuciones %v", cache1, v["contribuciones"])
+	}
+	if cache2, v2 := predecirConCabecera(t, ts.URL); cache2 != "HIT" || len(v2["contribuciones"].([]any)) == 0 {
+		t.Fatalf("segunda: X-Cache %s, contribuciones %v", cache2, v2["contribuciones"])
+	}
 }

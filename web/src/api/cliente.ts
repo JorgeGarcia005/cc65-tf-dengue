@@ -36,18 +36,28 @@ export interface OpcionesCliente {
 export interface Cliente {
   get<T>(ruta: string): Promise<T>
   post<T>(ruta: string, cuerpo?: unknown): Promise<T>
+  /** Como post, pero también devuelve las cabeceras y la latencia vista por el navegador. */
+  postMedido<T>(ruta: string, cuerpo?: unknown): Promise<Medida<T>>
+}
+
+/** Respuesta con lo que mide el navegador: el tiempo desde el envío hasta leer el cuerpo. */
+export interface Medida<T> {
+  datos: T
+  cabeceras: Headers
+  ms: number
 }
 
 export function crearCliente({ baseUrl, token, alExpirar }: OpcionesCliente): Cliente {
   const base = baseUrl.replace(/\/+$/, '')
 
-  async function pedir<T>(metodo: 'GET' | 'POST', ruta: string, cuerpo?: unknown): Promise<T> {
+  async function pedir<T>(metodo: 'GET' | 'POST', ruta: string, cuerpo?: unknown): Promise<Medida<T>> {
     const cabeceras: Record<string, string> = { Accept: 'application/json' }
     const t = token?.()
     if (t) cabeceras.Authorization = `Bearer ${t}`
     if (cuerpo !== undefined) cabeceras['Content-Type'] = 'application/json'
 
     let resp: Response
+    const inicio = performance.now()
     try {
       resp = await fetch(base + ruta, {
         method: metodo,
@@ -60,6 +70,7 @@ export function crearCliente({ baseUrl, token, alExpirar }: OpcionesCliente): Cl
     }
 
     const texto = await resp.text()
+    const ms = performance.now() - inicio
     let datos: unknown = undefined
     if (texto) {
       try {
@@ -77,12 +88,13 @@ export function crearCliente({ baseUrl, token, alExpirar }: OpcionesCliente): Cl
       const reintento = Number(resp.headers.get('Retry-After'))
       throw new ErrorApi(resp.status, msg, Number.isFinite(reintento) && reintento > 0 ? reintento : undefined)
     }
-    return datos as T
+    return { datos: datos as T, cabeceras: resp.headers, ms }
   }
 
   return {
-    get: (ruta) => pedir('GET', ruta),
-    post: (ruta, cuerpo) => pedir('POST', ruta, cuerpo),
+    get: async (ruta) => (await pedir<never>('GET', ruta)).datos,
+    post: async (ruta, cuerpo) => (await pedir<never>('POST', ruta, cuerpo)).datos,
+    postMedido: (ruta, cuerpo) => pedir('POST', ruta, cuerpo),
   }
 }
 

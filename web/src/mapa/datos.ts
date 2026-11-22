@@ -115,12 +115,18 @@ export function normalizarDepto(v: string | null, nombresMapa: Set<string>): str
 const pct = new Intl.NumberFormat('es-PE', { style: 'percent', minimumFractionDigits: 1, maximumFractionDigits: 1 })
 const num = new Intl.NumberFormat('es-PE', { maximumFractionDigits: 1 })
 const ent = new Intl.NumberFormat('es-PE', { maximumFractionDigits: 0 })
+const uno = new Intl.NumberFormat('es-PE', { minimumFractionDigits: 1, maximumFractionDigits: 1 })
+const dec = new Intl.NumberFormat('es-PE', { minimumFractionDigits: 3, maximumFractionDigits: 3 })
 
 export const formato = {
   porcentaje: (v: number) => pct.format(v),
   numero: (v: number) => num.format(v),
   entero: (v: number) => ent.format(v),
   metrica: (v: number, m: Metrica) => (m === 'riesgo' ? pct.format(v) : num.format(v)),
+  /** Un decimal fijo: columnas de casos esperados, para que queden alineadas. */
+  uno: (v: number) => uno.format(v),
+  /** Tres decimales fijos: AUC, Brier, probabilidades, pesos y aportes al logit. */
+  decimal: (v: number) => dec.format(v),
 }
 
 /** Etiqueta legible de una etapa a partir de su identificador (nino_0_11 → «Niños 0–11»). */

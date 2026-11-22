@@ -157,7 +157,9 @@ describe('sesión y destino tras el login (PR-79 H3, H4)', () => {
       .mockImplementationOnce(() => new Promise<Response>((ok) => (responderViejo = ok))) // con t1, queda pendiente
       .mockResolvedValueOnce(okLogin('t2', 'analista')) // login nuevo
     vi.stubGlobal('fetch', f)
-    montarConSonda('/', { rol: 'admin' })
+    // Desde /admin, que no pide datos al montar (el inicio sí, desde #67): así
+    // la primera petición es la de la sonda con t1.
+    montarConSonda('/admin', { rol: 'admin' })
     await userEvent.click(screen.getByRole('button', { name: 'sonda' }))
     await userEvent.click(screen.getByRole('button', { name: 'Salir' }))
     await userEvent.type(screen.getByLabelText('Correo'), 'analista@vigia.pe')
