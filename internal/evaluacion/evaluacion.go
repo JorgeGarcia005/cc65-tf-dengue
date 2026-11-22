@@ -68,8 +68,12 @@ type Reporte struct {
 // Generar calcula la evaluación completa. Falla si el AUC de la ROC se aparta
 // del de Mann-Whitney o del de referencia en más de 1e-6.
 func Generar(in Entrada) (Reporte, error) {
-	if in.Test == nil || in.Test.N == 0 || in.Esquema == nil || len(in.Pesos) != in.Esquema.D()+1 {
-		return Reporte{}, errors.New("evaluacion: faltan el conjunto de prueba, el esquema o los pesos")
+	if in.Test == nil || in.Test.N == 0 || in.Esquema == nil {
+		return Reporte{}, errors.New("evaluacion: faltan el conjunto de prueba o el esquema")
+	}
+	if in.Test.D != in.Esquema.D() || len(in.Pesos) != in.Esquema.D()+1 {
+		return Reporte{}, fmt.Errorf("evaluacion: el test tiene %d variables, el esquema %d y el modelo %d pesos (se esperaban %d)",
+			in.Test.D, in.Esquema.D(), len(in.Pesos), in.Esquema.D()+1)
 	}
 	y := in.Test.Y
 	p, pc := make([]float64, in.Test.N), make([]float64, in.Test.N)

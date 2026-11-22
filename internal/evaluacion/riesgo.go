@@ -53,13 +53,17 @@ type Grupos struct {
 
 // NuevosGrupos ubica las columnas en el esquema.
 func NuevosGrupos(esq *features.Esquema) (Grupos, error) {
+	if esq == nil {
+		return Grupos{}, errors.New("evaluacion: esquema nulo")
+	}
 	g := Grupos{jDepto: -1, jEtapa: esq.Indice("etapa_" + ingest.TramosEdad[0].Nombre),
 		jSin: esq.Indice("semana_sin"), jCos: esq.Indice("semana_cos"),
 		nDepto: len(esq.Departamentos), nEtapa: len(ingest.TramosEdad)}
 	if len(esq.Departamentos) > 0 {
 		g.jDepto = esq.Indice("depto_" + strings.ReplaceAll(strings.ToLower(esq.Departamentos[0]), " ", "_"))
 	}
-	if g.jDepto < 0 || g.jEtapa < 0 || g.jSin < 0 || g.jCos < 0 {
+	if g.jDepto < 0 || g.jEtapa < 0 || g.jSin < 0 || g.jCos < 0 ||
+		g.jDepto+g.nDepto > esq.D() || g.jEtapa+g.nEtapa > esq.D() {
 		return Grupos{}, errors.New("evaluacion: el esquema no tiene las columnas de departamento, etapa o semana")
 	}
 	return g, nil
@@ -95,6 +99,9 @@ type acumulado struct {
 // Cruzar arma el cubo departamento × semana × etapa (más sus niveles «todos»)
 // con las etiquetas y y el riesgo calibrado pc de cada fila de ds.
 func Cruzar(ds *ml.Dataset, y, pc []float64, esq *features.Esquema, minCasos int) (Cubo, error) {
+	if ds == nil || esq == nil || ds.D != esq.D() || len(y) != ds.N || len(pc) != ds.N {
+		return Cubo{}, errors.New("evaluacion: dataset, etiquetas, riesgos y esquema no coinciden en tamaño")
+	}
 	g, err := NuevosGrupos(esq)
 	if err != nil {
 		return Cubo{}, err
@@ -128,6 +135,12 @@ func Cruzar(ds *ml.Dataset, y, pc []float64, esq *features.Esquema, minCasos int
 		return Cubo{}, errors.New("evaluacion: conjunto de prueba vacío")
 	}
 	riesgoNac := nac.suma / float64(nac.casos)
+	proporcion := func(a, b float64) float64 { // sin NaN si el riesgo nacional es 0
+		if b == 0 {
+			return 0
+		}
+		return a / b
+	}
 	for d := range nD {
 		for s := range nS {
 			for e := range nE {
@@ -139,8 +152,8 @@ func Cruzar(ds *ml.Dataset, y, pc []float64, esq *features.Esquema, minCasos int
 				cubo.Celdas = append(cubo.Celdas, Celda{
 					Departamento: cubo.Departamentos[d], Semana: s, Etapa: cubo.Etapas[e],
 					Casos: a.casos, Positivos: a.pos, TasaObservada: float64(a.pos) / n,
-					RiesgoCalibrado: a.suma / n, CasosEsperados: a.suma, Fraccion: a.suma / nac.suma,
-					RazonNacional: a.suma / n / riesgoNac, Insuficiente: a.casos < minCasos,
+					RiesgoCalibrado: a.suma / n, CasosEsperados: a.suma, Fraccion: proporcion(a.suma, nac.suma),
+					RazonNacional: proporcion(a.suma/n, riesgoNac), Insuficiente: a.casos < minCasos,
 				})
 			}
 		}
@@ -152,7 +165,10 @@ func Cruzar(ds *ml.Dataset, y, pc []float64, esq *features.Esquema, minCasos int
 // semana y un grupo de edad, sin OTROS ni niveles «todos») con más casos
 // esperados y datos suficientes. Empates: por departamento, semana y etapa.
 func Prioridades(c Cubo, n int) []Celda {
-	var out []Celda
+	out := make([]Celda, 0) // nunca nil: se serializa como [] y no como null
+	if n <= 0 {
+		return out
+	}
 	for _, x := range c.Celdas {
 		if !x.Insuficiente && x.Semana != TodasSemanas && x.Etapa != TodasEtapas &&
 			x.Departamento != TodosDepartamentos && x.Departamento != features.OtrosDepartamentos {

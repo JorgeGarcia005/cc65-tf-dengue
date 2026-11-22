@@ -265,3 +265,58 @@ func buscar(t *testing.T, c Cubo, d string, s int, e string) Celda {
 	t.Fatalf("no existe la celda %s/%d/%s", d, s, e)
 	return Celda{}
 }
+
+func TestGenerarDimensionesDistintas(t *testing.T) {
+	for _, delta := range []int{-2, 2} {
+		in := entradaPrueba(t, 500)
+		d := in.Test.D + delta
+		x := make([]float64, in.Test.N*d)
+		ds, err := ml.NuevoDataset(x, in.Test.Y, d)
+		if err != nil {
+			t.Fatal(err)
+		}
+		in.Test = ds
+		if _, err := Generar(in); err == nil {
+			t.Fatalf("D del test %+d respecto del esquema debía fallar sin pánico", delta)
+		}
+		if _, err := Cruzar(ds, ds.Y, make([]float64, ds.N), in.Esquema, 1); err == nil {
+			t.Fatalf("Cruzar con D %+d debía fallar", delta)
+		}
+	}
+	in := entradaPrueba(t, 500)
+	if _, err := Cruzar(in.Test, in.Test.Y, make([]float64, 3), in.Esquema, 1); err == nil {
+		t.Fatal("pc de otro largo debía fallar")
+	}
+	if _, err := Cruzar(nil, nil, nil, in.Esquema, 1); err == nil {
+		t.Fatal("dataset nulo debía fallar")
+	}
+}
+
+func TestPrioridadesVaciasSeSerializanComoLista(t *testing.T) {
+	in := entradaPrueba(t, 500)
+	in.MinCasos = 1_000_000 // ninguna celda alcanza
+	rep, err := Generar(in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, n := range []int{-1, 0} {
+		if p := Prioridades(rep.Riesgo, n); p == nil || len(p) != 0 {
+			t.Fatalf("Prioridades(%d) = %v, quería lista vacía", n, p)
+		}
+	}
+	b, _ := json.Marshal(rep)
+	if !bytes.Contains(b, []byte(`"prioridades":[]`)) {
+		t.Fatal(`sin celdas suficientes, "prioridades" debe ser [] y no null`)
+	}
+}
+
+func TestCruzarRiesgoNacionalCero(t *testing.T) {
+	ds, esq, _ := sintetico(t, 300, 4)
+	cubo, err := Cruzar(ds, ds.Y, make([]float64, ds.N), esq, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := json.Marshal(cubo); err != nil {
+		t.Fatalf("con riesgo nacional 0 el cubo no se serializa: %v", err)
+	}
+}
