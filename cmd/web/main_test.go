@@ -89,7 +89,9 @@ func TestRutasDelSPA(t *testing.T) {
 		{"GET", "/assets/no-existe.js", 404, ""},
 		{"GET", "/favicon.svg", 200, "<svg/>"},
 		{"GET", "/../secreto.txt", 404, ""},
-		{"GET", "/assets", 200, "Vigía"}, // carpeta: no lista archivos
+		{"GET", "/assets", 200, "Vigía"},     // carpeta: no lista archivos
+		{"GET", "/index.html", 200, "Vigía"}, // sin el 301 de FileServer
+		{"GET", "/..%5csecreto.txt", 404, ""},
 		{"HEAD", "/", 200, ""},
 		{"POST", "/", 405, ""},
 	}
@@ -105,16 +107,40 @@ func TestRutasDelSPA(t *testing.T) {
 	if strings.Contains(pedir(t, h, "GET", "/assets/").Body.String(), "app-1.js") {
 		t.Error("lista el contenido de assets/")
 	}
+	if cc := pedir(t, h, "GET", "/assets/no-existe.js").Header().Get("Cache-Control"); strings.Contains(cc, "immutable") {
+		t.Errorf("un 404 de assets no debe guardarse en caché un año: %q", cc)
+	}
+	for _, ruta := range []string{"/", "/mapa", "/index.html"} {
+		if cc := pedir(t, h, "GET", ruta).Header().Get("Cache-Control"); cc != "no-cache" {
+			t.Errorf("%s con Cache-Control %q, quería no-cache", ruta, cc)
+		}
+	}
 }
 
 func TestConfiguracionInvalida(t *testing.T) {
 	d := dist(t)
-	for _, u := range []string{"", "localhost:8080", "ftp://x", "http://", "http://api/v1"} {
+	for _, u := range []string{"", "localhost:8080", "ftp://x", "http://", "http://api/v1",
+		"http://a;b:8080", "http://:8080", "http://user:pass@localhost:8080", "http://localhost:8080?x=1",
+		"http://localhost:8080#frag", "http://localhost:99999", "http://localhost:0", "http://a b",
+		"http://a,b", "http://localhost:8080?"} {
 		if _, err := nuevoServidor(d, u); err == nil {
 			t.Errorf("API_URL %q debía fallar", u)
 		}
 	}
 	if _, err := nuevoServidor(t.TempDir(), "http://localhost:8080"); err == nil {
 		t.Error("sin index.html debía fallar")
+	}
+}
+
+func TestAPIURLValidas(t *testing.T) {
+	for entrada, origen := range map[string]string{
+		"http://localhost:8080":    "http://localhost:8080",
+		"http://localhost:8080/":   "http://localhost:8080",
+		"https://api.vigia.pe":     "https://api.vigia.pe",
+		"http://192.168.1.20:8080": "http://192.168.1.20:8080",
+	} {
+		if got, err := validarAPI(entrada); err != nil || got != origen {
+			t.Errorf("validarAPI(%q) = %q, %v; quería %q", entrada, got, err, origen)
+		}
 	}
 }

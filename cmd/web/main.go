@@ -19,7 +19,7 @@ import (
 	"os"
 	"os/signal"
 	"path"
-	"path/filepath"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -41,28 +41,60 @@ func main() {
 		ReadTimeout: 10 * time.Second, WriteTimeout: 30 * time.Second, IdleTimeout: 60 * time.Second}
 	ctx, parar := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer parar()
+	cerrado := make(chan struct{})
 	go func() {
+		defer close(cerrado)
 		<-ctx.Done()
 		c, cancelar := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancelar()
-		_ = srv.Shutdown(c)
+		if err := srv.Shutdown(c); err != nil {
+			log.Printf("web: cierre: %v", err)
+		}
 	}()
 	log.Printf("web: sirviendo %s en %s (API %s)", *dir, *escucha, apiURL)
-	if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+	if err := srv.ListenAndServe(); !errors.Is(err, http.ErrServerClosed) {
 		log.Fatal(err)
 	}
+	<-cerrado // ListenAndServe vuelve apenas empieza Shutdown: hay que esperar a que drene
+}
+
+// validarAPI acepta solo http(s)://host[:puerto] (con / final opcional) y
+// devuelve el origen. Nada que pueda colarse en la CSP: sin credenciales, query,
+// fragmento ni caracteres fuera de [A-Za-z0-9.-] en el host (un «;» inyectaría
+// otra directiva).
+func validarAPI(apiURL string) (string, error) {
+	errFormato := fmt.Errorf("web: API_URL %q debe ser http(s)://host[:puerto]", apiURL)
+	u, err := url.Parse(apiURL)
+	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Opaque != "" || u.User != nil ||
+		u.RawQuery != "" || u.ForceQuery || u.Fragment != "" || (u.Path != "" && u.Path != "/") {
+		return "", errFormato
+	}
+	host, puerto := u.Hostname(), u.Port()
+	if host == "" || strings.Trim(host, "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789.-") != "" {
+		return "", errFormato
+	}
+	if puerto != "" {
+		if n, err := strconv.Atoi(puerto); err != nil || n < 1 || n > 65535 {
+			return "", errFormato
+		}
+		host += ":" + puerto
+	}
+	return u.Scheme + "://" + host, nil
 }
 
 // nuevoServidor valida la carpeta y la URL de la API y arma el handler.
 func nuevoServidor(dir, apiURL string) (http.Handler, error) {
-	if _, err := os.Stat(filepath.Join(dir, "index.html")); err != nil {
-		return nil, fmt.Errorf("web: falta index.html en %s: %w", dir, err)
+	raiz, err := os.OpenRoot(dir) // ninguna ruta pedida puede salir de dir (ni con «\» en Windows)
+	if err != nil {
+		return nil, fmt.Errorf("web: %w", err)
 	}
-	u, err := url.Parse(apiURL)
-	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" || u.Path != "" && u.Path != "/" {
-		return nil, fmt.Errorf("web: API_URL %q debe ser http(s)://host[:puerto]", apiURL)
+	if info, err := raiz.Stat("index.html"); err != nil || info.IsDir() {
+		return nil, fmt.Errorf("web: falta index.html en %s", dir)
 	}
-	origenAPI := u.Scheme + "://" + u.Host
+	origenAPI, err := validarAPI(apiURL)
+	if err != nil {
+		return nil, err
+	}
 	origenWS := strings.Replace(origenAPI, "http", "ws", 1) // http→ws, https→wss
 	config, _ := json.Marshal(map[string]string{"api_url": origenAPI})
 	csp := strings.Join([]string{
@@ -77,7 +109,6 @@ func nuevoServidor(dir, apiURL string) (http.Handler, error) {
 		"form-action 'self'",
 		"frame-ancestors 'none'",
 	}, "; ")
-	archivos := http.FileServer(http.Dir(dir))
 
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		cab := w.Header()
@@ -91,32 +122,46 @@ func nuevoServidor(dir, apiURL string) (http.Handler, error) {
 			http.Error(w, "método no permitido", http.StatusMethodNotAllowed)
 			return
 		}
-		limpia := path.Clean("/" + r.URL.Path) // sin «..»: no sale de dir
-		switch {
-		case limpia == "/config.json":
+		limpia := path.Clean("/" + r.URL.Path)
+		if limpia == "/config.json" {
 			cab.Set("Content-Type", "application/json; charset=utf-8")
 			cab.Set("Cache-Control", "no-store")
 			_, _ = w.Write(config)
 			return
-		case strings.HasPrefix(limpia, "/assets/"):
-			// Vite pone un hash en el nombre: se pueden guardar para siempre.
-			cab.Set("Cache-Control", "public, max-age=31536000, immutable")
 		}
-		info, err := os.Stat(filepath.Join(dir, filepath.FromSlash(limpia)))
-		if err == nil && !info.IsDir() {
-			if path.Base(limpia) == "index.html" {
-				cab.Set("Cache-Control", "no-cache")
+		if !strings.ContainsRune(limpia, '\\') && limpia != "/" {
+			if servirArchivo(w, r, raiz, strings.TrimPrefix(limpia, "/")) {
+				return
 			}
-			archivos.ServeHTTP(w, r)
-			return
 		}
-		// Un archivo con extensión que no existe es un 404 real; una ruta sin
-		// extensión (/mapa, /admin) es del router del SPA → index.html.
+		// Un archivo con extensión que no existe es un 404 real (sin caché larga);
+		// una ruta sin extensión (/mapa, /admin) es del router del SPA → index.html.
 		if path.Ext(limpia) != "" {
 			http.NotFound(w, r)
 			return
 		}
-		cab.Set("Cache-Control", "no-cache")
-		http.ServeFile(w, r, filepath.Join(dir, "index.html"))
+		servirArchivo(w, r, raiz, "index.html")
 	}), nil
+}
+
+// servirArchivo entrega nombre (relativo a raiz) si existe y no es carpeta. Usa
+// ServeContent: a diferencia de FileServer/ServeFile, no redirige /index.html.
+// La caché inmutable va solo para assets que existen (Vite les pone un hash).
+func servirArchivo(w http.ResponseWriter, r *http.Request, raiz *os.Root, nombre string) bool {
+	f, err := raiz.Open(nombre)
+	if err != nil {
+		return false
+	}
+	defer f.Close()
+	info, err := f.Stat()
+	if err != nil || info.IsDir() {
+		return false
+	}
+	if strings.HasPrefix(nombre, "assets/") {
+		w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+	} else {
+		w.Header().Set("Cache-Control", "no-cache")
+	}
+	http.ServeContent(w, r, info.Name(), info.ModTime(), f)
+	return true
 }
