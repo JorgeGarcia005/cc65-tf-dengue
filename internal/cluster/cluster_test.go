@@ -92,6 +92,12 @@ func (r *registro) contiene(texto string) bool {
 
 func nuevoCluster(t *testing.T, e *escenario, timeoutEpoca time.Duration) *clusterDePrueba {
 	t.Helper()
+	return nuevoClusterObservado(t, e, timeoutEpoca, nil)
+}
+
+// nuevoClusterObservado es nuevoCluster con un observador de eventos (#64).
+func nuevoClusterObservado(t *testing.T, e *escenario, timeoutEpoca time.Duration, obs func(Evento)) *clusterDePrueba {
+	t.Helper()
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
@@ -100,7 +106,7 @@ func nuevoCluster(t *testing.T, e *escenario, timeoutEpoca time.Duration) *clust
 	cp.c, err = Nuevo(ln, Opciones{
 		Shards: e.shards, D: e.ds.D, Config: e.cfg,
 		TimeoutRegistro: 5 * time.Second, TimeoutEpoca: timeoutEpoca, TimeoutEnvio: 2 * time.Second,
-		Log: cp.logs.anotar,
+		Log: cp.logs.anotar, Observador: obs,
 	})
 	if err != nil {
 		t.Fatal(err)

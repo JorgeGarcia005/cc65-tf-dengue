@@ -34,6 +34,7 @@ import (
 	"path/filepath"
 	"slices"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/JorgeGarcia005/cc65-tf-dengue/internal/cluster"
@@ -42,6 +43,7 @@ import (
 	"github.com/JorgeGarcia005/cc65-tf-dengue/internal/gold"
 	"github.com/JorgeGarcia005/cc65-tf-dengue/internal/maquina"
 	"github.com/JorgeGarcia005/cc65-tf-dengue/internal/ml"
+	"github.com/JorgeGarcia005/cc65-tf-dengue/internal/ws"
 )
 
 // opcionesCluster del modo -cluster.
@@ -58,6 +60,8 @@ type opcionesCluster struct {
 	// conectan de verdad (0 = todos).
 	timeoutRegistro time.Duration
 	conectar        int
+	// observador, si no es nil, recibe los eventos del coordinador (-observador, #64).
+	observador func(cluster.Evento)
 }
 
 // medicionCluster es el resultado para un número de nodos.
@@ -178,7 +182,7 @@ func medirNodos(train gold.Archivo, n int, cfg ml.Config, ent ml.Entrenamiento, 
 	}
 	c, err := cluster.Nuevo(ln, cluster.Opciones{
 		Shards: shards, D: train.D, Config: cfg,
-		TimeoutRegistro: tReg, TimeoutEpoca: 5 * time.Minute,
+		TimeoutRegistro: tReg, TimeoutEpoca: 5 * time.Minute, Observador: op.observador,
 	})
 	if err != nil {
 		ln.Close()
@@ -363,5 +367,88 @@ func ejecutarCluster(train gold.Archivo, fuente string, op opcionesCluster, sali
 		Mediciones: med,
 	}
 	imprimirCluster(rep)
+	escribir(rep, salida)
+}
+
+// reporteObservador compara el clúster sin y con observador (#64): el
+// observador codifica cada evento a JSON y lo publica en un ws.Hub con un
+// suscriptor, que es lo que hace la API en #65.
+type reporteObservador struct {
+	Generado   string            `json:"generado"`
+	Fuente     string            `json:"fuente"`
+	Maquina    map[string]any    `json:"maquina"`
+	Protocolo  map[string]any    `json:"protocolo"`
+	Sin        []medicionCluster `json:"sin_observador"`
+	Con        []medicionCluster `json:"con_observador"`
+	Sobrecosto []sobrecosto      `json:"sobrecosto"`
+	Eventos    int64             `json:"eventos_publicados"`
+	Descartes  uint64            `json:"eventos_descartados"`
+}
+
+type sobrecosto struct {
+	Nodos    int     `json:"nodos"`
+	MsSin    float64 `json:"ms_por_epoca_sin"`
+	MsCon    float64 `json:"ms_por_epoca_con"`
+	Relativo float64 `json:"relativo"` // (con − sin) / sin, con medias recortadas
+}
+
+// medirObservador corre medirCluster sin observador y con uno que publica en
+// un hub; un suscriptor vacía su canal como lo haría un navegador.
+func medirObservador(train gold.Archivo, op opcionesCluster) (reporteObservador, error) {
+	var rep reporteObservador
+	sin, err := medirCluster(train, op)
+	if err != nil {
+		return rep, err
+	}
+	hub := ws.NuevoHub(256)
+	cli := hub.Suscribir()
+	listo := make(chan struct{})
+	go func() {
+		defer close(listo)
+		for {
+			select {
+			case <-cli.Mensajes():
+			case <-cli.Hecho():
+				return
+			}
+		}
+	}()
+	var publicados atomic.Int64
+	op.observador = func(e cluster.Evento) {
+		b, err := json.Marshal(e)
+		if err == nil {
+			hub.Publicar(b)
+			publicados.Add(1)
+		}
+	}
+	con, err := medirCluster(train, op)
+	hub.Cerrar()
+	<-listo
+	if err != nil {
+		return rep, err
+	}
+	rep.Sin, rep.Con, rep.Eventos, rep.Descartes = sin, con, publicados.Load(), hub.Descartados()
+	for i := range sin {
+		a, b := sin[i].SegPorEpoca.MediaRecortada, con[i].SegPorEpoca.MediaRecortada
+		rep.Sobrecosto = append(rep.Sobrecosto, sobrecosto{Nodos: sin[i].Nodos, MsSin: 1000 * a, MsCon: 1000 * b, Relativo: (b - a) / a})
+	}
+	return rep, nil
+}
+
+// ejecutarObservador es el modo -observador de main.
+func ejecutarObservador(train gold.Archivo, fuente string, op opcionesCluster, salida string) {
+	rep, err := medirObservador(train, op)
+	if err != nil {
+		log.Fatal(err)
+	}
+	rep.Generado, rep.Fuente, rep.Maquina = time.Now().Format(time.RFC3339), fuente, maquina.Describir()
+	rep.Protocolo = map[string]any{
+		"nodos": nodosMedidos(rep.Sin), "repeticiones": op.reps, "epocas_por_repeticion": op.epocas,
+		"observador":   "json.Marshal de cada Evento + ws.Hub.Publicar (búfer 256) con un suscriptor que vacía su canal",
+		"verificacion": "ambas corridas se comparan bit a bit con el secuencial en cada repetición",
+	}
+	for _, s := range rep.Sobrecosto {
+		log.Printf("%d nodos: %.2f ms/época sin observador, %.2f con observador (%+.1f %%)", s.Nodos, s.MsSin, s.MsCon, 100*s.Relativo)
+	}
 	escribir(rep, salida)
 }

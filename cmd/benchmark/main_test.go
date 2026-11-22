@@ -122,3 +122,30 @@ func TestBenchmarkClusterOrdenaNodosYKarpFlattSoloContraUnNodo(t *testing.T) {
 		t.Fatalf("con base de 2 nodos no se define Karp-Flatt: %+v", med)
 	}
 }
+
+func TestBenchmarkObservadorPublicaYNoCambiaLosPesos(t *testing.T) {
+	ds, _ := ml.Sintetico(20_000, 8, 5)
+	train := gold.Archivo{Dataset: ds, TamBloque: 1024}
+	op := opcionesCluster{nodos: []int{1, 3}, reps: 2, epocas: 3, workersNodo: 1, tasa: 1, lambda: 1e-3,
+		recorte: 0, logf: func(string, ...any) {}}
+	rep, err := medirObservador(train, op)
+	if err != nil {
+		t.Fatal(err) // medirCluster ya exige pesos bit a bit iguales al secuencial en cada repetición
+	}
+	if len(rep.Sin) != 2 || len(rep.Con) != 2 || len(rep.Sobrecosto) != 2 {
+		t.Fatalf("mediciones: %+v", rep)
+	}
+	// Por cada nodos: registro + (calentamiento + 2 repeticiones) × 3 épocas con tarea,
+	// gradiente por shard y la época; al menos una época por repetición.
+	if rep.Eventos < int64(2*3*3) {
+		t.Fatalf("eventos publicados: %d", rep.Eventos)
+	}
+	for _, s := range rep.Sobrecosto {
+		if !(s.MsSin > 0 && s.MsCon > 0) {
+			t.Fatalf("sobrecosto sin tiempos: %+v", s)
+		}
+	}
+	if op.observador != nil {
+		t.Fatal("medirObservador no debe modificar las opciones del llamador")
+	}
+}
