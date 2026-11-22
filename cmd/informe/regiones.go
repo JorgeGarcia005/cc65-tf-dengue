@@ -11,7 +11,8 @@ package main
 // NOMBRE es una de:
 //
 //	fuente:RUTA#FUNCION   la función FUNCION del archivo Go RUTA, copiada del
-//	                      fuente con su comentario (FUNCION o (*Tipo).Metodo)
+//	                      fuente con su comentario (FUNCION o (*Tipo).Metodo);
+//	                      también un tipo (struct o interfaz) por su nombre
 //	spin                  la tabla de reports/spin.json
 //	cluster               la tabla de reports/bench_cluster_*.json
 //	api                   la tabla de reports/bench_api_*.json
@@ -133,7 +134,22 @@ func extraerFuncion(ruta, fn string) (string, error) {
 		}
 		return string(src[fset.Position(ini).Offset:fset.Position(fd.End()).Offset]), nil
 	}
-	return "", fmt.Errorf("%s no tiene la función %s", ruta, fn)
+	if tipo == "" {
+		for _, d := range f.Decls {
+			gd, ok := d.(*ast.GenDecl)
+			if !ok || gd.Tok != token.TYPE || len(gd.Specs) != 1 {
+				continue
+			}
+			if ts := gd.Specs[0].(*ast.TypeSpec); ts.Name.Name == nombre {
+				ini := gd.Pos()
+				if gd.Doc != nil {
+					ini = gd.Doc.Pos()
+				}
+				return string(src[fset.Position(ini).Offset:fset.Position(gd.End()).Offset]), nil
+			}
+		}
+	}
+	return "", fmt.Errorf("%s no tiene la función ni el tipo %s", ruta, fn)
 }
 
 func receptor(fd *ast.FuncDecl) string {

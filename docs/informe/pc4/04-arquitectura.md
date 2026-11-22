@@ -70,8 +70,8 @@ solo lectura. Hay dos modos:
 | Punto del Entregable 2 (enunciado PC4) | Dónde está en este informe |
 |---|---|
 | Distribución: clúster de nodos de ML, justificación de la topología y funcionamiento en Go | Sección 8 (topología, protocolo, código fuente del algoritmo distribuido, tolerancia a fallos, verificación con Spin) y sección 9 (rendimiento por número de nodos) |
-| API: documentación con Swagger y respuesta en menos de 100 ms con pantallazos de Postman | Sección 10 y sección 12.3 |
-| Bases de datos: diseño de entidades y registros | Sección 11 y sección 12.4 |
+| API: documentación con Swagger, funcionamiento en Go y respuesta en menos de 100 ms con pantallazos de Postman | Sección 10 (10.3: código Go) y sección 12.3 |
+| Bases de datos: diseño de entidades y registros | Sección 11 (11.4: entidades en Go y registros) y sección 12.4 |
 | Evidencias: datos de prueba y pantallazos | Sección 12 |
 | Informe con el entregable anterior corregido | Secciones 2 a 7 y tabla «Correcciones a la PC3» en los anexos (sección 16) |
 | GitHub y tablero Kanban | Secciones 12.6 y 12.7 y anexos |

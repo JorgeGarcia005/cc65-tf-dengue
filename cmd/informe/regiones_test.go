@@ -51,6 +51,10 @@ func TestExtraerFuncionYMetodo(t *testing.T) {
 	if err != nil || !strings.Contains(m, "func (c *Coordinador) cubrir() error {") {
 		t.Fatalf("método: %q, %v", m, err)
 	}
+	ty, err := extraerFuncion("internal/almacen/almacen.go", "RegistroPrediccion")
+	if err != nil || !strings.HasPrefix(ty, "// RegistroPrediccion") || !strings.Contains(ty, "type RegistroPrediccion struct {") || !strings.HasSuffix(ty, "}") {
+		t.Fatalf("tipo: %q, %v", ty, err)
+	}
 	if _, err := extraerFuncion("internal/ml/logistica.go", "NoExiste"); err == nil {
 		t.Fatal("una función inexistente debía dar error")
 	}

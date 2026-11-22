@@ -52,7 +52,7 @@ respuesta por debajo de 100 ms.
 
 <!-- captura: Predicción en Postman con la cabecera X-Cache -->
 
-`go run ./cmd/benchapi -exigir-p95 100ms` con 16 clientes concurrentes (sección 10.3).
+`go run ./cmd/benchapi -exigir-p95 100ms` con 16 clientes concurrentes (sección 10.4).
 
 <!-- captura: Benchmark de latencia de la API en consola -->
 
