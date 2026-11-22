@@ -21,6 +21,9 @@ const (
 	prefijo        = "pbkdf2-sha256"
 )
 
+// b64Clave codifica sal y clave: base64 estándar sin relleno, en modo estricto.
+var b64Clave = base64.RawStdEncoding.Strict()
+
 // Hash deriva la clave con una sal aleatoria y devuelve
 // "pbkdf2-sha256$<iter>$<sal b64>$<clave b64>".
 func Hash(clave string) (string, error) { return hashCon(clave, Iteraciones) }
@@ -34,13 +37,15 @@ func hashCon(clave string, iter int) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	b64 := base64.RawStdEncoding
-	return fmt.Sprintf("%s$%d$%s$%s", prefijo, iter, b64.EncodeToString(sal), b64.EncodeToString(k)), nil
+	return fmt.Sprintf("%s$%d$%s$%s", prefijo, iter, b64Clave.EncodeToString(sal), b64Clave.EncodeToString(k)), nil
 }
 
 // Comparar indica si clave corresponde al hash guardado. La comparación final es
 // en tiempo constante; un hash mal formado nunca verifica.
 func Comparar(guardado, clave string) bool {
+	if strings.ContainsAny(guardado, "\r\n") {
+		return false
+	}
 	partes := strings.Split(guardado, "$")
 	if len(partes) != 4 || partes[0] != prefijo {
 		return false
@@ -49,13 +54,14 @@ func Comparar(guardado, clave string) bool {
 	if err != nil || iter < 1 || iter > maxIteraciones {
 		return false
 	}
-	b64 := base64.RawStdEncoding
-	sal, err1 := b64.DecodeString(partes[2])
-	esperado, err2 := b64.DecodeString(partes[3])
-	if err1 != nil || err2 != nil || len(sal) == 0 || len(esperado) == 0 {
+	sal, err1 := b64Clave.DecodeString(partes[2])
+	esperado, err2 := b64Clave.DecodeString(partes[3])
+	// Largos fijos: una clave derivada más larga multiplicaría el costo
+	// (PBKDF2 hace iter × ⌈largo/32⌉ rondas) y una truncada sería trivial de adivinar.
+	if err1 != nil || err2 != nil || len(sal) != bytesSal || len(esperado) != bytesClave {
 		return false
 	}
-	k, err := pbkdf2.Key(sha256.New, clave, sal, iter, len(esperado))
+	k, err := pbkdf2.Key(sha256.New, clave, sal, iter, bytesClave)
 	if err != nil {
 		return false
 	}
