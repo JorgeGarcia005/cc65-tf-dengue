@@ -78,6 +78,8 @@ con Git Flow.
 
 <!-- captura: Pull requests de la PC4 en GitHub -->
 
+<!-- captura: Historial de commits de la rama develop en GitHub -->
+
 ## 12.7 Tablero Kanban
 
 Estado de las tareas de la PC4 en el tablero Kanban de GitHub.
