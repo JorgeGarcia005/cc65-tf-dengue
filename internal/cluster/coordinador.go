@@ -30,6 +30,11 @@ type Opciones struct {
 	TimeoutEnvio time.Duration
 	// Log recibe los sucesos del clúster (registros, descartes, reasignaciones).
 	Log func(formato string, args ...any)
+	// Observador recibe cada Evento del protocolo (#64), en orden, desde el
+	// bucle de épocas. No debe bloquear (ws.Hub y Grabador encolan sin
+	// esperar) ni guardar el slice de un evento para modificarlo: recibe copias,
+	// así que no puede cambiar el resultado numérico.
+	Observador func(Evento)
 }
 
 // EstadoNodo es la vista pública de un nodo.
@@ -109,6 +114,7 @@ type Coordinador struct {
 	epoca     int
 	reasign   int
 	fallo     error
+	terminado bool // Terminar ya avisó el fin exitoso
 
 	calcNodo map[int]int64 // µs de cómputo de la época en curso, por nodo
 	calcSuma int64         // y la suma de todos los shards
@@ -327,6 +333,9 @@ func (c *Coordinador) GradienteErr(w []float64) (ml.Gradiente, error) {
 	c.tiempos.SegCalculoSuma += float64(c.calcSuma) / 1e6
 	c.muEstado.Unlock()
 	c.publicar(g.Perdida)
+	if c.op.Observador != nil {
+		c.emitir(Evento{Tipo: EvEpoca, Epoca: c.epoca, Perdida: g.Perdida, Pesos: append([]float64(nil), w...)})
+	}
 	return g, nil
 }
 
@@ -362,6 +371,7 @@ func (c *Coordinador) despachar(s int) error {
 			if c.asignado[s] {
 				c.reasign++
 				c.op.Log("época %d: shard %d reasignado a %s", c.epoca, s, c.nodos[j].nombre)
+				c.emitir(Evento{Tipo: EvReasignacion, Epoca: c.epoca, Nodo: c.nodos[j].nombre, Shard: shard(s)})
 			}
 			c.asignado[s] = true
 		}
@@ -371,6 +381,7 @@ func (c *Coordinador) despachar(s int) error {
 		}
 		c.enviado[s] = true
 		c.vence[s] = time.Now().Add(c.op.TimeoutEpoca) // plazo propio del shard
+		c.emitir(Evento{Tipo: EvTarea, Epoca: c.epoca, Nodo: c.nodos[j].nombre, Shard: shard(s)})
 		return nil
 	}
 }
@@ -450,6 +461,9 @@ func (c *Coordinador) descartar(j int, motivo string) {
 	}
 	c.op.Log("época %d: nodo %s descartado: %s", c.epoca, n.nombre, motivo)
 	c.publicarNodos()
+	if c.op.Observador != nil {
+		c.emitir(Evento{Tipo: EvDescarte, Epoca: c.epoca, Nodo: n.nombre, Detalle: motivo, Nodos: c.vistaNodos()})
+	}
 }
 
 // proximoVencimiento es el menor plazo entre los shards en curso.
@@ -489,6 +503,9 @@ func (c *Coordinador) atender(ev evento) bool {
 		})
 		c.op.Log("nodo %s registrado desde %s (%d workers)", ev.msg.Nodo, ev.conn.Remoto(), ev.msg.Workers)
 		c.publicarNodos()
+		if c.op.Observador != nil {
+			c.emitir(Evento{Tipo: EvRegistro, Epoca: c.epoca, Nodo: ev.msg.Nodo, Nodos: c.vistaNodos()})
+		}
 		return false
 	}
 	j := c.porID[ev.id]
@@ -526,6 +543,7 @@ func (c *Coordinador) atender(ev evento) bool {
 		c.listo[m.Shard] = true
 		c.calcNodo[j] += m.MicrosCalculo // un nodo con varios shards los calcula en serie
 		c.calcSuma += m.MicrosCalculo
+		c.emitir(Evento{Tipo: EvGradiente, Epoca: c.epoca, Nodo: n.nombre, Shard: shard(m.Shard), Micros: m.MicrosCalculo})
 		return true
 	case protocolo.Error:
 		c.descartar(j, "el nodo informó: "+m.Detalle)
@@ -543,6 +561,7 @@ func (c *Coordinador) abortar(err error) error {
 	c.estado.Error = err.Error()
 	c.muEstado.Unlock()
 	c.op.Log("entrenamiento abortado: %v", err)
+	c.emitir(Evento{Tipo: EvAbortado, Epoca: c.epoca, Detalle: err.Error()})
 	return err
 }
 
@@ -558,7 +577,14 @@ func (c *Coordinador) avisarFin(motivo string) {
 func (c *Coordinador) Terminar() {
 	c.muBucle.Lock()
 	defer c.muBucle.Unlock()
+	// Tras un fallo ya se avisó `fin` (abortado) y se emitió EvAbortado; y un
+	// segundo Terminar no repite el aviso ni el evento.
+	if c.fallo != nil || c.terminado {
+		return
+	}
+	c.terminado = true
 	c.avisarFin(protocolo.MotivoCompleto)
+	c.emitir(Evento{Tipo: EvFin, Epoca: c.epoca})
 }
 
 // Cerrar deja de aceptar nodos, cierra todas las conexiones y espera a que

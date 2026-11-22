@@ -1,7 +1,9 @@
 package main
 
 import (
+	"github.com/JorgeGarcia005/cc65-tf-dengue/internal/cluster"
 	"math"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -120,5 +122,42 @@ func TestBenchmarkClusterOrdenaNodosYKarpFlattSoloContraUnNodo(t *testing.T) {
 	}
 	if med[0].Nodos != 2 || med[0].KarpFlatt != nil || med[1].KarpFlatt != nil {
 		t.Fatalf("con base de 2 nodos no se define Karp-Flatt: %+v", med)
+	}
+}
+
+func TestBenchmarkObservadorPublicaYNoCambiaLosPesos(t *testing.T) {
+	ds, _ := ml.Sintetico(20_000, 8, 5)
+	train := gold.Archivo{Dataset: ds, TamBloque: 1024}
+	op := opcionesCluster{nodos: []int{1, 3}, reps: 2, epocas: 3, workersNodo: 1, tasa: 1, lambda: 1e-3,
+		recorte: 0, logf: func(string, ...any) {}}
+	rep, err := medirObservador(train, op)
+	if err != nil {
+		t.Fatal(err) // medirCluster ya exige pesos bit a bit iguales al secuencial en cada repetición
+	}
+	if len(rep.Sin) != 2 || len(rep.Con) != 2 || len(rep.Sobrecosto) != 2 {
+		t.Fatalf("mediciones: %+v", rep)
+	}
+	// Por cada nodos: registro + (calentamiento + 2 repeticiones) × 3 épocas con tarea,
+	// gradiente por shard y la época; al menos una época por repetición.
+	if rep.Eventos < int64(2*3*3) {
+		t.Fatalf("eventos publicados: %d", rep.Eventos)
+	}
+	for _, s := range rep.Sobrecosto {
+		if !(s.MsSin > 0 && s.MsCon > 0) {
+			t.Fatalf("sobrecosto sin tiempos: %+v", s)
+		}
+	}
+	if op.observador != nil {
+		t.Fatal("medirObservador no debe modificar las opciones del llamador")
+	}
+	// Aunque el llamador traiga un observador, la corrida de control va sin él.
+	var llamadas atomic.Int64
+	op.observador = func(cluster.Evento) { llamadas.Add(1) }
+	op.nodos, op.reps, op.epocas = []int{1}, 1, 1
+	if _, err := medirObservador(train, op); err != nil {
+		t.Fatal(err)
+	}
+	if llamadas.Load() != 0 {
+		t.Fatalf("el observador del llamador recibió %d eventos", llamadas.Load())
 	}
 }

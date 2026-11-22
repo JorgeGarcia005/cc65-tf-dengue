@@ -206,6 +206,9 @@ func (c *Coordinador) GradienteErr(w []float64) (ml.Gradiente, error) {
 	c.tiempos.SegCalculoSuma += float64(c.calcSuma) / 1e6
 	c.muEstado.Unlock()
 	c.publicar(g.Perdida)
+	if c.op.Observador != nil {
+		c.emitir(Evento{Tipo: EvEpoca, Epoca: c.epoca, Perdida: g.Perdida, Pesos: append([]float64(nil), w...)})
+	}
 	return g, nil
 }
 ```
@@ -253,6 +256,7 @@ func (c *Coordinador) despachar(s int) error {
 			if c.asignado[s] {
 				c.reasign++
 				c.op.Log("época %d: shard %d reasignado a %s", c.epoca, s, c.nodos[j].nombre)
+				c.emitir(Evento{Tipo: EvReasignacion, Epoca: c.epoca, Nodo: c.nodos[j].nombre, Shard: shard(s)})
 			}
 			c.asignado[s] = true
 		}
@@ -262,6 +266,7 @@ func (c *Coordinador) despachar(s int) error {
 		}
 		c.enviado[s] = true
 		c.vence[s] = time.Now().Add(c.op.TimeoutEpoca) // plazo propio del shard
+		c.emitir(Evento{Tipo: EvTarea, Epoca: c.epoca, Nodo: c.nodos[j].nombre, Shard: shard(s)})
 		return nil
 	}
 }
