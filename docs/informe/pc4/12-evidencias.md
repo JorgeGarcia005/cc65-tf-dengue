@@ -74,7 +74,7 @@ Entrenamiento lanzado por la API y consultado por su ID, y la cadena verificada 
 ## 12.6 Repositorio en GitHub
 
 Historial de *pull requests* de la PC4, cada uno con el veredicto del juez y el CI en verde, y las ramas
-con Git Flow.
+con Git Flow; y el historial de commits de `develop`, donde están los commits de cada integrante.
 
 <!-- captura: Pull requests de la PC4 en GitHub -->
 

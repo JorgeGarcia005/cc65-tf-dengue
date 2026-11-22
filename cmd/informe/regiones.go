@@ -100,8 +100,9 @@ func generarRegion(nombre string) (string, error) {
 	return "", fmt.Errorf("región desconocida")
 }
 
-// extraerFuncion devuelve el texto exacto de una función (con su comentario)
-// tal como está en el archivo. fn es "Nombre" o "(*Tipo).Nombre".
+// extraerFuncion devuelve el texto exacto de una función o de un tipo (con su
+// comentario) tal como está en el archivo. fn es "Nombre" o "(*Tipo).Nombre";
+// un tipo se busca por "Nombre", también dentro de un bloque type ( … ).
 func extraerFuncion(ruta, fn string) (string, error) {
 	src, err := os.ReadFile(ruta)
 	if err != nil {
@@ -137,15 +138,29 @@ func extraerFuncion(ruta, fn string) (string, error) {
 	if tipo == "" {
 		for _, d := range f.Decls {
 			gd, ok := d.(*ast.GenDecl)
-			if !ok || gd.Tok != token.TYPE || len(gd.Specs) != 1 {
+			if !ok || gd.Tok != token.TYPE {
 				continue
 			}
-			if ts := gd.Specs[0].(*ast.TypeSpec); ts.Name.Name == nombre {
-				ini := gd.Pos()
-				if gd.Doc != nil {
-					ini = gd.Doc.Pos()
+			for _, sp := range gd.Specs {
+				ts := sp.(*ast.TypeSpec)
+				if ts.Name.Name != nombre {
+					continue
 				}
-				return string(src[fset.Position(ini).Offset:fset.Position(gd.End()).Offset]), nil
+				// Sola: la declaración completa con su comentario. En un bloque
+				// type ( … ): solo esa especificación, como "type Nombre …".
+				if len(gd.Specs) == 1 {
+					ini := gd.Pos()
+					if gd.Doc != nil {
+						ini = gd.Doc.Pos()
+					}
+					return string(src[fset.Position(ini).Offset:fset.Position(gd.End()).Offset]), nil
+				}
+				cuerpo := string(src[fset.Position(ts.Pos()).Offset:fset.Position(ts.End()).Offset])
+				doc := ""
+				if ts.Doc != nil {
+					doc = string(src[fset.Position(ts.Doc.Pos()).Offset:fset.Position(ts.Doc.End()).Offset]) + "\n"
+				}
+				return doc + "type " + cuerpo, nil
 			}
 		}
 	}

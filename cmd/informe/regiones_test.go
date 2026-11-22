@@ -19,13 +19,13 @@ func TestFragmentosSalenDelFuente(t *testing.T) {
 		t.Fatalf("sin secciones en docs/informe/pc4: %v", err)
 	}
 	reFuente := regexp.MustCompile(`<!-- generado:fuente:`)
-	fragmentos := 0
+	fragmentos := map[string]int{}
 	for _, a := range archivos {
 		b, err := os.ReadFile(a)
 		if err != nil {
 			t.Fatal(err)
 		}
-		fragmentos += len(reFuente.FindAll(b, -1))
+		fragmentos[filepath.Base(a)] = len(reFuente.FindAll(b, -1))
 		nuevo, err := expandirRegiones(b)
 		if err != nil {
 			t.Fatalf("%s: %v", a, err)
@@ -34,10 +34,13 @@ func TestFragmentosSalenDelFuente(t *testing.T) {
 			t.Errorf("%s no coincide con el repositorio: corra go run ./cmd/informe", a)
 		}
 	}
-	// El algoritmo distribuido completo: bucle, época, dos pasadas, plazo,
-	// nodo y reducción.
-	if fragmentos < 8 {
-		t.Fatalf("el informe tiene %d fragmentos de código fuente; se esperaban al menos 8", fragmentos)
+	// Mínimo por sección: el algoritmo distribuido completo (bucle, época, dos
+	// pasadas, plazo, nodo y reducción), la API y las entidades en Go.
+	minimos := map[string]int{"08-distribuido.md": 9, "10-api.md": 4, "11-bd.md": 8}
+	for archivo, min := range minimos {
+		if fragmentos[archivo] < min {
+			t.Errorf("%s tiene %d fragmentos de código fuente; se esperaban al menos %d", archivo, fragmentos[archivo], min)
+		}
 	}
 }
 
@@ -63,5 +66,18 @@ func TestExtraerFuncionYMetodo(t *testing.T) {
 func TestRegionDesconocidaDaError(t *testing.T) {
 	if _, err := expandirRegiones([]byte("<!-- generado:otra -->\nx\n<!-- /generado -->")); err == nil {
 		t.Fatal("se esperaba error")
+	}
+}
+
+func TestExtraerTipoDentroDeUnBloque(t *testing.T) {
+	dir := t.TempDir()
+	ruta := filepath.Join(dir, "x.go")
+	src := "package x\n\ntype (\n\t// A es uno.\n\tA struct{ N int }\n\tB int\n)\n"
+	if err := os.WriteFile(ruta, []byte(src), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	got, err := extraerFuncion(ruta, "A")
+	if err != nil || got != "// A es uno.\ntype A struct{ N int }" {
+		t.Fatalf("tipo en bloque: %q, %v", got, err)
 	}
 }
