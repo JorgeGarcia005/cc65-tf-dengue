@@ -54,6 +54,12 @@ Restricciones: API y protocolo solo con la biblioteca estándar (AGENTS §3.2); 
 | `GET /api/v1/ws?ticket=…` (modo `ticket`) | 403 si el `Origin` no está en la lista; 401 sin ticket válido | 403 (el ticket guarda el rol; defensa en profundidad) | ✓ |
 | `POST /api/v1/demo/nodos/{nombre}/cortar` (solo con `-demo`; sin el flag, 404) | 401 | 403 | ✓ |
 
+Modo demo (#65): `-demo` (o `DEMO=true`) registra la ruta de corte y habilita `ritmo_ms` (pausa
+de 0–2000 ms entre épocas, fuera del bucle del coordinador: no cambia el resultado). Cortar cierra
+la conexión TCP del nodo; el coordinador lo descarta y reasigna por el camino normal de una caída
+(ADR-0005), y un test exige que los pesos sigan iguales bit a bit al secuencial. El observador del
+coordinador publica cada `cluster.Evento` en JSON al hub del WebSocket.
+
 Swagger UI queda público para la sustentación; el OpenAPI declara `bearerAuth` y las respuestas
 401/403/429, de modo que desde `/docs` se puede autorizar con un token y probar las rutas.
 

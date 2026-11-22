@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net"
@@ -14,6 +15,7 @@ import (
 	"github.com/JorgeGarcia005/cc65-tf-dengue/internal/auth"
 	"github.com/JorgeGarcia005/cc65-tf-dengue/internal/cluster"
 	"github.com/JorgeGarcia005/cc65-tf-dengue/internal/ml"
+	"github.com/JorgeGarcia005/cc65-tf-dengue/internal/ws"
 )
 
 // PlazoCierreHTTP es lo que espera el cierre ordenado a que terminen las
@@ -43,8 +45,18 @@ func ejecutarAPI(ctx context.Context, ln, lnHTTP net.Listener, op opciones, mode
 		lnHTTP.Close()
 		return err
 	}
+	// El hub del WebSocket recibe cada evento del clúster en JSON (#65). El
+	// observador no bloquea: Publicar encola sin esperar y descarta si un
+	// navegador va lento (ADR-0007); json.Marshal de un evento son µs.
+	hub := ws.NuevoHub(api.BuferWS)
+	op.observador = func(e cluster.Evento) {
+		if b, err := json.Marshal(e); err == nil {
+			hub.Publicar(b)
+		}
+	}
 	c, p, err := prepararCluster(ln, op, logf)
 	if err != nil {
+		hub.Cerrar()
 		lnHTTP.Close()
 		return err
 	}
@@ -58,9 +70,15 @@ func ejecutarAPI(ctx context.Context, ln, lnHTTP net.Listener, op opciones, mode
 	ctx, cancelarNodos := context.WithCancel(ctx)
 	defer cancelarNodos()
 	ent := &entrenadorCluster{calc: c, d: p.d, lambda: op.lambda, progreso: op.progreso, logf: logf}
-	srv, err := api.Nuevo(api.Opciones{Modelo: base, Entrenador: ent, Cluster: c, Almacen: bd.Almacen, Cache: bd.Cache, Firmador: bd.Firmador,
-		Evaluacion: op.evaluacion, OrigenesCORS: op.origenes, Log: logf})
+	opAPI := api.Opciones{Modelo: base, Entrenador: ent, Cluster: c, Almacen: bd.Almacen, Cache: bd.Cache, Firmador: bd.Firmador,
+		Evaluacion: op.evaluacion, OrigenesCORS: op.origenes, Hub: hub, Log: logf}
+	if op.demo {
+		opAPI.Demo = c
+		logf("modo demo: POST /api/v1/demo/nodos/{nombre}/cortar y ritmo_ms habilitados")
+	}
+	srv, err := api.Nuevo(opAPI)
 	if err != nil {
+		hub.Cerrar()
 		lnHTTP.Close()
 		return err
 	}
@@ -131,7 +149,8 @@ func (e *entrenadorCluster) Entrenar(ctx context.Context, p api.ParametrosEntren
 	if p.Lambda != e.lambda {
 		return nil, fmt.Errorf("el clúster está configurado con lambda=%g (flag -lambda del coordinador); se pidió %g", e.lambda, p.Lambda)
 	}
-	calc := &conContexto{ctx: ctx, calc: e.calc, progreso: progreso, cada: e.progreso, logf: e.logf}
+	calc := &conContexto{ctx: ctx, calc: e.calc, progreso: progreso, cada: e.progreso, logf: e.logf,
+		ritmo: time.Duration(p.RitmoMs) * time.Millisecond}
 	ini := time.Now()
 	res, err := ml.EntrenarFalible(calc, e.d, ml.Entrenamiento{Epocas: p.Epocas, Tasa: p.Tasa})
 	if err != nil {
@@ -154,9 +173,20 @@ type conContexto struct {
 	cada     int
 	logf     func(string, ...any)
 	epoca    int
+	ritmo    time.Duration // pausa antes de cada época salvo la primera (modo demo)
 }
 
 func (c *conContexto) GradienteErr(w []float64) (ml.Gradiente, error) {
+	if c.ritmo > 0 && c.epoca > 0 {
+		// Pausa del modo demo, fuera del bucle de épocas del coordinador: no
+		// cambia el resultado, solo deja ver el entrenamiento en vivo.
+		pausa := time.NewTimer(c.ritmo)
+		select {
+		case <-pausa.C:
+		case <-c.ctx.Done():
+			pausa.Stop()
+		}
+	}
 	if err := c.ctx.Err(); err != nil {
 		return ml.Gradiente{}, fmt.Errorf("%w en la época %d: %w", errCancelado, c.epoca, err)
 	}
@@ -179,4 +209,5 @@ func (c *conContexto) GradienteErr(w []float64) (ml.Gradiente, error) {
 var (
 	_ ml.CalculadorFalible = (*cluster.Coordinador)(nil)
 	_ api.EstadoCluster    = (*cluster.Coordinador)(nil)
+	_ api.Demo             = (*cluster.Coordinador)(nil)
 )

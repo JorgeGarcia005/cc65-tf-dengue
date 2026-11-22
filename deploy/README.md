@@ -112,3 +112,12 @@ lista blanca de orígenes del navegador (por defecto, la SPA en `http://localhos
 a la SPA por IP, agrega `http://<ip>:8081`. El p95 con token se mide con
 `BENCH_CLAVE=<clave> go run ./cmd/benchapi -correo analista@vigia.pe -exigir-p95 100ms`, que
 escribe `reports/bench_api_<maquina>_jwt.json`.
+
+## Tiempo real y modo demo (TB2, #65)
+
+El panel admin sigue el entrenamiento por WebSocket: la SPA pide `POST /api/v1/ws/ticket` (con su
+JWT de admin) y abre `GET /api/v1/ws?ticket=…`; el ticket vale una vez y vence a los 30 s, y el
+`Origin` debe estar en `CORS_ORIGENES`. Con `DEMO=true` (o `-demo`) el coordinador expone
+`POST /api/v1/demo/nodos/{nombre}/cortar`, que corta la conexión de un nodo para mostrar la
+reasignación, y acepta `ritmo_ms` (0–2000) en `POST /api/v1/entrenamientos` para que las épocas se
+vean pasar. Sin el modo demo, esa ruta responde 404 y `ritmo_ms` se rechaza.

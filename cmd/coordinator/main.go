@@ -12,6 +12,7 @@
 package main
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
@@ -24,6 +25,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strconv"
 	"syscall"
 	"time"
 
@@ -50,6 +52,10 @@ type opciones struct {
 	evaluacion []byte
 	// origenes es la lista blanca de CORS de la API (-cors / $CORS_ORIGENES).
 	origenes []string
+	// demo habilita el corte de nodos y ritmo_ms en la API (-demo / $DEMO, #65).
+	demo bool
+	// observador recibe los eventos del clúster (el hub del WebSocket).
+	observador func(cluster.Evento)
 }
 
 // reporte usa las mismas claves que reports/entrenamiento.json para épocas,
@@ -97,8 +103,13 @@ func main() {
 	baseMongo := flag.String("base", "cc65_dengue", "modo servicio: base de datos de MongoDB")
 	dirRedis := flag.String("redis", os.Getenv("REDIS_ADDR"), "modo servicio: host:puerto de Redis (vacío = sin caché; por defecto $REDIS_ADDR)")
 	rutaEval := flag.String("evaluacion", os.Getenv("EVALUACION"), "modo servicio: reports/evaluacion.json para /api/v1/riesgo y /api/v1/evaluacion (por defecto $EVALUACION)")
+	demoEnv, errDemo := strconv.ParseBool(cmp.Or(os.Getenv("DEMO"), "false"))
+	flag.BoolVar(&op.demo, "demo", demoEnv, "modo servicio: habilita POST /api/v1/demo/nodos/{nombre}/cortar y ritmo_ms (por defecto $DEMO)")
 	cors := flag.String("cors", os.Getenv("CORS_ORIGENES"), "modo servicio: orígenes del navegador permitidos, separados por coma (p. ej. http://localhost:8081; por defecto $CORS_ORIGENES)")
 	flag.Parse()
+	if errDemo != nil {
+		log.Fatalf("DEMO=%q: use true o false", os.Getenv("DEMO"))
+	}
 
 	ln, err := net.Listen("tcp", *escucha)
 	if err != nil {
@@ -237,7 +248,7 @@ func prepararCluster(ln net.Listener, op opciones, logf func(string, ...any)) (*
 	logf("%d shards, %d filas, %d variables, %d bloques de %d filas", len(shards), len(y), d, bloques, tam)
 	c, err := cluster.Nuevo(ln, cluster.Opciones{
 		Shards: shards, D: d, Config: cfg,
-		TimeoutRegistro: op.tRegistro, TimeoutEpoca: op.tEpoca, Log: logf,
+		TimeoutRegistro: op.tRegistro, TimeoutEpoca: op.tEpoca, Log: logf, Observador: op.observador,
 	})
 	if err != nil {
 		ln.Close()
