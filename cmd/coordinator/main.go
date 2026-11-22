@@ -26,6 +26,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/JorgeGarcia005/cc65-tf-dengue/internal/almacen"
 	"github.com/JorgeGarcia005/cc65-tf-dengue/internal/cluster"
 	"github.com/JorgeGarcia005/cc65-tf-dengue/internal/gold"
 	"github.com/JorgeGarcia005/cc65-tf-dengue/internal/ml"
@@ -130,6 +131,16 @@ func servicio(ln net.Listener, dir, rutaModelo, uriMongo, baseMongo, dirRedis st
 		return err
 	}
 	defer cerrarBD() // después de ejecutarAPI, que ya cerró el servidor
+	if bd.Almacen == nil {
+		bd.Almacen = almacen.NuevaMemoria() // la siembra y la API comparten el mismo almacén
+	}
+	ctxSeg, cancelarSeg := context.WithTimeout(context.Background(), plazoConexionBD)
+	bd.Firmador, err = prepararSeguridad(ctxSeg, bd.Almacen, os.Getenv, log.Printf)
+	cancelarSeg()
+	if err != nil {
+		ln.Close()
+		return err
+	}
 	lnHTTP, err := net.Listen("tcp", dir)
 	if err != nil {
 		ln.Close()

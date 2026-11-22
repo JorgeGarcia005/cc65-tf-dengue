@@ -31,4 +31,5 @@ func TestMongoCumpleElContrato(t *testing.T) {
 		_ = a.Cerrar(context.Background())
 	})
 	contrato.Almacen(t, a)
+	contrato.Usuarios(t, a)
 }

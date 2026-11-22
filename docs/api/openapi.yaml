@@ -35,6 +35,46 @@ paths:
                 properties:
                   estado: {type: string, example: ok}
                   version_modelo: {type: string, example: 3f9a1c0b7d2e}
+  /api/v1/auth/login:
+    post:
+      tags: [sistema]
+      summary: Inicia sesión y devuelve un JWT (ADR-0007)
+      description: |
+        Credenciales del analista o del admin. El correo no distingue
+        mayúsculas. Una clave errada y un correo inexistente reciben el mismo
+        401. Tras 5 intentos fallidos en un minuto desde la misma IP, el
+        siguiente recibe 429 con Retry-After. Sin JWT_SECRETO en el
+        coordinador, 503.
+      operationId: login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/Login"}
+            example: {correo: analista@vigia.pe, clave: una-clave-larga}
+      responses:
+        "200":
+          description: Token HS256 con 60 minutos de vida.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Sesion"}
+        "400": {$ref: "#/components/responses/Error"}
+        "401": {$ref: "#/components/responses/Error"}
+        "413": {$ref: "#/components/responses/Error"}
+        "429":
+          description: Demasiados intentos fallidos desde esta IP.
+          headers:
+            Retry-After:
+              description: Segundos hasta que se pueda volver a intentar.
+              schema: {type: integer}
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [error]
+                properties:
+                  error: {type: string}
+        "503": {$ref: "#/components/responses/Error"}
   /api/v1/modelo:
     get:
       tags: [modelo]
@@ -141,6 +181,21 @@ components:
             properties:
               error: {type: string, example: "semana epidemiológica 54 fuera de 1–53"}
   schemas:
+    Login:
+      type: object
+      additionalProperties: false
+      required: [correo, clave]
+      properties:
+        correo: {type: string, maxLength: 254, example: analista@vigia.pe}
+        clave: {type: string, format: password, maxLength: 256}
+    Sesion:
+      type: object
+      required: [token, correo, rol, expira]
+      properties:
+        token: {type: string, description: "JWT HS256 para la cabecera Authorization: Bearer."}
+        correo: {type: string, example: analista@vigia.pe}
+        rol: {type: string, enum: [admin, analista]}
+        expira: {type: integer, format: int64, description: "Vencimiento en segundos Unix."}
     Consulta:
       type: object
       additionalProperties: false

@@ -13,6 +13,13 @@ services:
     environment:
       MONGO_URI: mongodb://mongo:27017
       REDIS_ADDR: redis:6379
+      # Login (ADR-0007): secreto del JWT y cuentas iniciales, desde deploy/.env
+      # (no versionado; ver deploy/.env.example). Sin JWT_SECRETO el login da 503.
+      JWT_SECRETO: ${JWT_SECRETO:-}
+      VIGIA_ADMIN_CORREO: ${VIGIA_ADMIN_CORREO:-}
+      VIGIA_ADMIN_CLAVE: ${VIGIA_ADMIN_CLAVE:-}
+      VIGIA_ANALISTA_CORREO: ${VIGIA_ANALISTA_CORREO:-}
+      VIGIA_ANALISTA_CLAVE: ${VIGIA_ANALISTA_CLAVE:-}
     depends_on:
       mongo:
         condition: service_healthy

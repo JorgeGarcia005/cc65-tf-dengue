@@ -11,6 +11,17 @@ import (
 	"github.com/JorgeGarcia005/cc65-tf-dengue/internal/almacen/contrato"
 )
 
+func TestMemoriaUsuariosCumpleElContrato(t *testing.T) {
+	contrato.Usuarios(t, almacen.NuevaMemoria())
+}
+
+func TestUsuarioNoSerializaElHash(t *testing.T) {
+	b, _ := json.Marshal(almacen.Usuario{Correo: "a@b.pe", Hash: "pbkdf2-sha256$secreto", Rol: "admin"})
+	if strings.Contains(string(b), "pbkdf2") || strings.Contains(string(b), "hash") {
+		t.Fatalf("el hash salió en el JSON: %s", b)
+	}
+}
+
 func TestMemoriaCumpleElContrato(t *testing.T) {
 	m := almacen.NuevaMemoria()
 	contrato.Almacen(t, m)

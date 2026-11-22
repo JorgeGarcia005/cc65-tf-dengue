@@ -245,3 +245,55 @@ func mismoResumen(a, b almacen.ResumenEntrenamiento) bool {
 	return a.ID == b.ID && a.Epoca == b.Epoca && a.Perdida == b.Perdida && slices.Equal(a.Historia, b.Historia) &&
 		slices.Equal(a.Nodos, b.Nodos) && a.Reasignaciones == b.Reasignaciones && a.Fin.Equal(b.Fin)
 }
+
+// Usuarios prueba una implementación vacía de almacen.Usuarios.
+func Usuarios(t *testing.T, u almacen.Usuarios) {
+	ctx := context.Background()
+	creado := time.Date(2026, 11, 22, 10, 0, 0, 0, time.UTC)
+	t.Run("GuardarYBuscarConCorreoNormalizado", func(t *testing.T) {
+		if _, ok, err := u.Usuario(ctx, "ana@diresa.pe"); err != nil || ok {
+			t.Fatalf("vacío: ok=%v err=%v", ok, err)
+		}
+		if err := u.GuardarUsuario(ctx, almacen.Usuario{Correo: "  Ana@DIRESA.pe ", Hash: "h1", Rol: "analista", Creado: creado}); err != nil {
+			t.Fatal(err)
+		}
+		got, ok, err := u.Usuario(ctx, "ANA@diresa.pe")
+		if err != nil || !ok || got.Correo != "ana@diresa.pe" || got.Hash != "h1" || got.Rol != "analista" || !got.Creado.Equal(creado) {
+			t.Fatalf("usuario = %+v ok=%v err=%v", got, ok, err)
+		}
+	})
+	t.Run("ReemplazaLaClave", func(t *testing.T) {
+		if err := u.GuardarUsuario(ctx, almacen.Usuario{Correo: "ana@diresa.pe", Hash: "h2", Rol: "admin", Creado: creado}); err != nil {
+			t.Fatal(err)
+		}
+		got, _, _ := u.Usuario(ctx, "ana@diresa.pe")
+		if got.Hash != "h2" || got.Rol != "admin" {
+			t.Fatalf("no reemplazó: %+v", got)
+		}
+	})
+	t.Run("RechazaInvalidos", func(t *testing.T) {
+		for _, x := range []almacen.Usuario{{Correo: " ", Hash: "h", Rol: "admin"}, {Correo: "a@b.pe", Rol: "admin"},
+			{Correo: "a@b.pe", Hash: "h", Rol: "root"}} {
+			if err := u.GuardarUsuario(ctx, x); !errors.Is(err, almacen.ErrUsuarioInvalido) {
+				t.Fatalf("%+v: error = %v", x, err)
+			}
+		}
+	})
+	t.Run("Concurrente", func(t *testing.T) {
+		var wg sync.WaitGroup
+		for i := range 16 {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				c := fmt.Sprintf("u%d@vigia.pe", i)
+				if err := u.GuardarUsuario(ctx, almacen.Usuario{Correo: c, Hash: "h", Rol: "analista", Creado: creado}); err != nil {
+					t.Error(err)
+				}
+				if _, ok, err := u.Usuario(ctx, c); err != nil || !ok {
+					t.Errorf("%s: ok=%v err=%v", c, ok, err)
+				}
+			}()
+		}
+		wg.Wait()
+	})
+}

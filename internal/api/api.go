@@ -32,6 +32,7 @@ import (
 
 	apidoc "github.com/JorgeGarcia005/cc65-tf-dengue/docs/api"
 	"github.com/JorgeGarcia005/cc65-tf-dengue/internal/almacen"
+	"github.com/JorgeGarcia005/cc65-tf-dengue/internal/auth"
 	"github.com/JorgeGarcia005/cc65-tf-dengue/internal/cluster"
 )
 
@@ -58,7 +59,12 @@ type Opciones struct {
 	// producción). Si es nil se usa almacen.Memoria.
 	Almacen almacen.Almacen
 	// Cache guarda predicciones (Redis en producción). Si es nil no hay caché.
-	Cache      almacen.Cache
+	Cache almacen.Cache
+	// Usuarios guarda las cuentas del login. Si es nil y Almacen implementa
+	// almacen.Usuarios (Memoria y Mongo lo hacen), se usa Almacen.
+	Usuarios almacen.Usuarios
+	// Firmador emite los JWT del login (ADR-0007). Sin él, el login responde 503.
+	Firmador   *auth.Firmador
 	Middleware []Middleware // se aplican en orden: el primero es el más externo
 	Log        func(formato string, args ...any)
 	// PlazoCierre acota cuánto espera Cerrar a que se vacíe el registro de
@@ -99,6 +105,8 @@ type Servidor struct {
 	wgEntrenar    sync.WaitGroup
 	wgRegistrador sync.WaitGroup
 	cerrarUnaVez  sync.Once
+
+	limite *limitador // intentos fallidos de login por IP
 }
 
 // Nuevo crea el servidor: elige el modelo inicial (el vigente del almacén o,
@@ -115,13 +123,16 @@ func Nuevo(op Opciones) (*Servidor, error) {
 	if op.PlazoCierre <= 0 {
 		op.PlazoCierre = DefectoPlazoCierre
 	}
+	if u, ok := op.Almacen.(almacen.Usuarios); op.Usuarios == nil && ok {
+		op.Usuarios = u
+	}
 	ctx, cancelar := context.WithTimeout(context.Background(), plazoArranque)
 	defer cancelar()
 	inicial, err := modeloInicial(ctx, op)
 	if err != nil {
 		return nil, err
 	}
-	s := &Servidor{op: op, registros: make(chan almacen.RegistroPrediccion, BufferRegistros)}
+	s := &Servidor{op: op, registros: make(chan almacen.RegistroPrediccion, BufferRegistros), limite: nuevoLimitador()}
 	s.ents = entrenamientos{almacen: op.Almacen, log: op.Log, nuevoID: nuevoIDEntrenamiento}
 	if err := s.ents.reconciliar(ctx); err != nil {
 		return nil, fmt.Errorf("api: entrenamientos pendientes: %w", err)
@@ -240,6 +251,7 @@ type Ruta struct {
 func Rutas() []Ruta {
 	return []Ruta{
 		{"GET", "/healthz", true, (*Servidor).salud},
+		{"POST", "/api/v1/auth/login", true, (*Servidor).login},
 		{"GET", "/api/v1/modelo", true, (*Servidor).verModelo},
 		{"POST", "/api/v1/predicciones", true, (*Servidor).predecir},
 		{"GET", "/api/v1/cluster", true, (*Servidor).verCluster},
