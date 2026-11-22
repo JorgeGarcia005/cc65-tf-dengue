@@ -237,8 +237,93 @@ paths:
         "401": {$ref: "#/components/responses/NoAutenticado"}
         "403": {$ref: "#/components/responses/SinPermiso"}
         "404": {$ref: "#/components/responses/Error"}
+  /api/v1/ws/ticket:
+    post:
+      tags: [cluster]
+      summary: Ticket de un solo uso para abrir el WebSocket (30 s)
+      description: |
+        El navegador no puede enviar Authorization en el handshake del
+        WebSocket: la SPA pide aquí un ticket (con su JWT de admin) y lo pasa
+        en `GET /api/v1/ws?ticket=…`. Vale una vez y vence a los 30 s. Como
+        máximo 128 tickets sin usar (luego 429).
+      operationId: emitirTicket
+      security: [{bearerAuth: []}]
+      responses:
+        "200":
+          description: Ticket emitido.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ticket, expira]
+                properties:
+                  ticket: {type: string, description: "32 bytes aleatorios en base64url."}
+                  expira: {type: integer, format: int64, description: "Vencimiento en segundos Unix."}
+        "401": {$ref: "#/components/responses/NoAutenticado"}
+        "403": {$ref: "#/components/responses/SinPermiso"}
+        "413": {$ref: "#/components/responses/Error"}
+        "429": {$ref: "#/components/responses/Error"}
+  /api/v1/ws:
+    get:
+      tags: [cluster]
+      summary: WebSocket con los eventos del entrenamiento en vivo
+      description: |
+        Handshake RFC 6455 (stdlib). Comprobaciones en orden: `Origin` fuera de
+        `CORS_ORIGENES` → 403 (antes de tocar el ticket); ticket inexistente,
+        vencido o usado → 401; ticket sin rol admin → 403. Conectado, recibe un
+        mensaje de texto por evento del coordinador (`cluster.Evento` en JSON:
+        registro, tarea, gradiente, epoca, reasignacion, descarte, abortado,
+        fin). El servidor manda ping cada 20 s y cierra con 1001 al apagarse.
+      operationId: servirWS
+      security: [{ticketWS: []}]
+      parameters:
+        - name: ticket
+          in: query
+          required: true
+          schema: {type: string}
+      responses:
+        "101": {description: Protocolo cambiado a WebSocket.}
+        "401": {$ref: "#/components/responses/Error"}
+        "403": {$ref: "#/components/responses/Error"}
+  /api/v1/demo/nodos/{nombre}/cortar:
+    post:
+      tags: [cluster]
+      summary: Corta la conexión de un nodo (solo con -demo)
+      description: |
+        Solo existe si el coordinador arrancó con `-demo` (sin el flag, 404).
+        Cierra la conexión TCP del nodo como si se cortara el cable: el
+        coordinador lo descarta y reasigna sus shards; el resultado sigue
+        siendo igual bit a bit al secuencial. En modo demo,
+        `POST /api/v1/entrenamientos` admite además `ritmo_ms` (pausa entre
+        épocas, 0–2000).
+      operationId: cortarNodo
+      parameters:
+        - name: nombre
+          in: path
+          required: true
+          schema: {type: string, example: nodo-2}
+      security: [{bearerAuth: []}]
+      responses:
+        "202":
+          description: Conexión cortada; el descarte llega por el WebSocket.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  nodo: {type: string}
+                  estado: {type: string, enum: [cortado]}
+        "401": {$ref: "#/components/responses/NoAutenticado"}
+        "403": {$ref: "#/components/responses/SinPermiso"}
+        "404": {$ref: "#/components/responses/Error"}
+        "413": {$ref: "#/components/responses/Error"}
 components:
   securitySchemes:
+    ticketWS:
+      type: apiKey
+      in: query
+      name: ticket
+      description: Ticket de un solo uso de POST /api/v1/ws/ticket (más Origin en CORS_ORIGENES).
     bearerAuth:
       type: http
       scheme: bearer
@@ -389,6 +474,7 @@ components:
         epocas: {type: integer, minimum: 1, maximum: 100000, default: 600}
         tasa: {type: number, format: double, default: 2}
         lambda: {type: number, format: double, default: 0.0001}
+        ritmo_ms: {type: integer, minimum: 0, maximum: 2000, default: 0, description: "Pausa entre épocas; solo con -demo (sin él, 400)."}
     Entrenamiento:
       type: object
       properties:

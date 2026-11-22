@@ -25,6 +25,9 @@ services:
       # Orígenes del navegador que pueden llamar a la API (CORS, ADR-0007): la SPA.
       # Para entrar por IP en la sustentación: CORS_ORIGENES=http://<ip>:8081
       CORS_ORIGENES: ${CORS_ORIGENES:-http://localhost:${PUERTO_WEB:-8081}}
+      # Modo demo (#65): DEMO=true habilita «Tumbar nodo» (POST /api/v1/demo/nodos/{nombre}/cortar)
+      # y ritmo_ms en los entrenamientos, para la sustentación. Apagado por defecto.
+      DEMO: ${DEMO:-false}
     depends_on:
       mongo:
         condition: service_healthy

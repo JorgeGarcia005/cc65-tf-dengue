@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"math"
@@ -331,5 +332,110 @@ func TestTerminarEmiteUnSoloFin(t *testing.T) {
 	}
 	if n != 1 {
 		t.Fatalf("%d eventos fin, quería 1", n)
+	}
+}
+
+// #65: cortar un nodo en la época k (como el botón «Tumbar nodo» del modo
+// demo) reasigna su shard y el resultado sigue siendo el secuencial bit a bit.
+func TestCortarNodoEnLaEpocaKReasignaYEsIgualAlSecuencial(t *testing.T) {
+	const k = 2
+	e := nuevoEscenario(t, 3, 6)
+	var r recolector
+	var cp *clusterDePrueba
+	var errCorte error
+	cp = nuevoClusterObservado(t, e, 10*time.Second, func(ev Evento) {
+		r.observar(ev)
+		if ev.Tipo == EvEpoca && ev.Epoca == k {
+			errCorte = cp.c.CortarNodo("nodo-2") // desde el bucle de épocas: no debe trabarse
+		}
+	})
+	cp.registrar(3, func() {
+		for i := 1; i <= 3; i++ {
+			cp.nodoReal(fmt.Sprintf("nodo-%d", i), 2)
+			cp.esperarRegistrados(i)
+		}
+	})
+	res, err := cp.entrenar(30 * time.Second)
+	if errCorte != nil {
+		t.Fatalf("CortarNodo: %v", errCorte)
+	}
+	cp.exigirIgualAlSecuencial(res, err)
+
+	tipos := r.tipos()
+	iDesc, iReas := slices.Index(tipos, EvDescarte), slices.Index(tipos, EvReasignacion)
+	if iDesc < 0 || iReas < iDesc {
+		t.Fatalf("se esperaba descarte y luego reasignación: %v", tipos)
+	}
+	if d := r.evs[iDesc]; d.Nodo != "nodo-2" || d.Epoca != k {
+		t.Fatalf("descarte: nodo %q en la época %d, se esperaba nodo-2 en la %d", d.Nodo, d.Epoca, k)
+	}
+	if est := cp.c.Estado(); est.Reasignaciones < 1 || est.Nodos[1].Sano {
+		t.Fatalf("estado tras el corte: %+v", est)
+	}
+	if !cp.logs.contiene("demo: se corta la conexión del nodo nodo-2") {
+		t.Fatal("el corte no quedó en el log")
+	}
+	if err := cp.c.CortarNodo("nodo-2"); !errors.Is(err, ErrNodoDesconocido) {
+		t.Fatalf("cortar un nodo ya caído: %v, se esperaba ErrNodoDesconocido", err)
+	}
+	if err := cp.c.CortarNodo("no-existe"); !errors.Is(err, ErrNodoDesconocido) {
+		t.Fatalf("cortar un nodo inexistente: %v", err)
+	}
+}
+
+// PR-84 H1: con el bucle en reposo, cortar dos veces el mismo nodo (seguido o
+// en paralelo) corta una sola vez y las demás devuelven ErrNodoDesconocido,
+// nunca el net.ErrClosed del socket; y un nodo que se reconecta con el mismo
+// nombre es el que se corta después.
+func TestCortarNodoEnReposoConcurrenteYTrasReconectar(t *testing.T) {
+	e := nuevoEscenario(t, 2, 1)
+	cp := nuevoCluster(t, e, 10*time.Second)
+	cp.registrar(2, func() {
+		cp.nodoReal("nodo-1", 1)
+		cp.esperarRegistrados(1)
+		cp.nodoReal("nodo-2", 1)
+	})
+	if err := cp.c.CortarNodo("nodo-1"); err != nil {
+		t.Fatalf("primer corte: %v", err)
+	}
+	if err := cp.c.CortarNodo("nodo-1"); !errors.Is(err, ErrNodoDesconocido) {
+		t.Fatalf("segundo corte en reposo: %v, quería ErrNodoDesconocido", err)
+	}
+
+	var wg sync.WaitGroup
+	errs := make([]error, 8)
+	for i := range errs {
+		wg.Add(1)
+		go func() { defer wg.Done(); errs[i] = cp.c.CortarNodo("nodo-2") }()
+	}
+	wg.Wait()
+	cortes := 0
+	for _, err := range errs {
+		switch {
+		case err == nil:
+			cortes++
+		case !errors.Is(err, ErrNodoDesconocido):
+			t.Fatalf("corte concurrente: %v", err)
+		}
+	}
+	if cortes != 1 {
+		t.Fatalf("%d cortes concurrentes con éxito, quería 1", cortes)
+	}
+
+	// El nodo vuelve con el mismo nombre (como cmd/node con -reconexiones).
+	cp.nodoReal("nodo-1", 1)
+	limite := time.Now().Add(5 * time.Second)
+	for {
+		err := cp.c.CortarNodo("nodo-1")
+		if err == nil {
+			break
+		}
+		if !errors.Is(err, ErrNodoDesconocido) {
+			t.Fatalf("cortar al nodo reconectado: %v", err)
+		}
+		if time.Now().After(limite) {
+			t.Fatal("el nodo reconectado nunca quedó disponible para cortar")
+		}
+		time.Sleep(5 * time.Millisecond)
 	}
 }

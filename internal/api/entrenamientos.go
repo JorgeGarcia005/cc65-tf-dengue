@@ -30,7 +30,10 @@ type ParametrosEntrenamiento struct {
 	Epocas int     `json:"epocas"`
 	Tasa   float64 `json:"tasa"`
 	Lambda float64 `json:"lambda"`
-	D      int     `json:"-"`
+	// RitmoMs es la pausa entre épocas, solo en modo demo (#65): deja ver el
+	// entrenamiento en vivo. No cambia el resultado numérico.
+	RitmoMs int `json:"ritmo_ms,omitempty"`
+	D       int `json:"-"`
 }
 
 // Entrenador corre un entrenamiento completo (en el clúster) y devuelve los

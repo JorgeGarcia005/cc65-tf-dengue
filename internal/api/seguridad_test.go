@@ -27,6 +27,7 @@ const (
 // apiSegura es la API completa, sin tokens agregados, con lo necesario para
 // que cada ruta pueda responder 2xx a quien tiene permiso.
 type apiSegura struct {
+	s               *Servidor
 	ts              *httptest.Server
 	analista, admin string // tokens
 	firmador        *auth.Firmador
@@ -41,12 +42,18 @@ func nuevaApiSegura(t *testing.T, op Opciones) *apiSegura {
 	}
 	f := firmadorDePrueba(t)
 	op.Almacen, op.Firmador = mem, f
-	op.Entrenador, op.Cluster, op.Evaluacion = entrenadorListo(), clusterFalso{}, []byte(evalMinima)
+	if op.Entrenador == nil {
+		op.Entrenador = entrenadorListo()
+	}
+	op.Cluster, op.Evaluacion = clusterFalso{}, []byte(evalMinima)
 	if op.OrigenesCORS == nil {
 		op.OrigenesCORS = []string{origenSPA}
 	}
-	_, h := servidorSeguro(t, op)
-	a := &apiSegura{ts: httptest.NewServer(h), firmador: f,
+	if op.Demo == nil {
+		op.Demo = demoFalsa{} // la matriz cubre también la ruta de -demo
+	}
+	s, h := servidorSeguro(t, op)
+	a := &apiSegura{s: s, ts: httptest.NewServer(h), firmador: f,
 		analista: tokenDePrueba(t, f, "ana@diresa.pe", auth.RolAnalista),
 		admin:    tokenDePrueba(t, f, "admin@vigia.pe", auth.RolAdmin)}
 	t.Cleanup(a.ts.Close)
@@ -103,9 +110,11 @@ func (a *apiSegura) entrenamientoTerminado(t *testing.T) string {
 // cuerposMatriz da una petición válida por ruta, para que quien tiene permiso
 // reciba 2xx. Una ruta nueva sin muestra hace fallar el test (no se olvida).
 var cuerposMatriz = map[string]string{
-	"POST /api/v1/auth/login":     `{"correo":"ana@diresa.pe","clave":"clave-de-ana-123"}`,
-	"POST /api/v1/predicciones":   `{"departamento":"LORETO","ano":2024,"semana":10,"edad":34,"sexo":"M"}`,
-	"POST /api/v1/entrenamientos": "",
+	"POST /api/v1/auth/login":                 `{"correo":"ana@diresa.pe","clave":"clave-de-ana-123"}`,
+	"POST /api/v1/predicciones":               `{"departamento":"LORETO","ano":2024,"semana":10,"edad":34,"sexo":"M"}`,
+	"POST /api/v1/entrenamientos":             "",
+	"POST /api/v1/ws/ticket":                  "",
+	"POST /api/v1/demo/nodos/{nombre}/cortar": "",
 }
 
 // Matriz ruta × rol de ADR-0007, generada desde Rutas(): publica con y sin
@@ -124,7 +133,11 @@ func TestMatrizRoles(t *testing.T) {
 		if r.Metodo == "POST" && !hay {
 			t.Fatalf("%s: agrega una petición de muestra a cuerposMatriz", clave)
 		}
-		ruta := strings.ReplaceAll(r.Ruta, "{id}", id)
+		ruta := strings.NewReplacer("{id}", id, "{nombre}", "nodo-1").Replace(r.Ruta)
+		if r.Modo == Ticket {
+			a.matrizTicket(t, clave, r)
+			continue
+		}
 		for _, q := range quienes {
 			quiere := "2xx"
 			switch {
@@ -167,7 +180,7 @@ func TestMatrizRolesTokenAjenoYSinFirmador(t *testing.T) {
 	ts := httptest.NewServer(h)
 	defer ts.Close()
 	for _, r := range Rutas() {
-		if r.Modo != Bearer {
+		if r.Modo != Bearer || r.SoloDemo { // sin Demo, la ruta de -demo ni existe (TestDemoSinFlagNoExiste)
 			continue
 		}
 		req, _ := http.NewRequest(r.Metodo, ts.URL+strings.ReplaceAll(r.Ruta, "{id}", "x"), nil)
@@ -313,6 +326,8 @@ func TestCabecerasLimiteDeCuerpo413(t *testing.T) {
 		{"/api/v1/predicciones", a.analista},
 		{"/api/v1/entrenamientos", a.admin},
 		{"/api/v1/auth/login", ""},
+		{"/api/v1/ws/ticket", a.admin},                // PR-84 H3: no leen el cuerpo,
+		{"/api/v1/demo/nodos/nodo-1/cortar", a.admin}, // pero el límite también vale
 	} {
 		if res, b := a.pedir(t, "POST", c.ruta, c.token, grande, nil); res.StatusCode != http.StatusRequestEntityTooLarge {
 			t.Errorf("POST %s con %d bytes: %d %s, quería 413", c.ruta, len(grande), res.StatusCode, b)
@@ -427,11 +442,13 @@ func TestOpenAPISeguridad(t *testing.T) {
 			t.Errorf("%s es pública y el OpenAPI le exige bearerAuth", clave)
 		case r.Modo == Bearer && !op.bearer:
 			t.Errorf("%s exige token y el OpenAPI no declara security: bearerAuth", clave)
+		case r.Modo == Ticket && (op.bearer || !slices.Contains(op.codigos, "101")):
+			t.Errorf("%s es el handshake del WebSocket: sin bearerAuth y con 101 (códigos: %v)", clave, op.codigos)
 		}
 		if r.Metodo == "POST" && !slices.Contains(op.codigos, "413") {
 			t.Errorf("%s es POST y no declara 413 (límite de %d bytes)", clave, MaxCuerpo)
 		}
-		if r.Modo != Bearer {
+		if r.Modo == Publica {
 			continue
 		}
 		for _, c := range []string{"401", "403"} {
@@ -444,7 +461,7 @@ func TestOpenAPISeguridad(t *testing.T) {
 
 // pendientesADR son filas de la matriz de ADR-0007 que aún no tienen ruta
 // (WebSocket y demo, #65). Una fila que no está aquí ni en Rutas() falla.
-var pendientesADR = []string{"POST /api/v1/ws/ticket", "GET /api/v1/ws", "POST /api/v1/demo/nodos/{nombre}/cortar"}
+var pendientesADR = []string{}
 
 // La política de Rutas() es la que fija la tabla de ADR-0007: cambiar un rol
 // en el código sin cambiar el ADR (o al revés) hace fallar este test.

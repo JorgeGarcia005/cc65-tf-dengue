@@ -49,10 +49,16 @@ tumbar el proceso:
 func (s *Servidor) Handler() http.Handler {
 	mux := http.NewServeMux()
 	for _, r := range Rutas() {
+		if r.SoloDemo && s.op.Demo == nil {
+			continue // sin -demo la ruta no existe: 404 del mux
+		}
 		manejar := r.manejar
 		var h http.Handler = http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) { manejar(s, w, req) })
-		if r.Modo == Bearer {
+		switch r.Modo {
+		case Bearer:
 			h = s.proteger(h, r.Roles)
+		case Ticket:
+			h = s.conTicket(h, r.Roles)
 		}
 		mux.Handle(r.Metodo+" "+r.Ruta, h)
 	}

@@ -13,6 +13,9 @@
 //	GET  /api/v1/cluster              admin
 //	POST /api/v1/entrenamientos       admin
 //	GET  /api/v1/entrenamientos/{id}  admin
+//	POST /api/v1/ws/ticket            admin (ticket de un solo uso, 30 s)
+//	GET  /api/v1/ws?ticket=…          admin por ticket + Origin (eventos del clúster)
+//	POST /api/v1/demo/nodos/{nombre}/cortar  admin, solo con -demo
 //
 // Seguridad (ADR-0007, seguridad.go): JWT Bearer con rol por ruta, CORS con
 // lista blanca, cabeceras nosniff y no-referrer, y cuerpo de POST ≤ 64 KiB.
@@ -42,6 +45,7 @@ import (
 	"github.com/JorgeGarcia005/cc65-tf-dengue/internal/almacen"
 	"github.com/JorgeGarcia005/cc65-tf-dengue/internal/auth"
 	"github.com/JorgeGarcia005/cc65-tf-dengue/internal/cluster"
+	"github.com/JorgeGarcia005/cc65-tf-dengue/internal/ws"
 )
 
 // MaxCuerpo limita el cuerpo de cualquier petición (las consultas pesan < 1 KB).
@@ -80,8 +84,15 @@ type Opciones struct {
 	// OrigenesCORS es la lista blanca de orígenes del navegador (CORS_ORIGENES;
 	// ver ParsearOrigenes). Vacía = ningún origen cruzado.
 	OrigenesCORS []string
-	Middleware   []Middleware // se aplican en orden: el primero es el más externo
-	Log          func(formato string, args ...any)
+	// Hub reparte los eventos del clúster por WebSocket (GET /api/v1/ws). El
+	// coordinador lo crea para colgarle su observador; si es nil, la API crea
+	// uno (sin eventos). Cerrar lo cierra: los clientes reciben 1001.
+	Hub *ws.Hub
+	// Demo habilita el modo -demo: POST /api/v1/demo/nodos/{nombre}/cortar y
+	// ritmo_ms en los entrenamientos. Nil = esa ruta no existe (404).
+	Demo       Demo
+	Middleware []Middleware // se aplican en orden: el primero es el más externo
+	Log        func(formato string, args ...any)
 	// PlazoCierre acota cuánto espera Cerrar a que se vacíe el registro de
 	// predicciones (PR-40 H6). Por defecto, DefectoPlazoCierre.
 	PlazoCierre time.Duration
@@ -123,6 +134,7 @@ type Servidor struct {
 
 	evaluacion, riesgo *documento // reports/evaluacion.json precomprimido; nil si no hay
 	limite             *limitador // intentos fallidos de login por IP
+	tickets            *tickets   // tickets de un solo uso del WebSocket
 }
 
 // Nuevo crea el servidor: elige el modelo inicial (el vigente del almacén o,
@@ -162,7 +174,10 @@ func Nuevo(op Opciones) (*Servidor, error) {
 	if err != nil {
 		return nil, err
 	}
-	s := &Servidor{op: op, registros: make(chan almacen.RegistroPrediccion, BufferRegistros), limite: nuevoLimitador()}
+	if op.Hub == nil {
+		op.Hub = ws.NuevoHub(BuferWS)
+	}
+	s := &Servidor{op: op, registros: make(chan almacen.RegistroPrediccion, BufferRegistros), limite: nuevoLimitador(), tickets: nuevosTickets()}
 	if len(op.Evaluacion) > 0 {
 		if s.evaluacion, s.riesgo, err = cargarEvaluacion(op.Evaluacion); err != nil {
 			return nil, err
@@ -222,6 +237,9 @@ func (s *Servidor) Cerrar() {
 		s.cierreMu.Lock()
 		s.cerrado = true
 		s.cierreMu.Unlock()
+		// http.Server.Shutdown no espera las conexiones tomadas con Hijack: el
+		// hub las cierra con 1001 y espera a sus goroutines (ADR-0007).
+		s.op.Hub.Cerrar()
 		s.cancelar()
 		s.wgEntrenar.Wait()
 		temporizador := time.AfterFunc(s.op.PlazoCierre, s.cancelarDrenaje)
@@ -281,7 +299,8 @@ type Ruta struct {
 	Metodo, Ruta string
 	Documentar   bool
 	Modo         Modo
-	Roles        []auth.Rol // solo en modo Bearer
+	Roles        []auth.Rol // en modo Bearer y Ticket
+	SoloDemo     bool       // solo se registra con Opciones.Demo (sin -demo → 404)
 	manejar      func(*Servidor, http.ResponseWriter, *http.Request)
 }
 
@@ -291,6 +310,7 @@ func Rutas() []Ruta {
 	pub := func(metodo, ruta string, doc bool, h func(*Servidor, http.ResponseWriter, *http.Request)) Ruta {
 		return Ruta{Metodo: metodo, Ruta: ruta, Documentar: doc, Modo: Publica, manejar: h}
 	}
+	demo := func(r Ruta) Ruta { r.SoloDemo = true; return r }
 	con := func(metodo, ruta string, roles []auth.Rol, h func(*Servidor, http.ResponseWriter, *http.Request)) Ruta {
 		// Copia: quien recibe Rutas() no puede cambiar la política (PR-83 H3).
 		return Ruta{Metodo: metodo, Ruta: ruta, Documentar: true, Modo: Bearer, Roles: slices.Clone(roles), manejar: h}
@@ -305,6 +325,9 @@ func Rutas() []Ruta {
 		con("GET", "/api/v1/cluster", soloAdmin, (*Servidor).verCluster),
 		con("POST", "/api/v1/entrenamientos", soloAdmin, (*Servidor).crearEntrenamiento),
 		con("GET", "/api/v1/entrenamientos/{id}", soloAdmin, (*Servidor).verEntrenamiento),
+		con("POST", "/api/v1/ws/ticket", soloAdmin, (*Servidor).emitirTicket),
+		{Metodo: "GET", Ruta: "/api/v1/ws", Documentar: true, Modo: Ticket, Roles: slices.Clone(soloAdmin), manejar: (*Servidor).servirWS},
+		demo(con("POST", "/api/v1/demo/nodos/{nombre}/cortar", soloAdmin, (*Servidor).cortarNodo)),
 		pub("GET", "/docs", false, (*Servidor).swaggerUI),
 		pub("GET", "/docs/openapi.yaml", false, (*Servidor).openapi),
 	}
@@ -317,10 +340,16 @@ func Rutas() []Ruta {
 func (s *Servidor) Handler() http.Handler {
 	mux := http.NewServeMux()
 	for _, r := range Rutas() {
+		if r.SoloDemo && s.op.Demo == nil {
+			continue // sin -demo la ruta no existe: 404 del mux
+		}
 		manejar := r.manejar
 		var h http.Handler = http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) { manejar(s, w, req) })
-		if r.Modo == Bearer {
+		switch r.Modo {
+		case Bearer:
 			h = s.proteger(h, r.Roles)
+		case Ticket:
+			h = s.conTicket(h, r.Roles)
 		}
 		mux.Handle(r.Metodo+" "+r.Ruta, h)
 	}
@@ -461,6 +490,12 @@ func (s *Servidor) crearEntrenamiento(w http.ResponseWriter, r *http.Request) {
 		return
 	case !(p.Lambda >= 0) || p.Lambda > 10:
 		responderError(w, http.StatusBadRequest, fmt.Sprintf("lambda %v fuera de [0, 10]", p.Lambda))
+		return
+	case p.RitmoMs != 0 && s.op.Demo == nil:
+		responderError(w, http.StatusBadRequest, "ritmo_ms solo existe en modo demo (coordinador con -demo)")
+		return
+	case p.RitmoMs < 0 || p.RitmoMs > MaxRitmo:
+		responderError(w, http.StatusBadRequest, fmt.Sprintf("ritmo_ms %d fuera de 0–%d", p.RitmoMs, MaxRitmo))
 		return
 	}
 	base := s.ModeloActual()
