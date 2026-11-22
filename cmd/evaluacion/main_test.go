@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"math"
 	"math/rand/v2"
 	"os"
@@ -88,5 +89,52 @@ func TestEjecutarFaltaArchivo(t *testing.T) {
 	o.cluster = filepath.Join(o.gold, "no-existe.json")
 	if _, err := ejecutar(o); err == nil {
 		t.Fatal("debía fallar sin el benchmark del clúster")
+	}
+}
+
+func TestEjecutarAUCReferencia(t *testing.T) {
+	o := preparar(t)
+	rep, err := ejecutar(o) // sin referencia: da el AUC del modelo
+	if err != nil {
+		t.Fatal(err)
+	}
+	escribir := func(contenido string) string {
+		ruta := filepath.Join(o.gold, "entrenamiento.json")
+		if err := os.WriteFile(ruta, []byte(contenido), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		return ruta
+	}
+	o.entrenamiento = escribir(fmt.Sprintf(`{"metricas_test":{"AUC":%v}}`, rep.Metricas.AUC))
+	ok, err := ejecutar(o)
+	if err != nil {
+		t.Fatalf("AUC coincidente: %v", err)
+	}
+	if len(ok.Fuentes) != 5 {
+		t.Fatalf("con referencia se esperaban 5 fuentes, hay %d", len(ok.Fuentes))
+	}
+	for nombre, c := range map[string]string{
+		"AUC divergente": `{"metricas_test":{"AUC":0.123}}`,
+		"sin metricas":   `{"pesos":[1]}`, // como reports/entrenamiento_cluster.json
+		"AUC cero":       `{"metricas_test":{"AUC":0}}`,
+		"JSON inválido":  `{`,
+	} {
+		o.entrenamiento = escribir(c)
+		if _, err := ejecutar(o); err == nil {
+			t.Errorf("%s: debía fallar", nombre)
+		}
+	}
+}
+
+func TestEjecutarParametrosInvalidos(t *testing.T) {
+	o := preparar(t)
+	o.top = -1
+	if _, err := ejecutar(o); err == nil {
+		t.Fatal("-top -1 debía fallar sin pánico")
+	}
+	o = preparar(t)
+	o.minCasos = 1_000_000 // sin prioridades: no debe entrar en pánico
+	if rep, err := ejecutar(o); err != nil || len(rep.Prioridades) != 0 {
+		t.Fatalf("sin prioridades: %v, %d", err, len(rep.Prioridades))
 	}
 }
