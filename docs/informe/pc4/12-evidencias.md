@@ -52,7 +52,7 @@ respuesta por debajo de 100 ms.
 
 <!-- captura: Predicción en Postman con la cabecera X-Cache -->
 
-`go run ./cmd/benchapi -exigir-p95 100ms` con 16 clientes concurrentes (sección 10.3).
+`go run ./cmd/benchapi -exigir-p95 100ms` con 16 clientes concurrentes (sección 10.4).
 
 <!-- captura: Benchmark de latencia de la API en consola -->
 
@@ -74,9 +74,11 @@ Entrenamiento lanzado por la API y consultado por su ID, y la cadena verificada 
 ## 12.6 Repositorio en GitHub
 
 Historial de *pull requests* de la PC4, cada uno con el veredicto del juez y el CI en verde, y las ramas
-con Git Flow.
+con Git Flow; y el historial de commits de `develop`, donde están los commits de cada integrante.
 
 <!-- captura: Pull requests de la PC4 en GitHub -->
+
+<!-- captura: Historial de commits de la rama develop en GitHub -->
 
 ## 12.7 Tablero Kanban
 

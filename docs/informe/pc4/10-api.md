@@ -32,7 +32,152 @@ esquema de variables guardado en el modelo, así que la API predice exactamente 
 - **Cierre ordenado.** Con `SIGTERM`, el servidor deja de aceptar conexiones, termina las peticiones en
   curso, cancela el entrenamiento y espera su escritura final, y recién después avisa `fin` a los nodos.
 
-## 10.3 Latencia medida
+## 10.3 Funcionamiento en Go
+
+La API es un `http.Server` de la biblioteca estándar. `Handler` arma el enrutador con la tabla única
+`Rutas()` (la misma que el test compara con el OpenAPI) usando los patrones con método de `net/http`
+(`"POST /api/v1/predicciones"`) y envuelve todo con `recuperar`, que convierte un pánico en un 500 sin
+tumbar el proceso:
+
+<!-- generado:fuente:internal/api/api.go#(*Servidor).Handler -->
+```go
+// internal/api/api.go
+// Handler arma el mux con los middlewares.
+func (s *Servidor) Handler() http.Handler {
+	mux := http.NewServeMux()
+	for _, r := range Rutas() {
+		manejar := r.manejar
+		mux.HandleFunc(r.Metodo+" "+r.Ruta, func(w http.ResponseWriter, req *http.Request) { manejar(s, w, req) })
+	}
+	var h http.Handler = mux
+	for i := len(s.op.Middleware) - 1; i >= 0; i-- {
+		h = s.op.Middleware[i](h)
+	}
+	return s.recuperar(h)
+}
+```
+<!-- /generado -->
+
+`predecir` es el camino que mide el benchmark. Lee el modelo vigente una sola vez desde el
+`atomic.Pointer` (clave, cálculo y registro usan el mismo modelo aunque otro entrenamiento lo reemplace en
+ese instante), valida y normaliza la consulta, intenta la caché con un plazo fijo (*cache-aside*) y, si no
+está, calcula, guarda en Redis y responde. El registro en MongoDB se encola al final y no se espera:
+
+<!-- generado:fuente:internal/api/api.go#(*Servidor).predecir -->
+```go
+// internal/api/api.go
+func (s *Servidor) predecir(w http.ResponseWriter, r *http.Request) {
+	inicio := time.Now()
+	var c Consulta
+	if !leerJSON(w, r, &c, false) {
+		return
+	}
+	m := s.ModeloActual() // una sola lectura: clave, cálculo y registro usan el mismo modelo
+	reg, err := m.registro(c)
+	if err != nil {
+		responderError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	cn := normalizada(reg)
+	clave := almacen.ClavePrediccion(m.Version, cn)
+	ctx := r.Context()
+
+	// Cache-aside (ADR-0006) con presupuesto fijo (PR-40 H5): un fallo o una
+	// demora de la caché no falla la predicción ni consume los 100 ms.
+	cacheSana := s.op.Cache != nil
+	if cacheSana {
+		ctxLeer, cancelar := context.WithTimeout(ctx, PresupuestoLecturaCache)
+		b, ok, err := s.op.Cache.Obtener(ctxLeer, clave)
+		cancelar()
+		if err != nil {
+			cacheSana = false // no se intenta una segunda espera para guardar
+			s.op.Log("api: caché no disponible al leer: %v", err)
+		}
+		var p Prediccion
+		if ok && json.Unmarshal(b, &p) == nil {
+			w.Header().Set("X-Cache", "HIT")
+			responderBytes(w, http.StatusOK, b)
+			s.registrar(registroDe(cn, p, true, inicio))
+			return
+		}
+	}
+	p := m.prediccion(reg)
+	b, err := json.Marshal(p)
+	if err != nil {
+		responderError(w, http.StatusInternalServerError, "error interno al codificar la respuesta")
+		return
+	}
+	if s.op.Cache != nil {
+		if cacheSana {
+			ctxGuardar, cancelar := context.WithTimeout(ctx, PresupuestoEscrituraCache)
+			if err := s.op.Cache.Guardar(ctxGuardar, clave, b, almacen.TTLPrediccion); err != nil {
+				s.op.Log("api: caché no disponible al guardar: %v", err)
+			}
+			cancelar()
+		}
+		w.Header().Set("X-Cache", "MISS")
+	}
+	responderBytes(w, http.StatusOK, b)
+	s.registrar(registroDe(cn, p, false, inicio))
+}
+```
+<!-- /generado -->
+
+El cálculo es el mismo producto punto y la misma sigmoide del entrenamiento, con los pesos publicados y la
+calibración del riesgo (sección 7):
+
+<!-- generado:fuente:internal/api/modelo.go#(*Modelo).prediccion -->
+```go
+// internal/api/modelo.go
+func (m *Modelo) prediccion(r ingest.Registro) Prediccion {
+	d := m.Esquema.D()
+	x := make([]float64, d)
+	m.Esquema.Llenar(r, x)
+	z := m.Pesos[d]
+	for j, v := range x {
+		z += m.Pesos[j] * v
+	}
+	p := ml.Sigmoide(z)
+	pr := Prediccion{
+		Riesgo:                ml.Calibrar(p, m.AjustePrior),
+		ProbabilidadPonderada: p,
+		Umbral:                m.Umbral,
+		Etiqueta:              "sin signos de alarma",
+		DepartamentoModelo:    features.OtrosDepartamentos,
+		VersionModelo:         m.Version,
+	}
+	if p >= m.Umbral {
+		pr.Clase, pr.Etiqueta = 1, "con signos de alarma o grave"
+	}
+	for _, dep := range m.Esquema.Departamentos {
+		if dep == r.Departamento {
+			pr.DepartamentoModelo = dep
+		}
+	}
+	return pr
+}
+```
+<!-- /generado -->
+
+`registrar` es la mitad productora del registro asíncrono: un `select` con `default` sobre un canal con
+búfer. Si el canal está lleno, el registro se cuenta como descartado y el handler sigue; una sola goroutine,
+`registrador`, consume el canal y escribe en MongoDB con su propio plazo:
+
+<!-- generado:fuente:internal/api/api.go#(*Servidor).registrar -->
+```go
+// internal/api/api.go
+// registrar encola sin bloquear.
+func (s *Servidor) registrar(r almacen.RegistroPrediccion) {
+	select {
+	case s.registros <- r:
+	default:
+		s.descartados.Add(1)
+	}
+}
+```
+<!-- /generado -->
+
+## 10.4 Latencia medida
 
 `go run ./cmd/benchapi -exigir-p95 100ms` envía, con 16 clientes concurrentes, dos corridas de 2000
 peticiones: con la **caché fría** (2000 consultas distintas: se calcula y se guarda en Redis) y con la

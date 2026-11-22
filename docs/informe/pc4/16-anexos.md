@@ -28,7 +28,7 @@ sección 2.6 agrega el análisis de trabajos relacionados.
 | Reportes con todas las cifras del informe | `reports/*.json` |
 | Fuente de este informe | `docs/informe/pc4/` (se genera con `go run ./cmd/informe` y `go run ./cmd/word`) |
 | Versión entregada | Rama `main`, tag `pc4` (release desde `develop`) |
-| Código fuente (además del repositorio) | `1ACC0065_PC4_UXXXXXXXX.zip`, generado con `git archive` desde el tag `pc4` |
+| Código fuente (además del repositorio) | `1ACC0065_PC4_U<código>.zip` (uno por integrante), generado con `git archive` desde el tag `pc4` |
 | Reporte de participación | `1ACC0065-202620_Participación_PC4.docx`, en el formato del docente, en el Aula Virtual |
 | Video | No corresponde a esta entrega (TB2) |
 
