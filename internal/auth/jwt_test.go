@@ -92,6 +92,13 @@ func TestJWTRechazos(t *testing.T) {
 		{"rol desconocido", armar(t, cab, rec(map[string]any{"rol": "root"}), secretoPrueba), ErrReclamos},
 		{"sin sub", armar(t, cab, rec(map[string]any{"sub": ""}), secretoPrueba), ErrReclamos},
 		{"campo extra desconocido no rompe", armar(t, cab, rec(map[string]any{"x": 1}), secretoPrueba), nil},
+		{"bits sobrantes en la firma", mutarUltimo(valido), ErrMalformado},
+		{"salto de línea en la firma", partes[0] + "." + partes[1] + "." + partes[2][:10] + "\n" + partes[2][10:], ErrMalformado},
+		{"retorno de carro", valido + "\r", ErrMalformado},
+		{"typ distinto", armar(t, map[string]any{"alg": "HS256", "typ": "NO-JWT"}, rec(nil), secretoPrueba), ErrMalformado},
+		{"ALG en mayúsculas", armar(t, map[string]any{"ALG": "HS256"}, rec(nil), secretoPrueba), ErrMalformado},
+		{"crit desconocido", armar(t, map[string]any{"alg": "HS256", "typ": "JWT", "crit": []string{"x-req"}}, rec(nil), secretoPrueba), ErrMalformado},
+		{"cabecera null", "bnVsbA." + partes[1] + "." + partes[2], ErrMalformado},
 	}
 	for _, c := range casos {
 		t.Run(c.nombre, func(t *testing.T) {
@@ -107,6 +114,14 @@ func TestJWTRechazos(t *testing.T) {
 			}
 		})
 	}
+}
+
+// mutarUltimo cambia el bit sobrante del último carácter de la firma: con
+// base64 no estricto seguiría decodificando a los mismos 32 bytes.
+func mutarUltimo(tok string) string {
+	const alfabeto = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_"
+	i := strings.IndexByte(alfabeto, tok[len(tok)-1])
+	return tok[:len(tok)-1] + string(alfabeto[i^1])
 }
 
 func TestJWTSecretoCorto(t *testing.T) {

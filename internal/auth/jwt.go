@@ -55,8 +55,12 @@ type Reclamos struct {
 	Exp int64  `json:"exp"`
 }
 
-// La cabecera es siempre la misma: se precalcula y se exige tal cual al decodificar.
-var cabeceraB64 = base64.RawURLEncoding.EncodeToString([]byte(`{"alg":"HS256","typ":"JWT"}`))
+// b64 es base64url sin relleno en modo estricto (RFC 7515 §2): rechaza bits
+// sobrantes distintos de cero.
+var b64 = base64.RawURLEncoding.Strict()
+
+// La cabecera es siempre la misma: se precalcula y Verificar la exige tal cual.
+var cabeceraB64 = b64.EncodeToString([]byte(`{"alg":"HS256","typ":"JWT"}`))
 
 // Firmador emite y verifica tokens. Es inmutable tras construirlo, así que es
 // seguro usarlo desde muchas goroutines.
@@ -89,36 +93,34 @@ func (f *Firmador) Firmar(sub string, rol Rol) (string, Reclamos, error) {
 	if err != nil {
 		return "", Reclamos{}, err
 	}
-	datos := cabeceraB64 + "." + base64.RawURLEncoding.EncodeToString(carga)
-	return datos + "." + base64.RawURLEncoding.EncodeToString(f.firma(datos)), rec, nil
+	datos := cabeceraB64 + "." + b64.EncodeToString(carga)
+	return datos + "." + b64.EncodeToString(f.firma(datos)), rec, nil
 }
 
-// Verificar comprueba estructura, algoritmo, firma (en tiempo constante),
-// vigencia, emisor, audiencia y rol, en ese orden.
+// Verificar comprueba estructura, cabecera, firma (en tiempo constante),
+// vigencia, emisor, audiencia y rol, en ese orden. La cabecera tiene que ser
+// exactamente la que emite Firmar y el base64url se decodifica en modo
+// estricto (sin bits sobrantes ni saltos de línea): cada token válido tiene una
+// sola representación.
 func (f *Firmador) Verificar(token string) (Reclamos, error) {
+	if strings.ContainsAny(token, "\r\n") {
+		return Reclamos{}, ErrMalformado
+	}
 	partes := strings.Split(token, ".")
 	if len(partes) != 3 {
 		return Reclamos{}, ErrMalformado
 	}
-	cab, err := base64.RawURLEncoding.DecodeString(partes[0])
-	if err != nil {
-		return Reclamos{}, ErrMalformado
+	if partes[0] != cabeceraB64 {
+		return Reclamos{}, errorDeCabecera(partes[0])
 	}
-	var c struct{ Alg, Typ string }
-	if err := json.Unmarshal(cab, &c); err != nil {
-		return Reclamos{}, ErrMalformado
-	}
-	if c.Alg != "HS256" {
-		return Reclamos{}, fmt.Errorf("%w: %q", ErrAlgoritmo, c.Alg)
-	}
-	firma, err := base64.RawURLEncoding.DecodeString(partes[2])
+	firma, err := b64.DecodeString(partes[2])
 	if err != nil {
 		return Reclamos{}, ErrMalformado
 	}
 	if !hmac.Equal(firma, f.firma(partes[0]+"."+partes[1])) {
 		return Reclamos{}, ErrFirma
 	}
-	carga, err := base64.RawURLEncoding.DecodeString(partes[1])
+	carga, err := b64.DecodeString(partes[1])
 	if err != nil {
 		return Reclamos{}, ErrMalformado
 	}
@@ -136,6 +138,25 @@ func (f *Firmador) Verificar(token string) (Reclamos, error) {
 		return Reclamos{}, ErrReclamos
 	}
 	return rec, nil
+}
+
+// errorDeCabecera clasifica una cabecera distinta de la fija: un "alg" explícito
+// que no es HS256 es ErrAlgoritmo; cualquier otra diferencia (typ, crit, claves
+// en mayúscula, null, base64 inválido) es ErrMalformado.
+func errorDeCabecera(parte string) error {
+	cab, err := b64.DecodeString(parte)
+	if err != nil {
+		return ErrMalformado
+	}
+	var c map[string]json.RawMessage
+	if err := json.Unmarshal(cab, &c); err != nil || c == nil {
+		return ErrMalformado
+	}
+	var alg string
+	if raw, ok := c["alg"]; ok && json.Unmarshal(raw, &alg) == nil && alg != "HS256" {
+		return fmt.Errorf("%w: %q", ErrAlgoritmo, alg)
+	}
+	return ErrMalformado
 }
 
 func (f *Firmador) firma(datos string) []byte {
