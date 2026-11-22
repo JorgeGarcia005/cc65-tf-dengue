@@ -57,7 +57,7 @@ func ejecutarAPI(ctx context.Context, ln, lnHTTP net.Listener, op opciones, mode
 	ctx, cancelarNodos := context.WithCancel(ctx)
 	defer cancelarNodos()
 	ent := &entrenadorCluster{calc: c, d: p.d, lambda: op.lambda, progreso: op.progreso, logf: logf}
-	srv, err := api.Nuevo(api.Opciones{Modelo: base, Entrenador: ent, Cluster: c, Almacen: bd.Almacen, Cache: bd.Cache, Firmador: bd.Firmador, Log: logf})
+	srv, err := api.Nuevo(api.Opciones{Modelo: base, Entrenador: ent, Cluster: c, Almacen: bd.Almacen, Cache: bd.Cache, Firmador: bd.Firmador, Evaluacion: op.evaluacion, Log: logf})
 	if err != nil {
 		lnHTTP.Close()
 		return err

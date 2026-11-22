@@ -114,6 +114,47 @@ paths:
               schema: {$ref: "#/components/schemas/Prediccion"}
         "400": {$ref: "#/components/responses/Error"}
         "413": {$ref: "#/components/responses/Error"}
+  /api/v1/riesgo:
+    get:
+      tags: [modelo]
+      summary: Riesgo cruzado por departamento, semana y grupo de edad (mapa)
+      description: |
+        Subconjunto de reports/evaluacion.json (cmd/evaluacion): el cubo de
+        riesgo (casos, tasa observada, riesgo calibrado, casos esperados con
+        signos de alarma, con niveles «todos») y las combinaciones
+        prioritarias. Comprimido con gzip si el cliente lo acepta; ETag para
+        revalidar (304).
+      operationId: verRiesgo
+      responses:
+        "200":
+          description: Riesgo cruzado.
+          headers:
+            ETag: {description: Huella del documento., schema: {type: string}}
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/DocumentoEvaluacion"}
+        "304": {description: Sin cambios desde el ETag enviado.}
+        "503": {$ref: "#/components/responses/Error"}
+  /api/v1/evaluacion:
+    get:
+      tags: [modelo]
+      summary: Evaluación experimental completa (reports/evaluacion.json)
+      description: |
+        Métricas en test, ROC, calibración por deciles con IC de Wilson,
+        riesgo cruzado, prioridades, escalabilidad por número de nodos y
+        latencia de la API, con el sha256 de cada fuente. Gzip y ETag como
+        /api/v1/riesgo.
+      operationId: verEvaluacion
+      responses:
+        "200":
+          description: Evaluación.
+          headers:
+            ETag: {description: Huella del documento., schema: {type: string}}
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/DocumentoEvaluacion"}
+        "304": {description: Sin cambios desde el ETag enviado.}
+        "503": {$ref: "#/components/responses/Error"}
   /api/v1/cluster:
     get:
       tags: [cluster]
@@ -181,6 +222,36 @@ components:
             properties:
               error: {type: string, example: "semana epidemiológica 54 fuera de 1–53"}
   schemas:
+    DocumentoEvaluacion:
+      type: object
+      description: Esquema completo en internal/evaluacion (Reporte); aquí, los campos comunes.
+      required: [version_esquema, version_modelo]
+      properties:
+        version_esquema: {type: integer, enum: [1]}
+        version_modelo: {type: string, example: e69395b36d2f}
+        riesgo:
+          type: object
+          properties:
+            min_casos: {type: integer}
+            departamentos: {type: array, items: {type: string}}
+            etapas: {type: array, items: {type: string}}
+            celdas: {type: array, items: {$ref: "#/components/schemas/Celda"}}
+        prioridades: {type: array, items: {$ref: "#/components/schemas/Celda"}}
+      additionalProperties: true
+    Celda:
+      type: object
+      properties:
+        departamento: {type: string, example: PIURA, description: "TODOS = nivel nacional."}
+        semana: {type: integer, minimum: 0, maximum: 52, description: "0 = todas."}
+        etapa: {type: string, example: adulto_30_59, description: "todas = todos los grupos."}
+        casos: {type: integer}
+        con_signos_observados: {type: integer}
+        tasa_observada: {type: number, format: double}
+        riesgo_calibrado_medio: {type: number, format: double}
+        casos_esperados: {type: number, format: double}
+        fraccion_nacional: {type: number, format: double}
+        razon_vs_nacional: {type: number, format: double}
+        insuficiente: {type: boolean}
     Login:
       type: object
       additionalProperties: false

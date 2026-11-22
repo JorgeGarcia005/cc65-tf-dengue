@@ -13,6 +13,8 @@ services:
     environment:
       MONGO_URI: mongodb://mongo:27017
       REDIS_ADDR: redis:6379
+      # reports/ ya está montado en /reports (docker-compose.yml): mapa y evaluación (#66).
+      EVALUACION: /reports/evaluacion.json
       # Login (ADR-0007): secreto del JWT y cuentas iniciales, desde deploy/.env
       # (no versionado; ver deploy/.env.example). Sin JWT_SECRETO el login da 503.
       JWT_SECRETO: ${JWT_SECRETO:-}

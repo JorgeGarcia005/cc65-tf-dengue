@@ -124,6 +124,9 @@ jobs:
       - name: Build (Vite)
         working-directory: web
         run: npm run build
+      - name: Sin recursos incrustados que la CSP bloquearía (data:)
+        working-directory: web
+        run: "! grep -l 'url(data:' dist/assets/*.css"
       - name: Imagen web sin privilegios, con CSP y /config.json
         run: |
           docker build -f deploy/Dockerfile.web -t cc65-tf-web .

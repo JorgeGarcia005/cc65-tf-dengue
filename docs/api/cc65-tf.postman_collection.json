@@ -395,6 +395,80 @@
         },
         "description": ""
       }
+    },
+    {
+      "name": "Riesgo cruzado (mapa)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+              "pm.test(\"responde en menos de 100 ms\", function () { pm.expect(pm.response.responseTime).to.be.below(100); });",
+              "pm.test(\"cubo y prioridades\", function () { const r = pm.response.json(); pm.expect(r.version_esquema).to.eql(1); pm.expect(r.riesgo.celdas.length).to.be.above(0); pm.expect(r.prioridades.length).to.be.above(0); });"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept-Encoding",
+            "value": "gzip"
+          }
+        ],
+        "url": {
+          "raw": "{{base_url}}/api/v1/riesgo",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "riesgo"
+          ]
+        },
+        "description": ""
+      }
+    },
+    {
+      "name": "Evaluación experimental",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+              "pm.test(\"responde en menos de 100 ms\", function () { pm.expect(pm.response.responseTime).to.be.below(100); });",
+              "pm.test(\"métricas, ROC y escalabilidad\", function () { const r = pm.response.json(); pm.expect(r.auc_trapecio).to.be.above(0.5); pm.expect(r.roc.length).to.be.above(1); pm.expect(r.escalabilidad.mediciones.length).to.be.above(0); });"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept-Encoding",
+            "value": "gzip"
+          }
+        ],
+        "url": {
+          "raw": "{{base_url}}/api/v1/evaluacion",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "evaluacion"
+          ]
+        },
+        "description": ""
+      }
     }
   ]
 }

@@ -8,6 +8,8 @@
 //	POST /api/v1/auth/login   (JWT, ADR-0007)
 //	GET  /api/v1/modelo
 //	POST /api/v1/predicciones
+//	GET  /api/v1/riesgo       (cubo de riesgo para el mapa, de reports/evaluacion.json)
+//	GET  /api/v1/evaluacion   (reports/evaluacion.json completo)
 //	GET  /api/v1/cluster
 //	POST /api/v1/entrenamientos
 //	GET  /api/v1/entrenamientos/{id}
@@ -61,6 +63,9 @@ type Opciones struct {
 	Almacen almacen.Almacen
 	// Cache guarda predicciones (Redis en producción). Si es nil no hay caché.
 	Cache almacen.Cache
+	// Evaluacion es el contenido de reports/evaluacion.json (#59): lo sirven
+	// GET /api/v1/evaluacion y, recortado, GET /api/v1/riesgo. Vacío = 503.
+	Evaluacion []byte
 	// Usuarios guarda las cuentas del login. Si es nil y Almacen implementa
 	// almacen.Usuarios (Memoria y Mongo lo hacen), se usa Almacen.
 	Usuarios almacen.Usuarios
@@ -107,7 +112,8 @@ type Servidor struct {
 	wgRegistrador sync.WaitGroup
 	cerrarUnaVez  sync.Once
 
-	limite *limitador // intentos fallidos de login por IP
+	evaluacion, riesgo *documento // reports/evaluacion.json precomprimido; nil si no hay
+	limite             *limitador // intentos fallidos de login por IP
 }
 
 // Nuevo crea el servidor: elige el modelo inicial (el vigente del almacén o,
@@ -139,6 +145,11 @@ func Nuevo(op Opciones) (*Servidor, error) {
 		return nil, err
 	}
 	s := &Servidor{op: op, registros: make(chan almacen.RegistroPrediccion, BufferRegistros), limite: nuevoLimitador()}
+	if len(op.Evaluacion) > 0 {
+		if s.evaluacion, s.riesgo, err = cargarEvaluacion(op.Evaluacion); err != nil {
+			return nil, err
+		}
+	}
 	s.ents = entrenamientos{almacen: op.Almacen, log: op.Log, nuevoID: nuevoIDEntrenamiento}
 	if err := s.ents.reconciliar(ctx); err != nil {
 		return nil, fmt.Errorf("api: entrenamientos pendientes: %w", err)
@@ -260,6 +271,8 @@ func Rutas() []Ruta {
 		{"POST", "/api/v1/auth/login", true, (*Servidor).login},
 		{"GET", "/api/v1/modelo", true, (*Servidor).verModelo},
 		{"POST", "/api/v1/predicciones", true, (*Servidor).predecir},
+		{"GET", "/api/v1/riesgo", true, (*Servidor).verRiesgo},
+		{"GET", "/api/v1/evaluacion", true, (*Servidor).verEvaluacion},
 		{"GET", "/api/v1/cluster", true, (*Servidor).verCluster},
 		{"POST", "/api/v1/entrenamientos", true, (*Servidor).crearEntrenamiento},
 		{"GET", "/api/v1/entrenamientos/{id}", true, (*Servidor).verEntrenamiento},

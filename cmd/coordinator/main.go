@@ -17,6 +17,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"io/fs"
 	"log"
 	"math"
 	"net"
@@ -43,6 +44,9 @@ type opciones struct {
 	verificar bool
 	tRegistro time.Duration
 	tEpoca    time.Duration
+	// evaluacion es reports/evaluacion.json para GET /api/v1/riesgo y
+	// /api/v1/evaluacion (modo servicio); vacío = esas rutas dan 503.
+	evaluacion []byte
 }
 
 // reporte usa las mismas claves que reports/entrenamiento.json para épocas,
@@ -89,6 +93,7 @@ func main() {
 	uriMongo := flag.String("mongo", os.Getenv("MONGO_URI"), "modo servicio: URI de MongoDB (vacío = en memoria; por defecto $MONGO_URI)")
 	baseMongo := flag.String("base", "cc65_dengue", "modo servicio: base de datos de MongoDB")
 	dirRedis := flag.String("redis", os.Getenv("REDIS_ADDR"), "modo servicio: host:puerto de Redis (vacío = sin caché; por defecto $REDIS_ADDR)")
+	rutaEval := flag.String("evaluacion", os.Getenv("EVALUACION"), "modo servicio: reports/evaluacion.json para /api/v1/riesgo y /api/v1/evaluacion (por defecto $EVALUACION)")
 	flag.Parse()
 
 	ln, err := net.Listen("tcp", *escucha)
@@ -97,6 +102,9 @@ func main() {
 	}
 	log.Printf("coordinador escuchando en %s; espera %d nodos", ln.Addr(), op.nodos)
 	if *dirAPI != "" {
+		if op.evaluacion, err = leerEvaluacion(*rutaEval, log.Printf); err != nil {
+			log.Fatal(err)
+		}
 		if err := servicio(ln, *dirAPI, *rutaModelo, *uriMongo, *baseMongo, *dirRedis, op); err != nil {
 			log.Fatal(err)
 		}
@@ -309,4 +317,28 @@ func escribirJSON(ruta string, v any) error {
 		return err
 	}
 	return os.WriteFile(ruta, append(b, '\n'), 0o644)
+}
+
+// leerEvaluacion carga reports/evaluacion.json si existe. Si no existe, la API
+// arranca igual y sus dos rutas responden 503 (la evaluación se genera aparte
+// con go run ./cmd/evaluacion y no debe impedir predecir ni entrenar). Un
+// archivo que existe pero está vacío es un error: es un reporte roto.
+func leerEvaluacion(ruta string, logf func(string, ...any)) ([]byte, error) {
+	if ruta == "" {
+		logf("sin -evaluacion: /api/v1/riesgo y /api/v1/evaluacion responden 503")
+		return nil, nil
+	}
+	b, err := os.ReadFile(ruta)
+	if errors.Is(err, fs.ErrNotExist) {
+		logf("evaluación no disponible (%s no existe): /api/v1/riesgo y /api/v1/evaluacion responden 503", ruta)
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("evaluación: %w", err)
+	}
+	if len(b) == 0 {
+		return nil, fmt.Errorf("evaluación: %s está vacío; vuelva a generarlo con go run ./cmd/evaluacion", ruta)
+	}
+	logf("evaluación cargada de %s (%d bytes)", ruta, len(b))
+	return b, nil
 }
