@@ -19,11 +19,17 @@ const (
 	Publica Modo = iota
 	// Bearer exige "Authorization: Bearer <jwt>" y que el rol esté en Ruta.Roles.
 	Bearer
+	// Ticket es el handshake del WebSocket: Origin en la lista de CORS y
+	// ?ticket= de un solo uso (el navegador no puede mandar Authorization ahí).
+	Ticket
 )
 
 func (m Modo) String() string {
-	if m == Bearer {
+	switch m {
+	case Bearer:
 		return "bearer"
+	case Ticket:
+		return "ticket"
 	}
 	return "publica"
 }
