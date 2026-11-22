@@ -3,7 +3,7 @@ SHELL := /bin/bash
 
 GO_FILES := $(shell find . -name '*.go' -not -path './web/*' -not -path './.git/*' 2>/dev/null)
 
-.PHONY: check fmt vet test skills data bench bench-api informe imagen cluster prueba-caida
+.PHONY: check fmt vet test skills data bench bench-api evaluacion informe imagen cluster prueba-caida
 
 ## check: todo lo que el CI exige antes de abrir un PR
 check: skills fmt vet test
@@ -36,6 +36,10 @@ bench:
 
 bench-api:
 	@go run ./cmd/benchapi
+
+## evaluacion: ROC, calibración y riesgo cruzado sobre test → reports/evaluacion.json (#59)
+evaluacion:
+	@go run ./cmd/evaluacion
 
 ## imagen: construye la imagen del clúster (solo coordinator y node)
 imagen:
