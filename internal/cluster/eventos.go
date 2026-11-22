@@ -55,13 +55,15 @@ func shard(s int) *int { return &s }
 // Grabador escribe los eventos como JSON por línea (reports/eventos_*.jsonl)
 // sin frenar al coordinador: Observar los encola en un canal con búfer y una
 // goroutine los escribe; si el búfer está lleno, el evento se descarta y se
-// cuenta. Cerrar vacía la cola y vuelca el archivo.
+// cuenta. Cerrar vacía la cola y vuelca el archivo. Observar después de Cerrar
+// (o a la vez) no entra en pánico: el evento se cuenta como descartado.
 type Grabador struct {
+	mu          sync.RWMutex // el envío (RLock) y el cierre del canal (Lock) no se cruzan
+	cerrado     bool
 	cola        chan Evento
 	hecho       chan struct{}
-	cerrar      sync.Once
 	descartados atomic.Int64
-	err         error
+	err         error // lo escribe la goroutine escritora; se lee después de <-hecho
 }
 
 // NuevoGrabador empieza a escribir en w.
@@ -85,6 +87,12 @@ func NuevoGrabador(w io.Writer, bufer int) *Grabador {
 
 // Observar se pasa como Opciones.Observador. No bloquea.
 func (g *Grabador) Observar(e Evento) {
+	g.mu.RLock()
+	defer g.mu.RUnlock()
+	if g.cerrado {
+		g.descartados.Add(1)
+		return
+	}
 	select {
 	case g.cola <- e:
 	default:
@@ -92,13 +100,18 @@ func (g *Grabador) Observar(e Evento) {
 	}
 }
 
-// Descartados devuelve cuántos eventos no se grabaron por cola llena.
+// Descartados devuelve cuántos eventos no se grabaron (cola llena o grabador cerrado).
 func (g *Grabador) Descartados() int64 { return g.descartados.Load() }
 
-// Cerrar espera a que se escriban los eventos encolados. No se debe llamar a
-// Observar después. Devuelve el primer error de escritura.
+// Cerrar deja de aceptar eventos, espera a que se escriban los ya encolados y
+// devuelve el primer error de escritura. Es idempotente.
 func (g *Grabador) Cerrar() error {
-	g.cerrar.Do(func() { close(g.cola) })
+	g.mu.Lock()
+	if !g.cerrado {
+		g.cerrado = true
+		close(g.cola)
+	}
+	g.mu.Unlock()
 	<-g.hecho
 	return g.err
 }

@@ -114,6 +114,7 @@ type Coordinador struct {
 	epoca     int
 	reasign   int
 	fallo     error
+	terminado bool // Terminar ya avisó el fin exitoso
 
 	calcNodo map[int]int64 // µs de cómputo de la época en curso, por nodo
 	calcSuma int64         // y la suma de todos los shards
@@ -576,6 +577,12 @@ func (c *Coordinador) avisarFin(motivo string) {
 func (c *Coordinador) Terminar() {
 	c.muBucle.Lock()
 	defer c.muBucle.Unlock()
+	// Tras un fallo ya se avisó `fin` (abortado) y se emitió EvAbortado; y un
+	// segundo Terminar no repite el aviso ni el evento.
+	if c.fallo != nil || c.terminado {
+		return
+	}
+	c.terminado = true
 	c.avisarFin(protocolo.MotivoCompleto)
 	c.emitir(Evento{Tipo: EvFin, Epoca: c.epoca})
 }

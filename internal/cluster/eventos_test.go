@@ -8,6 +8,7 @@ import (
 	"io"
 	"math"
 	"slices"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -21,12 +22,21 @@ type recolector struct {
 }
 
 func (r *recolector) observar(e Evento) {
+	r.mu.Lock()
+	r.evs = append(r.evs, copiaProfunda(e)) // lo que llegó, antes de destrozarlo
+	r.mu.Unlock()
 	for i := range e.Pesos {
 		e.Pesos[i] = math.NaN()
 	}
-	r.mu.Lock()
-	r.evs = append(r.evs, e)
-	r.mu.Unlock()
+	for i := range e.Nodos {
+		e.Nodos[i] = EstadoNodo{Nombre: "alterado", Sano: !e.Nodos[i].Sano}
+	}
+}
+
+func copiaProfunda(e Evento) Evento {
+	e.Pesos = append([]float64(nil), e.Pesos...)
+	e.Nodos = append([]EstadoNodo(nil), e.Nodos...)
+	return e
 }
 
 func (r *recolector) tipos() []string {
@@ -175,8 +185,19 @@ func proyeccion(t *testing.T, jsonl []byte) []string {
 		if e.Shard != nil {
 			sh = *e.Shard
 		}
-		out = append(out, fmt.Sprintf("%d %s %d %s %d %x %v", e.V, e.Tipo, e.Epoca, e.Nodo, sh,
-			math.Float64bits(e.Perdida), e.Pesos))
+		bits := make([]uint64, len(e.Pesos))
+		for i, w := range e.Pesos {
+			bits[i] = math.Float64bits(w)
+		}
+		var nodos []string
+		for _, n := range e.Nodos { // sin Remoto: el puerto cambia en cada corrida
+			nodos = append(nodos, fmt.Sprintf("%s/%d/%v/%d/%s", n.Nombre, n.Workers, n.Sano, n.Carga, n.Motivo))
+		}
+		out = append(out, fmt.Sprintf("%d %s %d %s %d %x %x %q %v", e.V, e.Tipo, e.Epoca, e.Nodo, sh,
+			math.Float64bits(e.Perdida), bits, e.Detalle, nodos))
+	}
+	if err := sc.Err(); err != nil {
+		t.Fatal(err)
 	}
 	return out
 }
@@ -213,9 +234,102 @@ func TestGrabadorNoBloquea(t *testing.T) {
 	if g.Descartados() == 0 {
 		t.Fatal("con la cola llena debían descartarse eventos")
 	}
-	go io.Copy(io.Discard, pr) // destraba al escritor
+	lector := make(chan struct{})
+	go func() { // destraba al escritor
+		defer close(lector)
+		_, _ = io.Copy(io.Discard, pr)
+	}()
 	if err := g.Cerrar(); err != nil {
 		t.Fatal(err)
 	}
-	pr.Close()
+	pw.Close()
+	<-lector
+}
+
+// PR-81 H2: Observar a la vez que Cerrar, o después, no entra en pánico; Cerrar
+// es idempotente; lo aceptado antes del cierre se escribe completo.
+func TestGrabadorObservarYCerrarConcurrentes(t *testing.T) {
+	for range 50 {
+		var buf bytes.Buffer
+		g := NuevoGrabador(&buf, 64)
+		var wg sync.WaitGroup
+		for range 4 {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				for range 100 {
+					g.Observar(Evento{Tipo: EvEpoca})
+				}
+			}()
+		}
+		if err := g.Cerrar(); err != nil {
+			t.Fatal(err)
+		}
+		wg.Wait()
+		g.Observar(Evento{Tipo: EvFin}) // después del cierre
+		if err := g.Cerrar(); err != nil {
+			t.Fatal(err)
+		}
+		lineas := bytes.Count(buf.Bytes(), []byte("\n"))
+		if int64(lineas)+g.Descartados() != 4*100+1 {
+			t.Fatalf("%d escritos + %d descartados ≠ %d observados", lineas, g.Descartados(), 401)
+		}
+	}
+}
+
+type escritorRoto struct{}
+
+func (escritorRoto) Write([]byte) (int, error) { return 0, fmt.Errorf("disco lleno") }
+
+func TestGrabadorDevuelveElErrorDeEscritura(t *testing.T) {
+	g := NuevoGrabador(escritorRoto{}, 8)
+	g.Observar(Evento{Tipo: EvEpoca, Pesos: make([]float64, 2000)}) // más que el búfer de bufio
+	if err := g.Cerrar(); err == nil || !strings.Contains(err.Error(), "disco lleno") {
+		t.Fatalf("Cerrar = %v, quería el error del escritor", err)
+	}
+}
+
+// PR-81 H3: si caen todos los nodos se emite descarte y abortado, y Terminar
+// después no emite un fin contradictorio.
+func TestEventosAbortadoSinFin(t *testing.T) {
+	e := nuevoEscenario(t, 2, 3)
+	var r recolector
+	cp := nuevoClusterObservado(t, e, 10*time.Second, r.observar)
+	caido := nuevoGuion()
+	caido.cerrarEnEp = 0
+	cp.registrar(1, func() { cp.nodoGuion("unico", caido) })
+	if _, err := cp.entrenar(20 * time.Second); err == nil {
+		t.Fatal("sin nodos el entrenamiento debía abortar")
+	}
+	cp.c.Terminar()
+	tipos := r.tipos()
+	iDesc, iAbort := slices.Index(tipos, EvDescarte), slices.Index(tipos, EvAbortado)
+	if iDesc < 0 || iAbort < iDesc || slices.Contains(tipos, EvFin) {
+		t.Fatalf("se esperaba descarte → abortado y ningún fin: %v", tipos)
+	}
+	if r.evs[iAbort].Detalle == "" {
+		t.Fatal("abortado sin detalle")
+	}
+	// El observador alteró los nodos que recibió: el estado del clúster no cambia.
+	for _, n := range cp.c.Estado().Nodos {
+		if n.Nombre == "alterado" {
+			t.Fatal("el observador modificó el estado del coordinador")
+		}
+	}
+}
+
+func TestTerminarEmiteUnSoloFin(t *testing.T) {
+	e := nuevoEscenario(t, 1, 2)
+	var r recolector
+	cp := entrenarCon(t, e, 1, r.observar) // ya llama a Terminar
+	cp.c.Terminar()
+	n := 0
+	for _, tp := range r.tipos() {
+		if tp == EvFin {
+			n++
+		}
+	}
+	if n != 1 {
+		t.Fatalf("%d eventos fin, quería 1", n)
+	}
 }
