@@ -158,7 +158,7 @@ func TestPrediccionCoincideConElModeloEntrenado(t *testing.T) {
 	m.Esquema.Llenar(ingest.Registro{Departamento: "LORETO", Ano: 2024, Semana: 10, EdadAnios: 34, Sexo: 'M'}, x)
 	z := m.Pesos[len(x)]
 	for j := range x {
-		z += m.Pesos[j] * x[j]
+		z += float64(m.Pesos[j] * x[j]) // sin FMA, como el modelo (PR-85 H3)
 	}
 	p := ml.Sigmoide(z)
 	if got := v["probabilidad_ponderada"].(float64); math.Float64bits(got) != math.Float64bits(p) {
@@ -701,7 +701,7 @@ func TestPrediccionContribucionesSumanElLogit(t *testing.T) {
 	}
 	suma := p.Sesgo
 	for j, c := range p.Contribuciones {
-		if c.Variable != m.Esquema.Nombres[j] || math.Float64bits(c.Aporte) != math.Float64bits(c.Peso*c.Valor) || c.Peso != m.Pesos[j] {
+		if c.Variable != m.Esquema.Nombres[j] || c.Aporte != float64(c.Peso*c.Valor) || c.Peso != m.Pesos[j] || math.Signbit(c.Aporte) && c.Aporte == 0 {
 			t.Fatalf("contribución %d: %+v (variable del modelo %s, peso %v)", j, c, m.Esquema.Nombres[j], m.Pesos[j])
 		}
 		suma += c.Aporte

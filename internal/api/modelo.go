@@ -246,6 +246,9 @@ func (m *Modelo) prediccion(r ingest.Registro) Prediccion {
 		// La conversión explícita redondea el producto (la especificación de Go
 		// permite fusionar x*y+z en una FMA): así Σ aportes reproduce z exacto.
 		aporte := float64(m.Pesos[j] * v)
+		if aporte == 0 {
+			aporte = 0 // -0 (peso negativo × 0) no cambia z, pero ensucia el JSON (PR-85 H3)
+		}
 		z += aporte
 		contribuciones[j] = Contribucion{Variable: m.Esquema.Nombres[j], Valor: v, Peso: m.Pesos[j], Aporte: aporte}
 	}
