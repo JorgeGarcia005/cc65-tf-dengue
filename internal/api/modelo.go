@@ -130,6 +130,20 @@ type Prediccion struct {
 	Umbral                float64 `json:"umbral"`
 	DepartamentoModelo    string  `json:"departamento_modelo"`
 	VersionModelo         string  `json:"version_modelo"`
+	// Logit es z = b + Σ w_j·x_j; ProbabilidadPonderada = σ(Logit). Sesgo más
+	// los aportes, sumados en el orden de Contribuciones, dan Logit bit a bit
+	// (es la misma suma que hace el modelo, #67).
+	Logit          float64        `json:"logit"`
+	Sesgo          float64        `json:"sesgo"`
+	Contribuciones []Contribucion `json:"contribuciones"`
+}
+
+// Contribucion es el aporte de una variable al logit: Aporte = Peso·Valor.
+type Contribucion struct {
+	Variable string  `json:"variable"`
+	Valor    float64 `json:"valor"` // x_j ya transformada (estandarizada o 0/1)
+	Peso     float64 `json:"peso"`
+	Aporte   float64 `json:"aporte"`
 }
 
 // ErrConsulta marca los errores de validación (→ 400).
@@ -227,11 +241,17 @@ func (m *Modelo) prediccion(r ingest.Registro) Prediccion {
 	x := make([]float64, d)
 	m.Esquema.Llenar(r, x)
 	z := m.Pesos[d]
+	contribuciones := make([]Contribucion, d)
 	for j, v := range x {
-		z += m.Pesos[j] * v
+		// La conversión explícita redondea el producto (la especificación de Go
+		// permite fusionar x*y+z en una FMA): así Σ aportes reproduce z exacto.
+		aporte := float64(m.Pesos[j] * v)
+		z += aporte
+		contribuciones[j] = Contribucion{Variable: m.Esquema.Nombres[j], Valor: v, Peso: m.Pesos[j], Aporte: aporte}
 	}
 	p := ml.Sigmoide(z)
 	pr := Prediccion{
+		Logit: z, Sesgo: m.Pesos[d], Contribuciones: contribuciones,
 		Riesgo:                ml.Calibrar(p, m.AjustePrior),
 		ProbabilidadPonderada: p,
 		Umbral:                m.Umbral,

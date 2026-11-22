@@ -428,7 +428,9 @@ func (s *Servidor) predecir(w http.ResponseWriter, r *http.Request) {
 			s.op.Log("api: caché no disponible al leer: %v", err)
 		}
 		var p Prediccion
-		if ok && json.Unmarshal(b, &p) == nil {
+		// Una entrada guardada antes de #67 no trae contribuciones: se recalcula
+		// y se reemplaza, en vez de servirla incompleta.
+		if ok && json.Unmarshal(b, &p) == nil && len(p.Contribuciones) > 0 {
 			w.Header().Set("X-Cache", "HIT")
 			responderBytes(w, http.StatusOK, b)
 			s.registrar(registroDe(cn, p, true, inicio))

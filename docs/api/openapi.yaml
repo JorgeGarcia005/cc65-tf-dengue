@@ -429,6 +429,19 @@ components:
         umbral: {type: number, format: double, example: 0.5}
         departamento_modelo: {type: string, example: LORETO, description: "Columna usada (OTROS si no tiene propia)."}
         version_modelo: {type: string, example: 3f9a1c0b7d2e}
+        logit: {type: number, format: double, description: "z = sesgo + Σ aportes; probabilidad_ponderada = σ(z)."}
+        sesgo: {type: number, format: double}
+        contribuciones:
+          type: array
+          description: "Una por variable, en el orden del modelo: sesgo + Σ aporte, sumados en ese orden, da logit exacto."
+          items: {$ref: "#/components/schemas/Contribucion"}
+    Contribucion:
+      type: object
+      properties:
+        variable: {type: string, example: depto_piura}
+        valor: {type: number, format: double, description: "Variable ya transformada (estandarizada o 0/1)."}
+        peso: {type: number, format: double}
+        aporte: {type: number, format: double, description: "peso × valor"}
     Modelo:
       type: object
       properties:
