@@ -30,7 +30,7 @@ Número de PR `<n>` y rama `<rama>`. Si te dan solo uno, deduce el otro con
      limitación del entorno, corre `go test -count=1 ./...` sin `-race` y apóyate en el CI
      de GitHub, que sí corre `-race`. Una carrera detectada (`WARNING: DATA RACE`) siempre
      es BLOQUEANTE.
-4. **Revisión del diff** (`git diff origin/develop...origin/<rama>`) con la lista de abajo.
+4. **Revisión del diff** (`git diff origin/<base>...origin/<rama>`, donde `<base>` es la base del PR: `integracion/tb2` en la TB2) con la lista de abajo.
 5. **Veredicto.** Copia `docs/agentes/revisiones/VEREDICTO.md` a
    `docs/agentes/revisiones/PR-<n>/ronda-<k>.md` y llénala. `k` = 1 + rondas existentes.
 6. **Entrega.** En una rama `revision/PR-<n>` creada desde la rama del PR:
