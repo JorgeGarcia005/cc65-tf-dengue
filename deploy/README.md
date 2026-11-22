@@ -78,3 +78,19 @@ Los mensajes son JSON por línea (ADR-0005), legibles tal cual:
 ```bash
 docker compose -f deploy/docker-compose.yml logs -f coordinator
 ```
+
+## SPA Vigía (TB2, #62)
+
+`deploy/Dockerfile.web` construye la imagen `cc65-tf-web`: compila la SPA de `web/` (React + Vite)
+y la sirve con `cmd/web`, un servidor estático en Go stdlib sobre distroless (`nonroot`). Envía una
+CSP estricta (sin `unsafe-inline`), `X-Content-Type-Options`, `Referrer-Policy` y
+`frame-ancestors 'none'`, y entrega `/config.json` con la URL de la API tomada de `API_URL` al
+arrancar (ADR-0007). En modo servicio se levanta junto a la API:
+
+```bash
+API=:8080 docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.api.yml up --build
+# SPA: http://localhost:8081 · API: http://localhost:8080 (otro origen: CORS real)
+```
+
+`PUERTO_WEB` cambia el puerto de la SPA en el anfitrión (8081 por defecto). Para desarrollar sin
+Docker: `cd web && npm ci && npm run dev` (usa `web/public/config.json`).

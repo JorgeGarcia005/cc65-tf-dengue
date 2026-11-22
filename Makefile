@@ -3,7 +3,7 @@ SHELL := /bin/bash
 
 GO_FILES := $(shell find . -name '*.go' -not -path './web/*' -not -path './.git/*' 2>/dev/null)
 
-.PHONY: check fmt vet test skills data bench bench-api informe imagen cluster prueba-caida
+.PHONY: check fmt vet test skills data bench bench-api informe imagen cluster prueba-caida web
 
 ## check: todo lo que el CI exige antes de abrir un PR
 check: skills fmt vet test
@@ -54,3 +54,7 @@ informe:
 	@go run ./cmd/informe
 	@go run ./cmd/word
 	@echo "Con Word instalado: powershell -ExecutionPolicy Bypass -File scripts/word-final.ps1"
+
+## web: tipos, tests y build de la SPA (lo mismo que el job «web» del CI)
+web:
+	@cd web && npm ci --no-audit --no-fund && npm run typecheck && npm test && npm run build
