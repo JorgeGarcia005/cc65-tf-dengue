@@ -29,8 +29,8 @@ export class ErrorApi extends Error {
 export interface OpcionesCliente {
   baseUrl: string
   token?: () => string | undefined
-  /** Se llama ante un 401 de una petición que llevaba token. */
-  alExpirar?: () => void
+  /** Se llama ante un 401 de una petición que llevaba token, con ese token. */
+  alExpirar?: (tokenFallido: string) => void
 }
 
 export interface Cliente {
@@ -69,7 +69,7 @@ export function crearCliente({ baseUrl, token, alExpirar }: OpcionesCliente): Cl
       }
     }
     if (!resp.ok) {
-      if (resp.status === 401 && t) alExpirar?.()
+      if (resp.status === 401 && t) alExpirar?.(t)
       const msg =
         datos && typeof datos === 'object' && 'error' in datos && typeof datos.error === 'string'
           ? datos.error
@@ -99,8 +99,11 @@ export function esSesion(v: unknown): v is Sesion {
   const s = v as Record<string, unknown>
   return (
     typeof s.token === 'string' &&
+    s.token.trim().length > 0 &&
     typeof s.correo === 'string' &&
+    s.correo.trim().length > 0 &&
     (s.rol === 'admin' || s.rol === 'analista') &&
-    typeof s.expira === 'number'
+    typeof s.expira === 'number' &&
+    Number.isFinite(s.expira)
   )
 }

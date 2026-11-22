@@ -6,12 +6,15 @@ import { crearCliente, esSesion, type Cliente, type RespuestaLogin, type Rol, ty
 const CLAVE = 'vigia.sesion'
 
 function leerGuardada(ahora: number): Sesion | null {
+  let v: unknown = null
   try {
-    const v: unknown = JSON.parse(sessionStorage.getItem(CLAVE) ?? 'null')
-    return esSesion(v) && v.expira > ahora ? v : null
+    v = JSON.parse(sessionStorage.getItem(CLAVE) ?? 'null')
   } catch {
-    return null
+    v = null
   }
+  if (esSesion(v) && v.expira > ahora) return v
+  sessionStorage.removeItem(CLAVE) // vencida o corrupta: no se deja guardada
+  return null
 }
 
 interface ValorSesion {
@@ -42,6 +45,7 @@ export function ProveedorSesion({
 
   const salir = useCallback(() => {
     sessionStorage.removeItem(CLAVE)
+    actual.current = null
     setSesion(null)
   }, [])
 
@@ -50,7 +54,9 @@ export function ProveedorSesion({
       crearCliente({
         baseUrl: apiUrl,
         token: () => actual.current?.token,
-        alExpirar: () => {
+        alExpirar: (tokenFallido) => {
+          // Un 401 tardío de una sesión anterior no cierra la sesión actual.
+          if (actual.current?.token !== tokenFallido) return
           setAviso('Tu sesión venció. Vuelve a entrar.')
           salir()
         },
@@ -60,9 +66,12 @@ export function ProveedorSesion({
 
   const entrar = useCallback(
     async (correo: string, clave: string) => {
-      const r = await crearCliente({ baseUrl: apiUrl }).post<RespuestaLogin>('/api/v1/auth/login', { correo, clave })
+      const r = await crearCliente({ baseUrl: apiUrl }).post<RespuestaLogin | undefined>('/api/v1/auth/login', {
+        correo,
+        clave,
+      })
+      if (!esSesion(r)) throw new Error('Respuesta de login inválida.')
       const nueva: Sesion = { token: r.token, correo: r.correo, rol: r.rol, expira: r.expira }
-      if (!esSesion(nueva)) throw new Error('Respuesta de login inválida.')
       sessionStorage.setItem(CLAVE, JSON.stringify(nueva))
       setAviso(null)
       setSesion(nueva)

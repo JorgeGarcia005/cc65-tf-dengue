@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { crearCliente, ErrorApi } from '../api/cliente'
+import { crearCliente, ErrorApi, esSesion } from '../api/cliente'
 
 function respuesta(estado: number, cuerpo: unknown, cabeceras: Record<string, string> = {}) {
   return new Response(cuerpo === undefined ? '' : JSON.stringify(cuerpo), { status: estado, headers: cabeceras })
@@ -17,12 +17,21 @@ describe('cliente de la API', () => {
     expect(init.credentials).toBe('omit')
   })
 
+  it('esSesion exige token, correo y vencimiento válidos', () => {
+    const base = { token: 't', correo: 'a@b.pe', rol: 'admin', expira: 1 }
+    expect(esSesion(base)).toBe(true)
+    for (const malo of [{ token: '' }, { token: '  ' }, { correo: '' }, { expira: Number.NaN }, { expira: Infinity }, { rol: 'root' }]) {
+      expect(esSesion({ ...base, ...malo })).toBe(false)
+    }
+    expect(esSesion(undefined)).toBe(false)
+  })
+
   it('un 401 con token avisa que la sesión venció', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(respuesta(401, { error: 'token inválido o vencido' })))
     const alExpirar = vi.fn()
     const api = crearCliente({ baseUrl: 'http://api', token: () => 't', alExpirar })
     await expect(api.get('/x')).rejects.toMatchObject({ estado: 401, message: 'token inválido o vencido' })
-    expect(alExpirar).toHaveBeenCalledOnce()
+    expect(alExpirar).toHaveBeenCalledExactlyOnceWith('t')
   })
 
   it('un 401 sin token (login fallido) no cierra ninguna sesión', async () => {
