@@ -14,6 +14,7 @@ type Hub struct {
 	mu          sync.Mutex
 	clientes    map[*Cliente]struct{}
 	cerrado     bool
+	activos     sync.WaitGroup // llamadas a Servir en curso; Cerrar las espera
 	bufer       int
 	descartados atomic.Uint64
 }
@@ -49,10 +50,12 @@ func (h *Hub) Suscribir() *Cliente {
 	return c
 }
 
-// Cerrar da de baja a todos los clientes y no acepta nuevos. http.Server.Shutdown
-// no cierra las conexiones tomadas con Hijack: la API llama a esto al recibir
-// SIGTERM y cada escritora manda el cierre 1001 (going away) y cierra el socket.
+// Cerrar da de baja a todos los clientes, no acepta nuevos y espera a que
+// terminen todas las llamadas a Servir. http.Server.Shutdown no cierra las
+// conexiones tomadas con Hijack: la API llama a esto al recibir SIGTERM y cada
+// escritora manda el cierre 1001 (going away) y cierra el socket. Es idempotente.
 func (h *Hub) Cerrar() {
+	defer h.activos.Wait()
 	h.mu.Lock()
 	h.cerrado = true
 	todos := make([]*Cliente, 0, len(h.clientes))
@@ -110,31 +113,48 @@ func (c *Cliente) Hecho() <-chan struct{} { return c.hecho }
 func (c *Cliente) Descartados() uint64 { return c.descartados.Load() }
 
 // Servir conecta una suscripción con una conexión: una goroutine escribe los
-// mensajes del hub y manda un ping cada intervaloPing; la goroutine que llama
-// lee del cliente (responde ping, atiende el cierre). Termina cuando el cliente
-// cierra, falla una escritura o se desuscribe; siempre deja al cliente dado de
-// baja y la conexión cerrada.
+// mensajes del hub y manda un ping cada intervaloPing (sin pings si es ≤ 0); la
+// goroutine que llama lee del cliente (responde ping, atiende el cierre). Con
+// pings, un cliente que no manda nada (ni el pong) en 2·intervaloPing se da por
+// caído. Termina cuando el cliente cierra, falla una escritura, vence ese plazo
+// o se desuscribe; siempre deja al cliente dado de baja y la conexión cerrada.
 func (h *Hub) Servir(conn *Conn, c *Cliente, intervaloPing time.Duration) {
+	h.mu.Lock()
+	if h.cerrado {
+		h.mu.Unlock()
+		h.Desuscribir(c)
+		_ = conn.Cerrar(CierreSaliendo, "el servidor se apaga")
+		return
+	}
+	h.activos.Add(1) // bajo h.mu: Cerrar no puede empezar a esperar antes del Add
+	h.mu.Unlock()
+	defer h.activos.Done()
 	defer h.Desuscribir(c)
+
+	var tic <-chan time.Time
+	if intervaloPing > 0 {
+		ping := time.NewTicker(intervaloPing)
+		defer ping.Stop()
+		tic = ping.C
+		conn.plazoLectura = 2 * intervaloPing // antes de lanzar la escritora: sin carrera
+	}
 	escritor := make(chan struct{})
 	go func() {
 		defer close(escritor)
 		defer func() {
 			if c.saliendo.Load() {
-				conn.Cerrar(CierreSaliendo, "el servidor se apaga")
+				_ = conn.Cerrar(CierreSaliendo, "el servidor se apaga")
 			} else {
-				conn.Cerrar(CierreNormal, "")
+				_ = conn.Cerrar(CierreNormal, "")
 			}
 		}()
-		ping := time.NewTicker(intervaloPing)
-		defer ping.Stop()
 		for {
 			select {
 			case m := <-c.ch:
 				if conn.EscribirTexto(m) != nil {
 					return
 				}
-			case <-ping.C:
+			case <-tic:
 				if conn.Ping() != nil {
 					return
 				}

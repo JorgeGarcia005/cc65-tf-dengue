@@ -18,6 +18,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 )
 
 // guid de RFC 6455 §1.3 para calcular Sec-WebSocket-Accept.
@@ -59,9 +60,18 @@ func ClaveAceptacion(clave string) string {
 type Conn struct {
 	nc        net.Conn
 	r         *bufio.Reader
-	escritura sync.Mutex
-	plazo     time.Duration
+	plazo     time.Duration // plazo de cada escritura
 	cerrarUna sync.Once
+
+	// escritura serializa los frames y protege cerrado: una vez enviado el
+	// frame de cierre no sale ningún otro (RFC 6455 §5.5.1).
+	escritura sync.Mutex
+	cerrado   bool
+
+	// plazoLectura, si es > 0, acota la espera de cada frame del cliente: con
+	// pings cada intervalo, un cliente mudo (TCP medio abierto) cae en ese plazo.
+	// Lo fija Hub.Servir antes de leer; solo lo usa la goroutine lectora.
+	plazoLectura time.Duration
 }
 
 // Aceptar valida el handshake y, si es correcto, toma la conexión TCP y responde
@@ -78,7 +88,9 @@ func Aceptar(w http.ResponseWriter, r *http.Request, origenPermitido func(string
 	switch {
 	case r.Method != http.MethodGet:
 		return falla(http.StatusMethodNotAllowed, "el handshake debe ser GET")
-	case !contieneToken(r.Header.Get("Connection"), "upgrade") || !contieneToken(r.Header.Get("Upgrade"), "websocket"):
+	case !r.ProtoAtLeast(1, 1):
+		return falla(http.StatusBadRequest, "el handshake requiere HTTP/1.1")
+	case !contieneToken(r.Header.Values("Connection"), "upgrade") || !contieneToken(r.Header.Values("Upgrade"), "websocket"):
 		return falla(http.StatusBadRequest, "faltan las cabeceras Upgrade: websocket y Connection: Upgrade")
 	case r.Header.Get("Sec-WebSocket-Version") != "13":
 		return falla(http.StatusUpgradeRequired, "solo se admite Sec-WebSocket-Version 13")
@@ -92,8 +104,11 @@ func Aceptar(w http.ResponseWriter, r *http.Request, origenPermitido func(string
 	}
 	// NewResponseController llega al Hijacker aunque un middleware envuelva w.
 	nc, rw, err := http.NewResponseController(w).Hijack()
-	if err != nil {
+	if errors.Is(err, http.ErrNotSupported) {
 		return falla(http.StatusInternalServerError, "el servidor no permite tomar la conexión")
+	}
+	if err != nil {
+		return nil, fmt.Errorf("ws: hijack: %w", err)
 	}
 	// Hijack no quita los plazos del http.Server (ReadTimeout/WriteTimeout de
 	// api.NuevoHTTP): sin esto la conexión moriría a los 15–30 s. Desde aquí cada
@@ -113,10 +128,15 @@ func Aceptar(w http.ResponseWriter, r *http.Request, origenPermitido func(string
 	return c, nil
 }
 
-func contieneToken(cabecera, token string) bool {
-	for _, t := range strings.Split(cabecera, ",") {
-		if strings.EqualFold(strings.TrimSpace(t), token) {
-			return true
+// contieneToken busca token en todas las líneas de una cabecera de lista
+// (RFC 9110 §5.3: «Connection: keep-alive» y «Connection: Upgrade» en dos líneas
+// equivalen a una con los dos valores).
+func contieneToken(lineas []string, token string) bool {
+	for _, linea := range lineas {
+		for _, t := range strings.Split(linea, ",") {
+			if strings.EqualFold(strings.TrimSpace(t), token) {
+				return true
+			}
 		}
 	}
 	return false
@@ -128,19 +148,44 @@ func (c *Conn) EscribirTexto(p []byte) error { return c.escribirFrame(opTexto, p
 // Ping envía un ping de control.
 func (c *Conn) Ping() error { return c.escribirFrame(opPing, nil) }
 
-// Cerrar envía el frame de cierre (si puede) y cierra la conexión TCP. Es idempotente.
+// Cerrar envía el frame de cierre y cierra la conexión TCP. Es idempotente y,
+// como toma el candado de escritura, ningún frame sale después del cierre.
+// El motivo se recorta a 123 bytes sin partir caracteres UTF-8.
 func (c *Conn) Cerrar(codigo uint16, motivo string) error {
+	return c.cerrar(func() {
+		p := binary.BigEndian.AppendUint16(nil, codigo)
+		_ = c.enviar(armarFrame(opCierre, append(p, recortarUTF8(motivo, 123)...)))
+	})
+}
+
+// cerrarSinFrame cierra el socket sin mandar nada (la conexión ya falló).
+func (c *Conn) cerrarSinFrame() { _ = c.cerrar(nil) }
+
+func (c *Conn) cerrar(antes func()) error {
 	var err error
 	c.cerrarUna.Do(func() {
-		p := binary.BigEndian.AppendUint16(nil, codigo)
-		p = append(p, motivo[:min(len(motivo), 123)]...)
-		_ = c.escribirFrame(opCierre, p)
+		c.escritura.Lock()
+		defer c.escritura.Unlock()
+		if antes != nil {
+			antes()
+		}
+		c.cerrado = true
 		err = c.nc.Close()
 	})
 	return err
 }
 
-func (c *Conn) escribirFrame(op byte, p []byte) error {
+func recortarUTF8(s string, max int) string {
+	if len(s) <= max {
+		return s
+	}
+	for max > 0 && !utf8.RuneStart(s[max]) {
+		max--
+	}
+	return s[:max]
+}
+
+func armarFrame(op byte, p []byte) []byte {
 	cab := []byte{0x80 | op} // FIN + opcode; el servidor nunca enmascara
 	switch n := len(p); {
 	case n <= 125:
@@ -150,12 +195,22 @@ func (c *Conn) escribirFrame(op byte, p []byte) error {
 	default:
 		cab = binary.BigEndian.AppendUint64(append(cab, 127), uint64(n))
 	}
-	return c.escribirCrudo(append(cab, p...))
+	return append(cab, p...)
 }
+
+func (c *Conn) escribirFrame(op byte, p []byte) error { return c.escribirCrudo(armarFrame(op, p)) }
 
 func (c *Conn) escribirCrudo(b []byte) error {
 	c.escritura.Lock()
 	defer c.escritura.Unlock()
+	if c.cerrado {
+		return ErrCerrado
+	}
+	return c.enviar(b)
+}
+
+// enviar escribe con plazo; quien llama tiene el candado de escritura.
+func (c *Conn) enviar(b []byte) error {
 	_ = c.nc.SetWriteDeadline(time.Now().Add(c.plazo))
 	_, err := c.nc.Write(b)
 	return err
@@ -166,30 +221,37 @@ func (c *Conn) escribirCrudo(b []byte) error {
 // cierra la conexión con el código que corresponde y devuelve ErrCerrado.
 func (c *Conn) LeerMensaje() ([]byte, error) {
 	for {
+		if c.plazoLectura > 0 {
+			_ = c.nc.SetReadDeadline(time.Now().Add(c.plazoLectura))
+		}
 		fin, op, p, codigo, err := c.leerFrame()
 		if err != nil {
 			if codigo != 0 {
 				_ = c.Cerrar(codigo, err.Error())
 			} else {
-				_ = c.nc.Close()
+				c.cerrarSinFrame() // EOF, plazo vencido o socket cerrado: no hay a quién avisar
 			}
 			return nil, fmt.Errorf("%w: %v", ErrCerrado, err)
 		}
 		switch {
 		case op == opPing:
 			if err := c.escribirFrame(opPong, p); err != nil {
-				return nil, err
+				c.cerrarSinFrame()
+				return nil, fmt.Errorf("%w: pong: %v", ErrCerrado, err)
 			}
-		case op == opPong:
+		case op == opPong: // renueva el plazo de lectura en la próxima vuelta
 		case op == opCierre:
 			_ = c.Cerrar(CierreNormal, "")
 			return nil, ErrCerrado
 		case op == opTexto && fin:
 			return p, nil
+		case op == opContinuacion: // continuación sin mensaje fragmentado abierto (RFC 6455 §5.4)
+			_ = c.Cerrar(CierreProtocolo, "continuación sin mensaje abierto")
+			return nil, fmt.Errorf("%w: continuación suelta", ErrCerrado)
 		case op == opBinario:
 			_ = c.Cerrar(CierreNoSoportado, "solo se aceptan mensajes de texto")
 			return nil, fmt.Errorf("%w: mensaje binario", ErrCerrado)
-		default: // fragmentado o continuación suelta
+		default: // texto fragmentado (FIN = 0)
 			_ = c.Cerrar(CierreNoSoportado, "no se aceptan mensajes fragmentados")
 			return nil, fmt.Errorf("%w: mensaje fragmentado", ErrCerrado)
 		}
