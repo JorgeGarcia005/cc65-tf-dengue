@@ -28,7 +28,8 @@ services:
       context: ..
       dockerfile: deploy/Dockerfile.web
     environment:
-      API_URL: http://localhost:${PUERTO_API:-8080}
+      # Para entrar desde otra máquina (p. ej. por IP en la sustentación): API_URL=http://<ip>:8080
+      API_URL: ${API_URL:-http://localhost:${PUERTO_API:-8080}}
     ports:
       - "${PUERTO_WEB:-8081}:8081"
     depends_on: [coordinator]

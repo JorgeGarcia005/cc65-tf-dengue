@@ -19,8 +19,9 @@ RUN npm run build
 # Etapa 2: servidor estático en Go.
 FROM golang:1.24-bookworm AS servidor
 WORKDIR /src
+# cmd/web solo usa la biblioteca estándar: no hace falta descargar los drivers
+# de MongoDB y Redis que figuran en go.mod.
 COPY go.mod go.su[m] ./
-RUN go mod download
 COPY cmd/web ./cmd/web
 RUN --mount=type=cache,target=/root/.cache/go-build \
     CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /out/web ./cmd/web

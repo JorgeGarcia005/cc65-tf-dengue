@@ -3,7 +3,8 @@
 *
 !go.mod
 !go.sum
-!cmd/web/main.go
+!cmd/web/*.go
+cmd/web/*_test.go
 !web
 web/node_modules
 web/dist
