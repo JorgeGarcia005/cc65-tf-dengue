@@ -1,7 +1,9 @@
 package main
 
 import (
+	"github.com/JorgeGarcia005/cc65-tf-dengue/internal/cluster"
 	"math"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -147,5 +149,15 @@ func TestBenchmarkObservadorPublicaYNoCambiaLosPesos(t *testing.T) {
 	}
 	if op.observador != nil {
 		t.Fatal("medirObservador no debe modificar las opciones del llamador")
+	}
+	// Aunque el llamador traiga un observador, la corrida de control va sin él.
+	var llamadas atomic.Int64
+	op.observador = func(cluster.Evento) { llamadas.Add(1) }
+	op.nodos, op.reps, op.epocas = []int{1}, 1, 1
+	if _, err := medirObservador(train, op); err != nil {
+		t.Fatal(err)
+	}
+	if llamadas.Load() != 0 {
+		t.Fatalf("el observador del llamador recibió %d eventos", llamadas.Load())
 	}
 }

@@ -396,6 +396,7 @@ type sobrecosto struct {
 // un hub; un suscriptor vacía su canal como lo haría un navegador.
 func medirObservador(train gold.Archivo, op opcionesCluster) (reporteObservador, error) {
 	var rep reporteObservador
+	op.observador = nil // la corrida de control va sin observador aunque el llamador traiga uno
 	sin, err := medirCluster(train, op)
 	if err != nil {
 		return rep, err
@@ -413,13 +414,15 @@ func medirObservador(train gold.Archivo, op opcionesCluster) (reporteObservador,
 			}
 		}
 	}()
-	var publicados atomic.Int64
+	var publicados, fallidos atomic.Int64
 	op.observador = func(e cluster.Evento) {
 		b, err := json.Marshal(e)
-		if err == nil {
-			hub.Publicar(b)
-			publicados.Add(1)
+		if err != nil {
+			fallidos.Add(1)
+			return
 		}
+		hub.Publicar(b)
+		publicados.Add(1)
 	}
 	con, err := medirCluster(train, op)
 	hub.Cerrar()
@@ -427,9 +430,15 @@ func medirObservador(train gold.Archivo, op opcionesCluster) (reporteObservador,
 	if err != nil {
 		return rep, err
 	}
+	if n := fallidos.Load(); n > 0 {
+		return rep, fmt.Errorf("observador: %d eventos no se pudieron codificar a JSON", n)
+	}
 	rep.Sin, rep.Con, rep.Eventos, rep.Descartes = sin, con, publicados.Load(), hub.Descartados()
 	for i := range sin {
 		a, b := sin[i].SegPorEpoca.MediaRecortada, con[i].SegPorEpoca.MediaRecortada
+		if !(a > 0) {
+			return rep, fmt.Errorf("%d nodos: tiempo por época sin observador no positivo (%v)", sin[i].Nodos, a)
+		}
 		rep.Sobrecosto = append(rep.Sobrecosto, sobrecosto{Nodos: sin[i].Nodos, MsSin: 1000 * a, MsCon: 1000 * b, Relativo: (b - a) / a})
 	}
 	return rep, nil
@@ -444,8 +453,12 @@ func ejecutarObservador(train gold.Archivo, fuente string, op opcionesCluster, s
 	rep.Generado, rep.Fuente, rep.Maquina = time.Now().Format(time.RFC3339), fuente, maquina.Describir()
 	rep.Protocolo = map[string]any{
 		"nodos": nodosMedidos(rep.Sin), "repeticiones": op.reps, "epocas_por_repeticion": op.epocas,
-		"observador":   "json.Marshal de cada Evento + ws.Hub.Publicar (búfer 256) con un suscriptor que vacía su canal",
-		"verificacion": "ambas corridas se comparan bit a bit con el secuencial en cada repetición",
+		"workers_por_nodo": op.workersNodo, "tasa": op.tasa, "lambda": op.lambda,
+		"red":           "TCP en 127.0.0.1 (loopback), protocolo JSON por línea real",
+		"calentamiento": "1 entrenamiento descartado (carga de shards)",
+		"estimador":     fmt.Sprintf("media recortada %.0f %% + IC95 bootstrap (2000)", op.recorte*100),
+		"observador":    "json.Marshal de cada Evento + ws.Hub.Publicar (búfer 256) con un suscriptor que vacía su canal",
+		"verificacion":  "ambas corridas se comparan bit a bit con el secuencial en cada repetición",
 	}
 	for _, s := range rep.Sobrecosto {
 		log.Printf("%d nodos: %.2f ms/época sin observador, %.2f con observador (%+.1f %%)", s.Nodos, s.MsSin, s.MsCon, 100*s.Relativo)
