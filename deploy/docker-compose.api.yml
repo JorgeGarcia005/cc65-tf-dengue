@@ -13,6 +13,8 @@ services:
     environment:
       MONGO_URI: mongodb://mongo:27017
       REDIS_ADDR: redis:6379
+      # reports/ ya está montado en /reports (docker-compose.yml): mapa y evaluación (#66).
+      EVALUACION: /reports/evaluacion.json
     depends_on:
       mongo:
         condition: service_healthy

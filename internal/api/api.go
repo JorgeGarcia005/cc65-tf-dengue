@@ -58,7 +58,10 @@ type Opciones struct {
 	// producción). Si es nil se usa almacen.Memoria.
 	Almacen almacen.Almacen
 	// Cache guarda predicciones (Redis en producción). Si es nil no hay caché.
-	Cache      almacen.Cache
+	Cache almacen.Cache
+	// Evaluacion es el contenido de reports/evaluacion.json (#59): lo sirven
+	// GET /api/v1/evaluacion y, recortado, GET /api/v1/riesgo. Vacío = 503.
+	Evaluacion []byte
 	Middleware []Middleware // se aplican en orden: el primero es el más externo
 	Log        func(formato string, args ...any)
 	// PlazoCierre acota cuánto espera Cerrar a que se vacíe el registro de
@@ -99,6 +102,8 @@ type Servidor struct {
 	wgEntrenar    sync.WaitGroup
 	wgRegistrador sync.WaitGroup
 	cerrarUnaVez  sync.Once
+
+	evaluacion, riesgo *documento // reports/evaluacion.json precomprimido; nil si no hay
 }
 
 // Nuevo crea el servidor: elige el modelo inicial (el vigente del almacén o,
@@ -122,6 +127,11 @@ func Nuevo(op Opciones) (*Servidor, error) {
 		return nil, err
 	}
 	s := &Servidor{op: op, registros: make(chan almacen.RegistroPrediccion, BufferRegistros)}
+	if len(op.Evaluacion) > 0 {
+		if s.evaluacion, s.riesgo, err = cargarEvaluacion(op.Evaluacion); err != nil {
+			return nil, err
+		}
+	}
 	s.ents = entrenamientos{almacen: op.Almacen, log: op.Log, nuevoID: nuevoIDEntrenamiento}
 	if err := s.ents.reconciliar(ctx); err != nil {
 		return nil, fmt.Errorf("api: entrenamientos pendientes: %w", err)
@@ -242,6 +252,8 @@ func Rutas() []Ruta {
 		{"GET", "/healthz", true, (*Servidor).salud},
 		{"GET", "/api/v1/modelo", true, (*Servidor).verModelo},
 		{"POST", "/api/v1/predicciones", true, (*Servidor).predecir},
+		{"GET", "/api/v1/riesgo", true, (*Servidor).verRiesgo},
+		{"GET", "/api/v1/evaluacion", true, (*Servidor).verEvaluacion},
 		{"GET", "/api/v1/cluster", true, (*Servidor).verCluster},
 		{"POST", "/api/v1/entrenamientos", true, (*Servidor).crearEntrenamiento},
 		{"GET", "/api/v1/entrenamientos/{id}", true, (*Servidor).verEntrenamiento},
