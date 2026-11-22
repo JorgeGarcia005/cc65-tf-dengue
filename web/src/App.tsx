@@ -1,4 +1,4 @@
-import { Navigate, NavLink, Outlet, Route, Routes, useLocation } from 'react-router-dom'
+import { Navigate, NavLink, Outlet, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
 import type { Rol } from './api/cliente'
 import { useSesion } from './sesion/Sesion'
 import { VISTAS } from './rutas'
@@ -9,7 +9,7 @@ import { NoEncontrado, Prohibido } from './paginas/Errores'
 function ConSesion() {
   const { sesion } = useSesion()
   const ubicacion = useLocation()
-  if (!sesion) return <Navigate to="/login" replace state={{ desde: ubicacion.pathname }} />
+  if (!sesion) return <Navigate to="/login" replace state={{ desde: ubicacion.pathname + ubicacion.search }} />
   return <Marco />
 }
 
@@ -21,6 +21,12 @@ function ConRol({ roles, children }: { roles: Rol[]; children: React.ReactElemen
 
 function Marco() {
   const { sesion, salir, puede } = useSesion()
+  const navegar = useNavigate()
+  // Salir a propósito no recuerda la vista: el próximo usuario empieza en el inicio.
+  const cerrarSesion = () => {
+    navegar('/login', { replace: true })
+    salir()
+  }
   return (
     <div className="marco">
       <a className="saltar" href="#contenido">
@@ -46,12 +52,12 @@ function Marco() {
         <div className="usuario">
           <span className="usuario-correo">{sesion?.correo}</span>
           <span className={`etiqueta etiqueta-${sesion?.rol}`}>{sesion?.rol}</span>
-          <button type="button" className="boton boton-fantasma" onClick={salir}>
+          <button type="button" className="boton boton-fantasma" onClick={cerrarSesion}>
             Salir
           </button>
         </div>
       </header>
-      <main id="contenido" className="contenido">
+      <main id="contenido" className="contenido" tabIndex={-1}>
         <Outlet />
       </main>
     </div>

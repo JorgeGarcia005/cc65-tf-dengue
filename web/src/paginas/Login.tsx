@@ -2,6 +2,7 @@ import { useState, type FormEvent } from 'react'
 import { Navigate, useLocation, useNavigate } from 'react-router-dom'
 import { ErrorApi } from '../api/cliente'
 import { useSesion } from '../sesion/Sesion'
+import { destinoTrasLogin } from '../rutas'
 
 function mensajeDe(e: unknown): string {
   if (e instanceof ErrorApi) {
@@ -19,21 +20,21 @@ function mensajeDe(e: unknown): string {
 export default function Login() {
   const { sesion, entrar, aviso } = useSesion()
   const navegar = useNavigate()
-  const desde = (useLocation().state as { desde?: string } | null)?.desde ?? '/'
+  const desde = (useLocation().state as { desde?: unknown } | null)?.desde
   const [correo, setCorreo] = useState('')
   const [clave, setClave] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [enviando, setEnviando] = useState(false)
 
-  if (sesion) return <Navigate to={desde} replace />
+  if (sesion) return <Navigate to={destinoTrasLogin(desde, sesion.rol)} replace />
 
   async function enviar(ev: FormEvent) {
     ev.preventDefault()
     setError(null)
     setEnviando(true)
     try {
-      await entrar(correo.trim(), clave)
-      navegar(desde, { replace: true })
+      const nueva = await entrar(correo.trim(), clave)
+      navegar(destinoTrasLogin(desde, nueva.rol), { replace: true })
     } catch (e) {
       setError(mensajeDe(e))
       setClave('')
@@ -81,7 +82,7 @@ export default function Login() {
               {error}
             </p>
           )}
-          <button type="submit" className="boton" disabled={enviando || !correo || !clave}>
+          <button type="submit" className="boton" disabled={enviando || !correo.trim() || !clave}>
             {enviando ? 'Entrando…' : 'Entrar'}
           </button>
         </form>

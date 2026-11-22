@@ -24,3 +24,24 @@ export const VISTAS: Vista[] = [
   { ruta: '/evaluacion', titulo: 'Evaluación del modelo', menu: 'Evaluación', roles: ['analista', 'admin'], elemento: <Evaluacion /> },
   { ruta: '/admin', titulo: 'Clúster y entrenamiento en vivo', menu: 'Clúster', roles: ['admin'], elemento: <Admin /> },
 ]
+
+/**
+ * Adónde ir después del login: la vista que se pidió, solo si es una ruta interna
+ * (empieza con una «/», no con «//» ni «\\») y el rol nuevo puede verla; si no, al inicio.
+ * Así un analista que entra después de que un admin salió desde /admin no
+ * aterriza en un 403.
+ */
+export function destinoTrasLogin(desde: unknown, rol: Rol): string {
+  if (
+    typeof desde !== 'string' ||
+    !desde.startsWith('/') ||
+    desde.startsWith('//') ||
+    desde.includes('\\') ||
+    desde.startsWith('/login')
+  ) {
+    return '/'
+  }
+  const ruta = desde.split(/[?#]/)[0]
+  const vista = VISTAS.find((v) => v.ruta === ruta)
+  return vista && !vista.roles.includes(rol) ? '/' : desde
+}

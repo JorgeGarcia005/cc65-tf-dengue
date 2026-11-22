@@ -4,7 +4,8 @@ import { MemoryRouter } from 'react-router-dom'
 import { describe, expect, it, vi } from 'vitest'
 import App from '../App'
 import type { Sesion } from '../api/cliente'
-import { ProveedorSesion } from '../sesion/Sesion'
+import { ProveedorSesion, useSesion } from '../sesion/Sesion'
+import { destinoTrasLogin } from '../rutas'
 
 const AHORA = 1_800_000_000
 
@@ -107,5 +108,121 @@ describe('login', () => {
     montar('/')
     await escribir()
     expect(await screen.findByRole('alert')).toHaveTextContent('Vuelve a probar en 30 s.')
+  })
+})
+
+describe('sesión y destino tras el login (PR-79 H3, H4)', () => {
+  const okLogin = (token: string, rol: 'admin' | 'analista') =>
+    new Response(JSON.stringify({ token, correo: `${rol}@vigia.pe`, rol, expira: AHORA + 3600 }))
+
+  function Sonda() {
+    const { api } = useSesion()
+    return (
+      <button type="button" onClick={() => api.get('/api/v1/modelo').catch(() => undefined)}>
+        sonda
+      </button>
+    )
+  }
+
+  function montarConSonda(ruta: string | { pathname: string; state: unknown }, sesion?: Partial<Sesion>) {
+    if (sesion) {
+      sessionStorage.setItem(
+        'vigia.sesion',
+        JSON.stringify({ token: 't1', correo: 'x@vigia.pe', rol: 'analista', expira: AHORA + 3600, ...sesion }),
+      )
+    }
+    return render(
+      <ProveedorSesion apiUrl="http://api:8080" ahora={() => AHORA}>
+        <MemoryRouter initialEntries={[ruta]}>
+          <Sonda />
+          <App />
+        </MemoryRouter>
+      </ProveedorSesion>,
+    )
+  }
+
+  it('un 401 de la API cierra la sesión, vuelve al login y avisa', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('{"error":"vencido"}', { status: 401 })))
+    montarConSonda('/mapa', { rol: 'analista' })
+    await userEvent.click(screen.getByRole('button', { name: 'sonda' }))
+    expect(await screen.findByRole('status')).toHaveTextContent('Tu sesión venció. Vuelve a entrar.')
+    expect(screen.getByLabelText('Correo')).toBeInTheDocument()
+    expect(sessionStorage.getItem('vigia.sesion')).toBeNull()
+  })
+
+  it('un 401 tardío de la sesión anterior no cierra la sesión nueva', async () => {
+    let responderViejo: (r: Response) => void = () => undefined
+    const f = vi
+      .fn()
+      .mockImplementationOnce(() => new Promise<Response>((ok) => (responderViejo = ok))) // con t1, queda pendiente
+      .mockResolvedValueOnce(okLogin('t2', 'analista')) // login nuevo
+    vi.stubGlobal('fetch', f)
+    montarConSonda('/', { rol: 'admin' })
+    await userEvent.click(screen.getByRole('button', { name: 'sonda' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Salir' }))
+    await userEvent.type(screen.getByLabelText('Correo'), 'analista@vigia.pe')
+    await userEvent.type(screen.getByLabelText('Clave'), 'x')
+    await userEvent.click(screen.getByRole('button', { name: 'Entrar' }))
+    expect(await screen.findByRole('heading', { name: 'Dónde y cuándo reforzar' })).toBeInTheDocument()
+    responderViejo(new Response('{"error":"vencido"}', { status: 401 }))
+    await new Promise((r) => setTimeout(r, 20))
+    expect(JSON.parse(sessionStorage.getItem('vigia.sesion')!).token).toBe('t2')
+    expect(screen.queryByRole('status')).toBeNull()
+  })
+
+  it('admin sale desde /admin y el analista que entra aterriza en el inicio, no en 403', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(okLogin('t2', 'analista')))
+    montarConSonda('/admin', { rol: 'admin' })
+    await userEvent.click(screen.getByRole('button', { name: 'Salir' }))
+    await userEvent.type(screen.getByLabelText('Correo'), 'analista@vigia.pe')
+    await userEvent.type(screen.getByLabelText('Clave'), 'x')
+    await userEvent.click(screen.getByRole('button', { name: 'Entrar' }))
+    expect(await screen.findByRole('heading', { name: 'Dónde y cuándo reforzar' })).toBeInTheDocument()
+  })
+
+  it.each(['//evil.example', '/\\evil.example', 'https://evil.example', '/login', '/admin'])(
+    'un destino no seguro o sin permiso (%s) lleva al inicio',
+    async (desde) => {
+      vi.stubGlobal('fetch', vi.fn().mockResolvedValue(okLogin('t', 'analista')))
+      montarConSonda({ pathname: '/login', state: { desde } })
+      await userEvent.type(screen.getByLabelText('Correo'), 'a@vigia.pe')
+      await userEvent.type(screen.getByLabelText('Clave'), 'x')
+      await userEvent.click(screen.getByRole('button', { name: 'Entrar' }))
+      expect(await screen.findByRole('heading', { name: 'Dónde y cuándo reforzar' })).toBeInTheDocument()
+    },
+  )
+
+  it('conserva la query de la vista pedida', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(okLogin('t', 'analista')))
+    montarConSonda('/mapa?semana=20&etapa=adulto_30_59')
+    await userEvent.type(screen.getByLabelText('Correo'), 'a@vigia.pe')
+    await userEvent.type(screen.getByLabelText('Clave'), 'x')
+    await userEvent.click(screen.getByRole('button', { name: 'Entrar' }))
+    expect(await screen.findByRole('heading', { name: 'Mapa de riesgo' })).toBeInTheDocument()
+    expect(destinoTrasLogin('/mapa?semana=20', 'analista')).toBe('/mapa?semana=20')
+  })
+
+  it('un correo de solo espacios no habilita Entrar', async () => {
+    montarConSonda('/')
+    await userEvent.type(screen.getByLabelText('Correo'), '   ')
+    await userEvent.type(screen.getByLabelText('Clave'), 'x')
+    expect(screen.getByRole('button', { name: 'Entrar' })).toBeDisabled()
+  })
+
+  it('un login 200 sin cuerpo válido muestra error, sin romper', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('<html>proxy</html>', { status: 200 })))
+    montarConSonda('/')
+    await userEvent.type(screen.getByLabelText('Correo'), 'a@vigia.pe')
+    await userEvent.type(screen.getByLabelText('Clave'), 'x')
+    await userEvent.click(screen.getByRole('button', { name: 'Entrar' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent('No se pudo entrar.')
+    expect(sessionStorage.getItem('vigia.sesion')).toBeNull()
+  })
+
+  it('una sesión guardada corrupta o con token vacío se borra', () => {
+    sessionStorage.setItem('vigia.sesion', JSON.stringify({ token: '', correo: 'x', rol: 'admin', expira: AHORA + 60 }))
+    montarConSonda('/')
+    expect(screen.getByLabelText('Correo')).toBeInTheDocument()
+    expect(sessionStorage.getItem('vigia.sesion')).toBeNull()
   })
 })
