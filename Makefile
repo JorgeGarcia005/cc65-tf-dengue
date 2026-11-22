@@ -58,3 +58,8 @@ informe:
 	@go run ./cmd/informe
 	@go run ./cmd/word
 	@echo "Con Word instalado: powershell -ExecutionPolicy Bypass -File scripts/word-final.ps1"
+
+## web: tipos, tests y build de la SPA (lo mismo que el job «web» del CI)
+.PHONY: web
+web:
+	@cd web && npm ci --no-audit --no-fund && npm run typecheck && npm test && npm run build

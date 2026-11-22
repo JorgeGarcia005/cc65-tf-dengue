@@ -1,0 +1,11 @@
+# Contexto de deploy/Dockerfile.web: solo web/ (sin dependencias ni build
+# locales), go.mod/go.sum y cmd/web.
+*
+!go.mod
+!go.sum
+!cmd/web/*.go
+cmd/web/*_test.go
+!web
+web/node_modules
+web/dist
+web/**/*.tsbuildinfo

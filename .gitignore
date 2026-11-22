@@ -20,6 +20,7 @@ spin/_spin_nvr.tmp
 # Frontend
 web/node_modules/
 web/dist/
+web/*.tsbuildinfo
 
 # Entorno y secretos
 .env
