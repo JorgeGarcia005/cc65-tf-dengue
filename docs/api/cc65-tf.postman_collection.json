@@ -25,6 +25,18 @@
     {
       "key": "token",
       "value": ""
+    },
+    {
+      "key": "origen",
+      "value": "http://localhost:8081"
+    },
+    {
+      "key": "demo",
+      "value": "false"
+    },
+    {
+      "key": "nodo",
+      "value": "nodo-2"
     }
   ],
   "item": [
@@ -509,6 +521,113 @@
           ]
         },
         "description": ""
+      }
+    },
+    {
+      "name": "Ticket del WebSocket (admin)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+              "pm.test(\"responde en menos de 100 ms\", function () { pm.expect(pm.response.responseTime).to.be.below(100); });",
+              "pm.test(\"ticket de un solo uso que vence a los 30 s\", function () { const r = pm.response.json(); pm.expect(r.ticket).to.have.lengthOf(43); pm.expect(r.expira * 1000 - Date.now()).to.be.within(25000, 31000); });"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [],
+        "url": {
+          "raw": "{{base_url}}/api/v1/ws/ticket",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "ws",
+            "ticket"
+          ]
+        },
+        "description": "Solo admin. La SPA pasa el ticket en GET /api/v1/ws?ticket=… (el navegador no puede mandar Authorization en el handshake). ADR-0007, #65."
+      }
+    },
+    {
+      "name": "WebSocket sin ticket (401)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 401 sin ticket\", function () { pm.response.to.have.status(401); });",
+              "pm.test(\"responde en menos de 100 ms\", function () { pm.expect(pm.response.responseTime).to.be.below(100); });"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "auth": {
+          "type": "noauth"
+        },
+        "method": "GET",
+        "header": [
+          {
+            "key": "Origin",
+            "value": "{{origen}}"
+          }
+        ],
+        "url": {
+          "raw": "{{base_url}}/api/v1/ws",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "ws"
+          ]
+        },
+        "description": "Newman no hace el handshake de WebSocket: aquí se comprueba que sin ticket no se entra. El flujo completo (ticket → 101 → eventos) lo prueban TestWSOrigen* y TestServicioDemoCortarNodoPorLaAPI."
+      }
+    },
+    {
+      "name": "Cortar un nodo (solo con -demo)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "const demo = pm.collectionVariables.get(\"demo\") === \"true\";",
+              "pm.test(demo ? \"HTTP 202 en modo demo\" : \"HTTP 404 sin -demo\", function () { pm.response.to.have.status(demo ? 202 : 404); });",
+              "pm.test(\"responde en menos de 100 ms\", function () { pm.expect(pm.response.responseTime).to.be.below(100); });"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [],
+        "url": {
+          "raw": "{{base_url}}/api/v1/demo/nodos/{{nodo}}/cortar",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "demo",
+            "nodos",
+            "{{nodo}}",
+            "cortar"
+          ]
+        },
+        "description": "Con DEMO=true corta la conexión del nodo (variable nodo) y el coordinador reasigna su shard; sin el modo demo la ruta no existe."
       }
     }
   ],

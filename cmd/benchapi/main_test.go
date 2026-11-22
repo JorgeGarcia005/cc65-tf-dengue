@@ -263,10 +263,11 @@ func TestColeccionPostmanCubreLasRutas(t *testing.T) {
 		t.Fatalf("la colección no es JSON válido: %v", err)
 	}
 	variable := regexp.MustCompile(`\{\{[a-z_]+\}\}`)
+	parametro := regexp.MustCompile(`\{[a-z_]+\}`) // {id}, {nombre}: la variable de Postman ocupa su lugar
 	tiene := map[string]bool{}
 	for _, it := range col.Item {
 		ruta := strings.TrimPrefix(it.Request.URL.Raw, "{{base_url}}")
-		ruta = variable.ReplaceAllString(ruta, "{id}")
+		ruta = variable.ReplaceAllString(ruta, "{}")
 		tiene[it.Request.Method+" "+ruta] = true
 		var tests string
 		for _, e := range it.Event {
@@ -285,7 +286,7 @@ func TestColeccionPostmanCubreLasRutas(t *testing.T) {
 		}
 	}
 	for _, r := range api.Rutas() {
-		if r.Documentar && !tiene[r.Metodo+" "+r.Ruta] {
+		if r.Documentar && !tiene[r.Metodo+" "+parametro.ReplaceAllString(r.Ruta, "{}")] {
 			t.Errorf("la colección no tiene %s %s", r.Metodo, r.Ruta)
 		}
 	}
