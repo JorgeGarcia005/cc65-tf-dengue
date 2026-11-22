@@ -3,6 +3,7 @@ package evaluacion
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"math"
 	"math/rand/v2"
 	"os"
@@ -318,5 +319,25 @@ func TestCruzarRiesgoNacionalCero(t *testing.T) {
 	}
 	if _, err := json.Marshal(cubo); err != nil {
 		t.Fatalf("con riesgo nacional 0 el cubo no se serializa: %v", err)
+	}
+}
+
+func TestGuardasNumericas(t *testing.T) {
+	if _, _, err := ROC([]float64{0, 1}, []float64{math.NaN(), 0.5}, 0, 10); err == nil {
+		t.Fatal("un puntaje NaN debía fallar (antes: bucle infinito)")
+	}
+	if _, _, err := ROC([]float64{0, 1}, []float64{math.Inf(1), 0.5}, 0, 10); err == nil {
+		t.Fatal("un puntaje infinito debía fallar")
+	}
+	if b := Brier(nil, nil); b != 0 {
+		t.Fatalf("Brier vacío = %v", b)
+	}
+	bins, _ := Calibracion(make([]float64, 23), make([]float64, 23), 10)
+	tam := make([]int, len(bins))
+	for i, b := range bins {
+		tam[i] = b.Casos
+	}
+	if fmt.Sprint(tam) != "[2 2 2 3 2 2 3 2 2 3]" {
+		t.Fatalf("reparto de 23 filas en 10 tramos = %v", tam)
 	}
 }

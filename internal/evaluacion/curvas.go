@@ -32,6 +32,11 @@ func ROC(y, p []float64, ajuste float64, maxPuntos int) ([]PuntoROC, float64, er
 	if maxPuntos < 2 {
 		return nil, 0, errors.New("evaluacion: la ROC necesita al menos 2 puntos")
 	}
+	for _, v := range p {
+		if math.IsNaN(v) || math.IsInf(v, 0) {
+			return nil, 0, errors.New("evaluacion: puntaje no finito en la ROC")
+		}
+	}
 	idx := indicesOrdenados(p, func(a, b float64) int { return cmp.Compare(b, a) })
 	var npos, nneg float64
 	for _, v := range y {
@@ -88,8 +93,9 @@ type Bin struct {
 	IC95Sup   float64 `json:"ic95_sup"`
 }
 
-// Calibracion ordena por riesgo calibrado y lo parte en k tramos de igual tamaño
-// (el último absorbe el resto). Compara el riesgo medio predicho con la tasa
+// Calibracion ordena por riesgo calibrado y lo parte en k tramos de tamaño casi
+// igual: el tramo b va de ⌊b·n/k⌋ a ⌊(b+1)·n/k⌋, así que el resto n mod k se
+// reparte de a una fila entre varios tramos. Compara el riesgo medio predicho con la tasa
 // observada de cada tramo.
 func Calibracion(y, pc []float64, k int) ([]Bin, error) {
 	if len(y) != len(pc) || k < 1 || len(y) < k {
@@ -111,8 +117,12 @@ func Calibracion(y, pc []float64, k int) ([]Bin, error) {
 	return out, nil
 }
 
-// Brier es el error cuadrático medio de las probabilidades calibradas.
+// Brier es el error cuadrático medio de las probabilidades calibradas (0 si no
+// hay filas).
 func Brier(y, pc []float64) float64 {
+	if len(y) == 0 {
+		return 0
+	}
 	var s float64
 	for i := range y {
 		d := pc[i] - y[i]
