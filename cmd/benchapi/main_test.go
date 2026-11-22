@@ -378,4 +378,8 @@ func TestMedirConLoginUsaJWT(t *testing.T) {
 	if _, err := medir(context.Background(), op, 0, silencio); err == nil || !strings.Contains(err.Error(), "BENCH_CLAVE") {
 		t.Fatalf("correo sin clave: err %v", err)
 	}
+	op.token = tokenBench(t)
+	if _, err := medir(context.Background(), op, 0, silencio); err == nil || !strings.Contains(err.Error(), "no ambos") {
+		t.Fatalf("-token y -correo juntos: err %v", err)
+	}
 }

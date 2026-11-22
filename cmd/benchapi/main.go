@@ -153,6 +153,11 @@ func medir(ctx context.Context, op opciones, limite time.Duration, logf func(str
 	cli := &http.Client{Timeout: op.timeout, Transport: tr}
 	defer cli.CloseIdleConnections()
 	op.url = strings.TrimRight(op.url, "/")
+	if op.correo != "" && op.token != "" {
+		// Ambos pueden venir del entorno ($BENCH_CORREO y $BENCH_TOKEN): no se
+		// elige uno en silencio (PR-83 H4).
+		return reporte{}, errors.New("usa -token o -correo, no ambos (revisa $BENCH_TOKEN y $BENCH_CORREO)")
+	}
 	if op.correo != "" {
 		if op.clave == "" {
 			return reporte{}, errors.New("-correo necesita la clave en $BENCH_CLAVE")
