@@ -2,12 +2,17 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { ErrorApi } from '../api/cliente'
 import { TODAS, TODOS, type DocumentoRiesgo } from '../api/tipos'
-import { IndiceRiesgo, etiquetaDepto, etiquetaEtapa, formato, valor, type Metrica } from '../mapa/datos'
+import { IndiceRiesgo, etiquetaDepto, etiquetaEtapa, formato, normalizarDepto, valor, type Metrica } from '../mapa/datos'
+import { DEPARTAMENTOS } from '../mapa/geo'
 import MapaPeru from '../mapa/MapaPeru'
 import PanelDepto from '../mapa/PanelDepto'
 import { useSesion } from '../sesion/Sesion'
 
 const VERSION_ESPERADA = 1
+/** Ritmo de «Reproducir semanas». */
+export const MS_POR_SEMANA = 700
+
+const NOMBRES_MAPA = new Set(DEPARTAMENTOS.features.map((f) => f.properties.NOMBDEP))
 
 /** Lee y valida los filtros de la URL (?semana=20&etapa=…&metrica=…&depto=…): se pueden compartir. */
 function filtros(p: URLSearchParams, indice: IndiceRiesgo | null) {
@@ -18,8 +23,19 @@ function filtros(p: URLSearchParams, indice: IndiceRiesgo | null) {
     semana: Number.isInteger(semana) && semana >= 0 && semana <= 52 ? semana : 0,
     etapa: indice && !indice.cubo.etapas.includes(etapa) ? TODAS : etapa,
     metrica,
-    depto: p.get('depto'),
+    depto: normalizarDepto(p.get('depto'), NOMBRES_MAPA),
   }
+}
+
+/** Aplica cambios a los parámetros; los valores por defecto se quitan de la URL. */
+function conCambios(params: URLSearchParams, cambios: Record<string, string | number | null>) {
+  const p = new URLSearchParams(params)
+  for (const [k, v] of Object.entries(cambios)) {
+    const porDefecto = v === null || v === '' || (k === 'semana' && v === 0) || (k === 'etapa' && v === TODAS) || (k === 'metrica' && v === 'riesgo')
+    if (porDefecto) p.delete(k)
+    else p.set(k, String(v))
+  }
+  return p
 }
 
 export default function Mapa() {
@@ -49,17 +65,16 @@ export default function Mapa() {
   const f = filtros(params, indice)
 
   function cambiar(cambios: Record<string, string | number | null>) {
-    const p = new URLSearchParams(params)
-    for (const [k, v] of Object.entries(cambios)) {
-      if (v === null || v === '' || (k === 'semana' && v === 0) || (k === 'etapa' && v === TODAS) || (k === 'metrica' && v === 'riesgo')) p.delete(k)
-      else p.set(k, String(v))
-    }
-    setParams(p, { replace: true })
+    setParams(conCambios(params, cambios), { replace: true })
   }
 
-  // Reproducción semana a semana (1 → 52).
+  // Reproducción semana a semana (1 → 52). Un solo temporizador mientras dure
+  // (no se recrea al cambiar los parámetros): lee la semana y la función de
+  // cambio más recientes por referencia.
   const semanaRef = useRef(f.semana)
+  const cambiarRef = useRef(cambiar)
   semanaRef.current = f.semana
+  cambiarRef.current = cambiar
   useEffect(() => {
     if (!reproduciendo) return
     const id = setInterval(() => {
@@ -68,10 +83,11 @@ export default function Mapa() {
         setReproduciendo(false)
         return
       }
-      cambiar({ semana: s + 1 })
-    }, 700)
+      semanaRef.current = s + 1 // por si el siguiente tic llega antes del render
+      cambiarRef.current({ semana: s + 1 })
+    }, MS_POR_SEMANA)
     return () => clearInterval(id)
-  }, [reproduciendo, params])
+  }, [reproduciendo])
 
   if (error) {
     return (

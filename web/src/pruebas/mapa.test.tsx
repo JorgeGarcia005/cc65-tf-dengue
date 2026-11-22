@@ -1,12 +1,13 @@
 import { createHash } from 'node:crypto'
 import { readFileSync } from 'node:fs'
-import { fireEvent, render, screen, within } from '@testing-library/react'
+import { act, fireEvent, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { describe, expect, it, vi } from 'vitest'
 import App from '../App'
 import type { Celda, Cubo, DocumentoRiesgo } from '../api/tipos'
-import { COLORES, IndiceRiesgo, escalaPara, etiquetaDepto, etiquetaEtapa } from '../mapa/datos'
+import { COLORES, IndiceRiesgo, escalaPara, etiquetaDepto, etiquetaEtapa, normalizarDepto, tramos } from '../mapa/datos'
+import { MS_POR_SEMANA } from '../paginas/Mapa'
 import { DEPARTAMENTOS } from '../mapa/geo'
 import { ProveedorSesion } from '../sesion/Sesion'
 
@@ -69,7 +70,8 @@ describe('escala y etiquetas', () => {
     expect(etiquetaEtapa('nino_0_11')).toBe('Niños 0–11')
     expect(etiquetaEtapa('adulto_mayor_60_mas')).toBe('Adultos mayores 60+')
     expect(etiquetaEtapa('todas')).toBe('Todas las edades')
-    expect(etiquetaDepto('MADRE DE DIOS')).toBe('Madre De Dios')
+    expect(etiquetaDepto('MADRE DE DIOS')).toBe('Madre de Dios')
+    expect(etiquetaDepto('LA LIBERTAD')).toBe('La Libertad')
     expect(etiquetaDepto('TODOS')).toBe('Perú')
   })
 })
@@ -122,7 +124,7 @@ describe('vista del mapa', () => {
     expect(depto('AREQUIPA').getAttribute('aria-label')).toMatch(/agrupado en Otros/)
     await userEvent.click(depto('AREQUIPA'))
     expect(await screen.findByRole('heading', { name: 'Arequipa' })).toBeInTheDocument()
-    expect(screen.getByText(/el modelo lo agrupa con otros departamentos/)).toBeInTheDocument()
+    expect(screen.getByText(/el modelo lo agrupa con/)).toHaveTextContent('Tacna')
   })
 
   it('se navega con el teclado: Tab y Enter seleccionan y abren el panel', async () => {
@@ -156,5 +158,112 @@ describe('vista del mapa', () => {
       </ProveedorSesion>,
     )
     expect(await screen.findByRole('alert')).toHaveTextContent('evaluación no disponible')
+  })
+})
+
+describe('ronda 1 de PR-82', () => {
+  it('H1: ?depto= se normaliza y uno inexistente no abre panel', async () => {
+    montarMapa('/mapa?depto=piura')
+    expect(await screen.findByRole('heading', { name: 'Piura' })).toBeInTheDocument()
+    expect(screen.queryByText(/agrupa/)).toBeNull() // PIURA es del modelo: sus propias cifras
+    expect(depto('PIURA')).toHaveAttribute('aria-pressed', 'true')
+    expect(normalizarDepto('  Madre de Dios ', new Set(['MADRE DE DIOS']))).toBe('MADRE DE DIOS')
+    expect(normalizarDepto('Marte', new Set(['PIURA']))).toBeNull()
+    expect(normalizarDepto('otros', new Set())).toBe('OTROS')
+  })
+
+  it('H1: un departamento inexistente en la URL no muestra datos de OTROS', async () => {
+    montarMapa('/mapa?depto=NOEXISTE')
+    await screen.findByRole('group', { name: 'Mapa de riesgo por departamento' })
+    expect(screen.queryByRole('heading', { name: /Noexiste/i })).toBeNull()
+    expect(screen.getByText(/Elige un departamento en el mapa/)).toBeInTheDocument()
+  })
+
+  it('H1: elegir OTROS en la tabla resalta los 5 agrupados y los nombra', async () => {
+    montarMapa()
+    await screen.findByRole('group', { name: 'Mapa de riesgo por departamento' })
+    await userEvent.click(screen.getByRole('button', { name: 'Ver como tabla' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Otros (agrupados)' }))
+    expect(await screen.findByRole('heading', { name: 'Otros (agrupados)' })).toBeInTheDocument()
+    const resaltados = [...document.querySelectorAll('path.depto-sel')].map((p) => p.getAttribute('data-depto'))
+    expect(resaltados.length).toBeGreaterThan(5) // en el cubo de prueba hay 4 del modelo: los 21 restantes son OTROS
+    expect(resaltados).not.toContain('PIURA')
+    expect(screen.getByText(/que el modelo trata como un solo grupo/)).toHaveTextContent('Arequipa')
+  })
+
+  it('H2: la escala de la curva ignora celdas insuficientes y los huecos cortan la línea', () => {
+    const c = (riesgo: number, insuficiente = false) =>
+      ({ riesgo_calibrado_medio: riesgo, tasa_observada: riesgo, insuficiente }) as unknown as import('../api/tipos').Celda
+    const curva = [c(0.1), c(0.12), c(1, true), undefined, c(0.11), c(0.09), undefined, c(0.2)]
+    const t = tramos(curva, (x) => x.riesgo_calibrado_medio)
+    expect(t).toEqual([[[0, 0.1], [1, 0.12]], [[4, 0.11], [5, 0.09]], [[7, 0.2]]])
+    expect(Math.max(...t.flat().map(([, v]) => v))).toBe(0.2) // la celda con 1 caso (100 %) no entra
+    expect(tramos([undefined, c(1, true)], (x) => x.tasa_observada)).toEqual([])
+  })
+
+  it('H2: el panel dibuja un subcamino por tramo, un punto por semana aislada y avisa si no hay curva', async () => {
+    // En el cubo de prueba TUMBES tiene la semana 2 insuficiente: tramo 1 (semana 1) aislado → punto.
+    montarMapa('/mapa?depto=TUMBES')
+    await screen.findByRole('heading', { name: 'Tumbes' })
+    expect(document.querySelectorAll('.curva-calibrada circle')).toHaveLength(1)
+    // LORETO tiene semanas 1 y 2: un tramo de dos puntos → un subcamino «M…L…»
+    await userEvent.click(depto('LORETO'))
+    const d = document.querySelector('.curva-calibrada path')!.getAttribute('d')!
+    expect(d.match(/M/g)).toHaveLength(1)
+    expect(d.match(/L/g)).toHaveLength(1)
+  })
+
+  it('H4: sin departamentos suficientes no se inventa una leyenda', () => {
+    const cubo = cuboDePrueba()
+    for (const x of cubo.celdas) x.insuficiente = true
+    const esc = escalaPara(new IndiceRiesgo(cubo), 1, 'todas', 'riesgo')
+    expect(esc.vacia).toBe(true)
+    expect(esc.clases).toEqual([])
+  })
+
+  it('H4: con un solo departamento suficiente la leyenda tiene una sola clase con su valor real', () => {
+    const cubo = cuboDePrueba()
+    for (const x of cubo.celdas) x.insuficiente = x.departamento !== 'PIURA'
+    const indice = new IndiceRiesgo(cubo)
+    const esc = escalaPara(indice, 1, 'todas', 'riesgo')
+    const v = indice.celda('PIURA', 1, 'todas')!.riesgo_calibrado_medio
+    expect(esc.clases).toHaveLength(1)
+    expect(esc.clases[0]).toMatchObject({ min: v, max: v })
+  })
+
+  it('H4: la leyenda y el panel cambian con los filtros', async () => {
+    montarMapa('/mapa?depto=LORETO')
+    await screen.findByRole('heading', { name: 'Loreto' })
+    const leyenda = () => screen.getByRole('list', { name: /Leyenda/ }).textContent
+    const cifras = () => document.querySelector('.cifras')!.textContent
+    const [l0, c0] = [leyenda(), cifras()]
+    fireEvent.change(screen.getByLabelText(/Semana epidemiológica/), { target: { value: '2' } })
+    expect(leyenda()).not.toBe(l0)
+    expect(cifras()).not.toBe(c0)
+    await userEvent.click(screen.getByRole('radio', { name: 'Casos esperados' }))
+    expect(leyenda()).not.toMatch(/%/)
+  })
+
+  it('H4: reproducir avanza las semanas, se pausa, se detiene en 52 y desde 52 reinicia en 1', async () => {
+    montarMapa('/mapa?semana=50')
+    await screen.findByRole('group', { name: 'Mapa de riesgo por departamento' })
+    const semana = () => screen.getByLabelText(/Semana epidemiológica/).getAttribute('value')
+    vi.useFakeTimers()
+    try {
+      fireEvent.click(screen.getByRole('button', { name: 'Reproducir semanas' }))
+      act(() => vi.advanceTimersByTime(MS_POR_SEMANA))
+      expect(semana()).toBe('51')
+      fireEvent.click(screen.getByRole('button', { name: 'Pausar' }))
+      act(() => vi.advanceTimersByTime(3 * MS_POR_SEMANA))
+      expect(semana()).toBe('51')
+      fireEvent.click(screen.getByRole('button', { name: 'Reproducir semanas' }))
+      act(() => vi.advanceTimersByTime(3 * MS_POR_SEMANA))
+      expect(semana()).toBe('52')
+      expect(screen.getByRole('button', { name: 'Reproducir semanas' })).toBeInTheDocument() // se detuvo
+      fireEvent.click(screen.getByRole('button', { name: 'Reproducir semanas' }))
+      expect(semana()).toBe('1')
+    } finally {
+      vi.useRealTimers()
+    }
   })
 })

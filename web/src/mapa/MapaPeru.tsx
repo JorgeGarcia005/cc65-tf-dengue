@@ -2,28 +2,31 @@ import { geoMercator, geoPath } from 'd3-geo'
 import { useMemo, useState, type KeyboardEvent } from 'react'
 import { OTROS } from '../api/tipos'
 import { DEPARTAMENTOS } from './geo'
-import { COLORES as escalaColores, escalaPara, etiquetaDepto, formato, valor, type IndiceRiesgo, type Metrica } from './datos'
+import { escalaPara, etiquetaDepto, formato, valor, type Escala, type IndiceRiesgo, type Metrica } from './datos'
 
 const ANCHO = 520
 const ALTO = 680
+
+// La proyección no depende de los datos: se calcula una sola vez por carga del módulo.
+const proyeccion = geoMercator().fitSize([ANCHO, ALTO], DEPARTAMENTOS)
+const CAMINOS = DEPARTAMENTOS.features.map((f) => ({ nombre: f.properties.NOMBDEP, d: geoPath(proyeccion)(f) ?? '' }))
 
 interface Props {
   indice: IndiceRiesgo
   semana: number
   etapa: string
   metrica: Metrica
+  /** Departamento elegido, o OTROS (resalta todos los agrupados). */
   seleccionado: string | null
   onSeleccionar(depto: string): void
 }
 
 /** Coroplético por departamento (SVG). Cada departamento es un botón accesible con teclado. */
 export default function MapaPeru({ indice, semana, etapa, metrica, seleccionado, onSeleccionar }: Props) {
-  const camino = useMemo(() => geoPath(geoMercator().fitSize([ANCHO, ALTO], DEPARTAMENTOS)), [])
   const escala = useMemo(() => escalaPara(indice, semana, etapa, metrica), [indice, semana, etapa, metrica])
   const [sobre, setSobre] = useState<string | null>(null)
 
-  const deptos = DEPARTAMENTOS.features.map((f) => {
-    const nombre = f.properties.NOMBDEP
+  const deptos = CAMINOS.map(({ nombre, d }) => {
     const grupo = indice.grupo(nombre)
     const celda = indice.celda(grupo, semana, etapa)
     const v = valor(celda, metrica)
@@ -33,7 +36,8 @@ export default function MapaPeru({ indice, semana, etapa, metrica, seleccionado,
         : `${etiquetaDepto(nombre)}${grupo === OTROS ? ' (agrupado en Otros)' : ''}: ` +
           `${metrica === 'riesgo' ? 'riesgo' : 'casos esperados'} ${formato.metrica(v!, metrica)}, ` +
           `${formato.entero(celda.casos)} casos${celda.insuficiente ? ', datos insuficientes' : ''}`
-    return { f, nombre, grupo, celda, v, texto, d: camino(f) ?? '' }
+    const elegido = nombre === seleccionado || (seleccionado === OTROS && grupo === OTROS)
+    return { nombre, grupo, celda, v, texto, d, elegido }
   })
 
   const activo = deptos.find((x) => x.nombre === (sobre ?? seleccionado))
@@ -58,12 +62,12 @@ export default function MapaPeru({ indice, semana, etapa, metrica, seleccionado,
           <path
             key={x.nombre}
             d={x.d}
-            className={'depto' + (x.nombre === seleccionado ? ' depto-sel' : '') + (x.grupo === OTROS ? ' depto-otros' : '')}
-            fill={x.celda === undefined || x.celda.insuficiente ? 'url(#rayado)' : escala.color(x.v!)}
+            className={'depto' + (x.elegido ? ' depto-sel' : '') + (x.grupo === OTROS ? ' depto-otros' : '')}
+            fill={x.celda === undefined || x.celda.insuficiente || escala.vacia ? 'url(#rayado)' : escala.color(x.v!)}
             role="button"
             tabIndex={0}
             aria-label={x.texto}
-            aria-pressed={x.nombre === seleccionado}
+            aria-pressed={x.elegido}
             data-depto={x.nombre}
             onClick={() => onSeleccionar(x.nombre)}
             onKeyDown={(e) => tecla(e, x.nombre)}
@@ -77,19 +81,24 @@ export default function MapaPeru({ indice, semana, etapa, metrica, seleccionado,
       <figcaption className="mapa-info" aria-live="polite">
         {activo ? activo.texto : 'Pasa el cursor o usa Tab sobre un departamento.'}
       </figcaption>
-      <Leyenda cortes={escala.cortes} metrica={metrica} />
+      <Leyenda escala={escala} metrica={metrica} />
     </figure>
   )
 }
 
-function Leyenda({ cortes, metrica }: { cortes: number[]; metrica: Metrica }) {
-  const limites = ['', ...cortes.map((c) => formato.metrica(c, metrica))]
+function Leyenda({ escala, metrica }: { escala: Escala; metrica: Metrica }) {
+  const rango = (min: number, max: number) => {
+    const a = formato.metrica(min, metrica)
+    const b = formato.metrica(max, metrica)
+    return a === b ? a : `${a} – ${b}`
+  }
   return (
-    <ul className="leyenda" aria-label="Leyenda: quintiles entre los departamentos">
-      {escalaColores.map((color, i) => (
-        <li key={color}>
-          <span className="leyenda-color" style={{ background: color }} aria-hidden="true" />
-          {i === 0 ? `< ${limites[1]}` : i === escalaColores.length - 1 ? `≥ ${limites[i]}` : `${limites[i]} – ${limites[i + 1]}`}
+    <ul className="leyenda" aria-label="Leyenda: rango de valores de los departamentos en cada color">
+      {escala.vacia && <li>Ningún departamento tiene datos suficientes con este filtro.</li>}
+      {escala.clases.map((c) => (
+        <li key={c.color}>
+          <span className="leyenda-color" style={{ background: c.color }} aria-hidden="true" />
+          {rango(c.min, c.max)}
         </li>
       ))}
       <li>
@@ -99,4 +108,3 @@ function Leyenda({ cortes, metrica }: { cortes: number[]; metrica: Metrica }) {
     </ul>
   )
 }
-

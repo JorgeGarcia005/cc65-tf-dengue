@@ -413,6 +413,10 @@ a {
   stroke: var(--azul);
   stroke-width: 3;
 }
+.depto-sel:focus-visible {
+  stroke: var(--tinta);
+  stroke-width: 4.5;
+}
 .depto-otros {
   stroke-dasharray: 3 2;
 }
@@ -488,16 +492,22 @@ a {
   height: auto;
   border-bottom: 1.5px solid var(--tinta);
 }
-.curva polyline {
+.curva path {
   fill: none;
   stroke-width: 2;
 }
-.curva-calibrada {
+.curva-calibrada path {
   stroke: var(--rosa);
 }
-.curva-observada {
+.curva-calibrada circle {
+  fill: var(--rosa);
+}
+.curva-observada path {
   stroke: var(--azul);
   stroke-dasharray: 4 3;
+}
+.curva-observada circle {
+  fill: var(--azul);
 }
 .curva-semana {
   stroke: var(--amarillo);
