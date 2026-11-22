@@ -130,8 +130,62 @@ func TestLoginRateLimit(t *testing.T) {
 	if c, _, b := postLogin(t, url, `{"correo":"ana@diresa.pe","clave":"clave-de-ana-123"}`); c != 200 {
 		t.Fatalf("tras la ventana el login correcto debía pasar: %d %s", c, b)
 	}
-	if bloqueado, _ := s.limite.Bloqueado("127.0.0.1"); bloqueado {
-		t.Fatal("un login correcto debe borrar los fallos de la IP")
+	// El login correcto borró los fallos de t = 1…4 s. Sin ese borrado, uno más
+	// sumaría 5 y el siguiente intento ya recibiría 429.
+	if c, _, b := postLogin(t, url, malo); c != 401 {
+		t.Fatalf("fallo tras el login correcto: %d %s", c, b)
+	}
+	if c, _, b := postLogin(t, url, malo); c != 401 {
+		t.Fatalf("un login correcto debe borrar los fallos de la IP: %d %s", c, b)
+	}
+}
+
+// PR-80 H1: una ráfaga concurrente no puede saltarse el límite mientras corre
+// PBKDF2. De 20 intentos simultáneos con clave errada desde la misma IP, solo
+// MaxFallosLogin llegan a comparar la clave (401); el resto recibe 429.
+func TestLoginRafagaConcurrente(t *testing.T) {
+	_, url, _ := servidorLogin(t, nil)
+	const n = 20
+	var wg sync.WaitGroup
+	codigos := make(chan int, n)
+	listos := make(chan struct{})
+	for range n {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			<-listos
+			res, err := http.Post(url, "application/json", strings.NewReader(`{"correo":"ana@diresa.pe","clave":"mala"}`))
+			if err != nil {
+				t.Error(err)
+				return
+			}
+			res.Body.Close()
+			if res.StatusCode == 429 && res.Header.Get("Retry-After") == "" {
+				t.Error("429 sin Retry-After")
+			}
+			codigos <- res.StatusCode
+		}()
+	}
+	close(listos)
+	wg.Wait()
+	close(codigos)
+	cuenta := map[int]int{}
+	for c := range codigos {
+		cuenta[c]++
+	}
+	if cuenta[401] != MaxFallosLogin || cuenta[429] != n-MaxFallosLogin {
+		t.Fatalf("respuestas %v: quería %d × 401 y %d × 429", cuenta, MaxFallosLogin, n-MaxFallosLogin)
+	}
+}
+
+type sinUsuarios struct{ almacen.Almacen } // no implementa almacen.Usuarios
+
+func TestLoginSinUsuariosDa503(t *testing.T) {
+	f, _ := auth.NuevoFirmador([]byte(secretoLogin), time.Hour)
+	_, ts := servidorDePrueba(t, Opciones{Firmador: f, Almacen: sinUsuarios{almacen.NuevaMemoria()}})
+	c, _, b := postLogin(t, ts.URL+"/api/v1/auth/login", `{"correo":"a@b.pe","clave":"x"}`)
+	if c != 503 || !strings.Contains(string(b), "almacén de usuarios") {
+		t.Fatalf("%d %s", c, b)
 	}
 }
 
@@ -157,8 +211,8 @@ func TestLoginValidacion(t *testing.T) {
 		`{"correo":"","clave":"x"}`:      400,
 		`{"correo":"a@b.pe","clave":""}`: 400,
 		`{"correo":"a@b.pe","clave":"x","rol":"admin"}`:                              400, // campo desconocido
-		`{"correo":"a@b.pe","clave":"` + strings.Repeat("x", maxLargoClave+1) + `"}`: 400,
-		`{"correo":"` + strings.Repeat("a", maxLargoCorreo+1) + `","clave":"x"}`:     400,
+		`{"correo":"a@b.pe","clave":"` + strings.Repeat("x", MaxBytesClave+1) + `"}`: 400,
+		`{"correo":"` + strings.Repeat("a", MaxBytesCorreo+1) + `","clave":"x"}`:     400,
 		`{"correo":"a@b.pe","clave":"x"}{}`:                                          400,
 	}
 	for cuerpo, quiere := range casos {
@@ -175,25 +229,72 @@ func TestLoginSinFirmadorDa503(t *testing.T) {
 	}
 }
 
-func TestLimitadorPorIPYPoda(t *testing.T) {
+func fallar(t *testing.T, l *limitador, ip string) {
+	t.Helper()
+	liberar, _ := l.Reservar(ip)
+	if liberar == nil {
+		t.Fatalf("%s bloqueada antes de tiempo", ip)
+	}
+	liberar(intentoFallido)
+}
+
+func TestLimitadorPorIP(t *testing.T) {
 	l := nuevoLimitador()
+	t0 := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	l.ahora = func() time.Time { return t0 }
+	for range MaxFallosLogin {
+		fallar(t, l, "10.0.0.1")
+	}
+	if liberar, espera := l.Reservar("10.0.0.1"); liberar != nil || espera != VentanaFallos {
+		t.Fatalf("10.0.0.1 debía quedar bloqueada un minuto: espera %v", espera)
+	}
+	if liberar, _ := l.Reservar("10.0.0.2"); liberar == nil {
+		t.Fatal("otra IP no debe quedar bloqueada")
+	}
+}
+
+func TestLimitadorCuentaIntentosEnCurso(t *testing.T) {
+	l := nuevoLimitador()
+	var reservas []func(resultadoIntento)
+	for range MaxFallosLogin {
+		liberar, _ := l.Reservar("10.0.0.1")
+		if liberar == nil {
+			t.Fatal("reserva rechazada antes del máximo")
+		}
+		reservas = append(reservas, liberar)
+	}
+	if liberar, espera := l.Reservar("10.0.0.1"); liberar != nil || espera != time.Second {
+		t.Fatalf("con %d intentos en curso, el siguiente debía esperar 1 s: %v", MaxFallosLogin, espera)
+	}
+	reservas[0](intentoNeutro)
+	reservas[0](intentoFallido) // la segunda liberación no hace nada
+	if liberar, _ := l.Reservar("10.0.0.1"); liberar == nil {
+		t.Fatal("al liberar uno como neutro debía quedar un cupo")
+	}
+	if n := len(l.fallos["10.0.0.1"]); n != 0 {
+		t.Fatalf("un intento neutro (o liberado dos veces) no debe contar como fallo: %d", n)
+	}
+}
+
+// PR-80 H2: con muchas IPs activas en la misma ventana, el mapa no pasa del
+// tope y la poda no corre en cada fallo.
+func TestLimitadorMemoriaAcotada(t *testing.T) {
+	l := nuevoLimitador()
+	l.podarDesde, l.maxIPs = 8, 16
 	t0 := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 	ahora := t0
 	l.ahora = func() time.Time { return ahora }
-	for range MaxFallosLogin {
-		l.Fallo("10.0.0.1")
+	for i := range 100 {
+		fallar(t, l, fmt.Sprintf("192.168.0.%d", i))
 	}
-	if b, _ := l.Bloqueado("10.0.0.1"); !b {
-		t.Fatal("10.0.0.1 debía quedar bloqueada")
+	if n := len(l.fallos); n > 16 {
+		t.Fatalf("el mapa creció a %d IPs con tope 16", n)
 	}
-	if b, _ := l.Bloqueado("10.0.0.2"); b {
-		t.Fatal("otra IP no debe quedar bloqueada")
-	}
-	for i := range maxIPsAntesPoda {
-		l.Fallo(fmt.Sprintf("192.168.%d.%d", i/256, i%256))
+	if !l.ultimaPoda.Equal(t0) {
+		t.Fatalf("la poda debía correr una sola vez en la media ventana: última %v", l.ultimaPoda)
 	}
 	ahora = t0.Add(2 * VentanaFallos) // todo vencido
-	l.Fallo("10.0.0.9")               // dispara la poda
+	fallar(t, l, "10.0.0.9")
 	if n := len(l.fallos); n != 1 {
 		t.Fatalf("quedaron %d IPs tras la poda, quería 1", n)
 	}
@@ -234,6 +335,11 @@ func TestSembrarUsuarios(t *testing.T) {
 		{"VIGIA_ADMIN_CORREO": "a@b.pe", "VIGIA_ADMIN_CLAVE": "corta"},
 		{"VIGIA_ADMIN_CORREO": "a@b.pe"},
 		{"VIGIA_ANALISTA_CLAVE": "una-clave-larga"},
+		{"VIGIA_ADMIN_CORREO": "a@b.pe", "VIGIA_ADMIN_CLAVE": strings.Repeat("x", MaxBytesClave+1)},
+		{"VIGIA_ADMIN_CORREO": "a@b.pe", "VIGIA_ADMIN_CLAVE": strings.Repeat("ñ", 150)}, // 150 runas, 300 bytes
+		{"VIGIA_ADMIN_CORREO": strings.Repeat("a", MaxBytesCorreo) + "@b.pe", "VIGIA_ADMIN_CLAVE": "una-clave-larga"},
+		{"VIGIA_ADMIN_CORREO": "Misma@b.pe", "VIGIA_ADMIN_CLAVE": "una-clave-larga",
+			"VIGIA_ANALISTA_CORREO": "misma@B.pe", "VIGIA_ANALISTA_CLAVE": "otra-clave-larga"},
 	} {
 		if _, err := SembrarUsuarios(ctx, mem, entorno(m)); err == nil {
 			t.Errorf("%v debía fallar", m)

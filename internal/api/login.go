@@ -12,11 +12,11 @@ import (
 	"github.com/JorgeGarcia005/cc65-tf-dengue/internal/auth"
 )
 
-// Largos máximos del login: acotan el trabajo de PBKDF2 y el tamaño de la
-// búsqueda antes de tocar la base.
+// Largos máximos del login, en bytes: acotan el trabajo de PBKDF2 y el tamaño
+// de la búsqueda antes de tocar la base. SembrarUsuarios exige los mismos.
 const (
-	maxLargoCorreo = 254
-	maxLargoClave  = 256
+	MaxBytesCorreo = 254
+	MaxBytesClave  = 256
 )
 
 // MensajeCredenciales es la única respuesta a un login fallido: no revela si
@@ -38,23 +38,30 @@ type RespuestaLogin struct {
 
 func (s *Servidor) login(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store")
-	if s.op.Firmador == nil || s.op.Usuarios == nil {
+	switch {
+	case s.op.Firmador == nil:
 		responderError(w, http.StatusServiceUnavailable, "el login no está configurado (falta JWT_SECRETO)")
+		return
+	case s.op.Usuarios == nil:
+		responderError(w, http.StatusServiceUnavailable, "el login no está configurado (no hay almacén de usuarios)")
 		return
 	}
 	ip := ipCliente(r)
-	if bloqueado, espera := s.limite.Bloqueado(ip); bloqueado {
-		w.Header().Set("Retry-After", strconv.Itoa(int(math.Ceil(espera.Seconds()))))
+	liberar, espera := s.limite.Reservar(ip)
+	if liberar == nil {
+		w.Header().Set("Retry-After", strconv.Itoa(max(1, int(math.Ceil(espera.Seconds())))))
 		responderError(w, http.StatusTooManyRequests, "demasiados intentos fallidos; espera antes de volver a probar")
 		return
 	}
+	resultado := intentoNeutro
+	defer func() { liberar(resultado) }() // también ante un pánico: el cupo no queda tomado
 	var p pedidoLogin
 	if !leerJSON(w, r, &p, false) {
 		return
 	}
 	correo := almacen.NormalizarCorreo(p.Correo)
-	if correo == "" || p.Clave == "" || len(correo) > maxLargoCorreo || len(p.Clave) > maxLargoClave {
-		responderError(w, http.StatusBadRequest, fmt.Sprintf("correo y clave son obligatorios (máximo %d y %d caracteres)", maxLargoCorreo, maxLargoClave))
+	if correo == "" || p.Clave == "" || len(correo) > MaxBytesCorreo || len(p.Clave) > MaxBytesClave {
+		responderError(w, http.StatusBadRequest, fmt.Sprintf("correo y clave son obligatorios (máximo %d y %d bytes)", MaxBytesCorreo, MaxBytesClave))
 		return
 	}
 	ctx, cancelar := context.WithTimeout(r.Context(), 5*time.Second)
@@ -71,18 +78,17 @@ func (s *Servidor) login(w http.ResponseWriter, r *http.Request) {
 	if existe {
 		hash = u.Hash
 	}
-	valida := auth.Comparar(hash, p.Clave) && existe && auth.Rol(u.Rol).Valido()
-	if !valida {
-		s.limite.Fallo(ip)
+	if !(auth.Comparar(hash, p.Clave) && existe && auth.Rol(u.Rol).Valido()) {
+		resultado = intentoFallido
 		responderError(w, http.StatusUnauthorized, MensajeCredenciales)
 		return
 	}
-	s.limite.Exito(ip)
 	tok, rec, err := s.op.Firmador.Firmar(u.Correo, auth.Rol(u.Rol))
 	if err != nil {
 		s.op.Log("api: login: firmar: %v", err)
 		responderError(w, http.StatusInternalServerError, "no se pudo emitir el token")
 		return
 	}
+	resultado = intentoExitoso
 	responder(w, http.StatusOK, RespuestaLogin{Token: tok, Correo: rec.Sub, Rol: string(rec.Rol), Expira: rec.Exp})
 }

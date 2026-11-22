@@ -27,15 +27,23 @@ var VariablesSiembra = []struct{ Rol, Correo, Clave string }{
 // coordinador al arrancar en modo servicio.
 func SembrarUsuarios(ctx context.Context, repo almacen.Usuarios, getenv func(string) string) ([]string, error) {
 	var sembrados []string
+	vistos := map[string]string{} // correo → variable que lo definió
 	for _, v := range VariablesSiembra {
 		correo, clave := almacen.NormalizarCorreo(getenv(v.Correo)), getenv(v.Clave)
 		if correo == "" && clave == "" {
 			continue
 		}
-		if correo == "" || utf8.RuneCountInString(clave) < MinLargoClave {
+		switch {
+		case correo == "" || utf8.RuneCountInString(clave) < MinLargoClave:
 			return sembrados, fmt.Errorf("usuarios: %s y %s: falta el correo o la clave tiene menos de %d caracteres",
 				v.Correo, v.Clave, MinLargoClave)
+		case len(correo) > MaxBytesCorreo || len(clave) > MaxBytesClave:
+			// Con más, el login la rechazaría con 400 y la cuenta quedaría inservible.
+			return sembrados, fmt.Errorf("usuarios: %s o %s superan %d / %d bytes", v.Correo, v.Clave, MaxBytesCorreo, MaxBytesClave)
+		case vistos[correo] != "":
+			return sembrados, fmt.Errorf("usuarios: %s repite el correo de %s; cada rol necesita su propia cuenta", v.Correo, vistos[correo])
 		}
+		vistos[correo] = v.Correo
 		h, err := auth.Hash(clave)
 		if err != nil {
 			return sembrados, err

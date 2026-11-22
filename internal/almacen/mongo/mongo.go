@@ -1,6 +1,7 @@
-// Package mongo implementa almacen.Almacen sobre MongoDB con el driver
-// oficial (ADR-0003, ADR-0006). Colecciones: modelos, entrenamientos,
-// predicciones; los índices se crean al conectar (operación idempotente).
+// Package mongo implementa almacen.Almacen y almacen.Usuarios sobre MongoDB con
+// el driver oficial (ADR-0003, ADR-0006, ADR-0007). Colecciones: modelos,
+// entrenamientos, predicciones y usuarios; los índices se crean al conectar
+// (operación idempotente).
 package mongo
 
 import (

@@ -5,6 +5,7 @@
 // Rutas (documentadas en docs/api/openapi.yaml y servidas en /docs):
 //
 //	GET  /healthz
+//	POST /api/v1/auth/login   (JWT, ADR-0007)
 //	GET  /api/v1/modelo
 //	POST /api/v1/predicciones
 //	GET  /api/v1/cluster
@@ -125,6 +126,11 @@ func Nuevo(op Opciones) (*Servidor, error) {
 	}
 	if u, ok := op.Almacen.(almacen.Usuarios); op.Usuarios == nil && ok {
 		op.Usuarios = u
+	}
+	if op.Firmador != nil {
+		// El hash señuelo cuesta un PBKDF2 completo: se calcula ya, en segundo
+		// plano, para que el primer login no pague dos derivaciones.
+		go auth.HashSenuelo()
 	}
 	ctx, cancelar := context.WithTimeout(context.Background(), plazoArranque)
 	defer cancelar()
