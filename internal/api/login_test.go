@@ -223,7 +223,9 @@ func TestLoginValidacion(t *testing.T) {
 }
 
 func TestLoginSinFirmadorDa503(t *testing.T) {
-	_, ts := servidorDePrueba(t, Opciones{})
+	_, h := servidorSeguro(t, Opciones{})
+	ts := httptest.NewServer(h)
+	defer ts.Close()
 	if c, _, b := postLogin(t, ts.URL+"/api/v1/auth/login", `{"correo":"a@b.pe","clave":"x"}`); c != 503 {
 		t.Fatalf("%d %s", c, b)
 	}

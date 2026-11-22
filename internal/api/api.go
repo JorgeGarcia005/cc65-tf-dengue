@@ -4,15 +4,18 @@
 //
 // Rutas (documentadas en docs/api/openapi.yaml y servidas en /docs):
 //
-//	GET  /healthz
-//	POST /api/v1/auth/login   (JWT, ADR-0007)
-//	GET  /api/v1/modelo
-//	POST /api/v1/predicciones
-//	GET  /api/v1/riesgo       (cubo de riesgo para el mapa, de reports/evaluacion.json)
-//	GET  /api/v1/evaluacion   (reports/evaluacion.json completo)
-//	GET  /api/v1/cluster
-//	POST /api/v1/entrenamientos
-//	GET  /api/v1/entrenamientos/{id}
+//	GET  /healthz                     pública
+//	POST /api/v1/auth/login           pública (JWT, ADR-0007)
+//	GET  /api/v1/modelo               analista, admin
+//	POST /api/v1/predicciones         analista, admin
+//	GET  /api/v1/riesgo               analista, admin (cubo de riesgo para el mapa)
+//	GET  /api/v1/evaluacion           analista, admin (reports/evaluacion.json)
+//	GET  /api/v1/cluster              admin
+//	POST /api/v1/entrenamientos       admin
+//	GET  /api/v1/entrenamientos/{id}  admin
+//
+// Seguridad (ADR-0007, seguridad.go): JWT Bearer con rol por ruta, CORS con
+// lista blanca, cabeceras nosniff y no-referrer, y cuerpo de POST ≤ 64 KiB.
 //
 // Concurrencia: net/http atiende cada petición en su goroutine. El modelo
 // publicado vive en un atomic.Pointer (lecturas sin bloqueo; un entrenamiento
@@ -47,7 +50,7 @@ type EstadoCluster interface {
 	Estado() cluster.Estado
 }
 
-// Middleware envuelve un handler. JWT y CORS (TB2) entran aquí sin tocar las rutas.
+// Middleware envuelve un handler (va entre CORS y el mux).
 type Middleware func(http.Handler) http.Handler
 
 // Opciones del servidor. Sin Entrenador o sin Cluster las rutas
@@ -69,10 +72,14 @@ type Opciones struct {
 	// Usuarios guarda las cuentas del login. Si es nil y Almacen implementa
 	// almacen.Usuarios (Memoria y Mongo lo hacen), se usa Almacen.
 	Usuarios almacen.Usuarios
-	// Firmador emite los JWT del login (ADR-0007). Sin él, el login responde 503.
-	Firmador   *auth.Firmador
-	Middleware []Middleware // se aplican en orden: el primero es el más externo
-	Log        func(formato string, args ...any)
+	// Firmador emite y verifica los JWT (ADR-0007). Sin él, el login y toda
+	// ruta protegida responden 503: la API falla cerrada.
+	Firmador *auth.Firmador
+	// OrigenesCORS es la lista blanca de orígenes del navegador (CORS_ORIGENES;
+	// ver ParsearOrigenes). Vacía = ningún origen cruzado.
+	OrigenesCORS []string
+	Middleware   []Middleware // se aplican en orden: el primero es el más externo
+	Log          func(formato string, args ...any)
 	// PlazoCierre acota cuánto espera Cerrar a que se vacíe el registro de
 	// predicciones (PR-40 H6). Por defecto, DefectoPlazoCierre.
 	PlazoCierre time.Duration
@@ -130,6 +137,15 @@ func Nuevo(op Opciones) (*Servidor, error) {
 	if op.PlazoCierre <= 0 {
 		op.PlazoCierre = DefectoPlazoCierre
 	}
+	origenes := make([]string, 0, len(op.OrigenesCORS))
+	for _, o := range op.OrigenesCORS {
+		norm, err := normalizarOrigen(o)
+		if err != nil {
+			return nil, fmt.Errorf("api: %w", err)
+		}
+		origenes = append(origenes, norm)
+	}
+	op.OrigenesCORS = origenes // copia: el llamador no cambia la política después
 	if u, ok := op.Almacen.(almacen.Usuarios); op.Usuarios == nil && ok {
 		op.Usuarios = u
 	}
@@ -257,42 +273,59 @@ func (s *Servidor) registrar(r almacen.RegistroPrediccion) {
 	}
 }
 
-// Ruta describe una ruta del mux. Documentar indica si debe figurar en el OpenAPI.
+// Ruta describe una ruta del mux. Documentar indica si debe figurar en el
+// OpenAPI; Modo y Roles son la autorización de la matriz de ADR-0007.
 type Ruta struct {
 	Metodo, Ruta string
 	Documentar   bool
+	Modo         Modo
+	Roles        []auth.Rol // solo en modo Bearer
 	manejar      func(*Servidor, http.ResponseWriter, *http.Request)
 }
 
-// Rutas es la tabla única de la que salen el mux y el test del OpenAPI.
+// Rutas es la tabla única de la que salen el mux, la autorización y los tests
+// del OpenAPI y de la matriz de roles.
 func Rutas() []Ruta {
+	pub := func(metodo, ruta string, doc bool, h func(*Servidor, http.ResponseWriter, *http.Request)) Ruta {
+		return Ruta{Metodo: metodo, Ruta: ruta, Documentar: doc, Modo: Publica, manejar: h}
+	}
+	con := func(metodo, ruta string, roles []auth.Rol, h func(*Servidor, http.ResponseWriter, *http.Request)) Ruta {
+		return Ruta{Metodo: metodo, Ruta: ruta, Documentar: true, Modo: Bearer, Roles: roles, manejar: h}
+	}
 	return []Ruta{
-		{"GET", "/healthz", true, (*Servidor).salud},
-		{"POST", "/api/v1/auth/login", true, (*Servidor).login},
-		{"GET", "/api/v1/modelo", true, (*Servidor).verModelo},
-		{"POST", "/api/v1/predicciones", true, (*Servidor).predecir},
-		{"GET", "/api/v1/riesgo", true, (*Servidor).verRiesgo},
-		{"GET", "/api/v1/evaluacion", true, (*Servidor).verEvaluacion},
-		{"GET", "/api/v1/cluster", true, (*Servidor).verCluster},
-		{"POST", "/api/v1/entrenamientos", true, (*Servidor).crearEntrenamiento},
-		{"GET", "/api/v1/entrenamientos/{id}", true, (*Servidor).verEntrenamiento},
-		{"GET", "/docs", false, (*Servidor).swaggerUI},
-		{"GET", "/docs/openapi.yaml", false, (*Servidor).openapi},
+		pub("GET", "/healthz", true, (*Servidor).salud),
+		pub("POST", "/api/v1/auth/login", true, (*Servidor).login),
+		con("GET", "/api/v1/modelo", rolesTodos, (*Servidor).verModelo),
+		con("POST", "/api/v1/predicciones", rolesTodos, (*Servidor).predecir),
+		con("GET", "/api/v1/riesgo", rolesTodos, (*Servidor).verRiesgo),
+		con("GET", "/api/v1/evaluacion", rolesTodos, (*Servidor).verEvaluacion),
+		con("GET", "/api/v1/cluster", soloAdmin, (*Servidor).verCluster),
+		con("POST", "/api/v1/entrenamientos", soloAdmin, (*Servidor).crearEntrenamiento),
+		con("GET", "/api/v1/entrenamientos/{id}", soloAdmin, (*Servidor).verEntrenamiento),
+		pub("GET", "/docs", false, (*Servidor).swaggerUI),
+		pub("GET", "/docs/openapi.yaml", false, (*Servidor).openapi),
 	}
 }
 
-// Handler arma el mux con los middlewares.
+// Handler arma la cadena de ADR-0007, de afuera hacia adentro: recuperar →
+// cabeceras de seguridad → CORS → Opciones.Middleware → mux → autenticación
+// y rol de la ruta → handler. La autenticación va por ruta (después de que el
+// mux la elige) para que cada una aplique su propio modo.
 func (s *Servidor) Handler() http.Handler {
 	mux := http.NewServeMux()
 	for _, r := range Rutas() {
 		manejar := r.manejar
-		mux.HandleFunc(r.Metodo+" "+r.Ruta, func(w http.ResponseWriter, req *http.Request) { manejar(s, w, req) })
+		var h http.Handler = http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) { manejar(s, w, req) })
+		if r.Modo == Bearer {
+			h = s.proteger(h, r.Roles)
+		}
+		mux.Handle(r.Metodo+" "+r.Ruta, h)
 	}
 	var h http.Handler = mux
 	for i := len(s.op.Middleware) - 1; i >= 0; i-- {
 		h = s.op.Middleware[i](h)
 	}
-	return s.recuperar(h)
+	return s.recuperar(cabecerasSeguridad(s.cors(h)))
 }
 
 // recuperar convierte un pánico en un 500 sin tumbar el proceso.

@@ -9,8 +9,13 @@ info:
     MINSA / CDC Perú (2000-2025). También expone el modelo publicado, el estado
     del clúster y permite lanzar entrenamientos.
 
-    Implementada solo con `net/http` de la biblioteca estándar de Go. JWT y
-    CORS se agregan en TB2 como middleware, sin cambiar estas rutas.
+    Implementada solo con `net/http` de la biblioteca estándar de Go.
+
+    **Seguridad (ADR-0007).** Las rutas `/api/v1/*`, salvo el login, exigen
+    `Authorization: Bearer <jwt>`: sin token o con uno inválido, 401; con un
+    rol sin acceso, 403. Analista: modelo, predicciones, riesgo y evaluación.
+    Admin: además, clúster y entrenamientos. CORS solo para los orígenes de
+    `CORS_ORIGENES`. Todo POST admite como máximo 64 KiB (413).
 servers:
   - url: http://localhost:8080
     description: docker compose (deploy/docker-compose.yml)
@@ -80,12 +85,15 @@ paths:
       tags: [modelo]
       summary: Modelo publicado (pesos por variable, umbral y versión)
       operationId: verModelo
+      security: [{bearerAuth: []}]
       responses:
         "200":
           description: Modelo vigente.
           content:
             application/json:
               schema: {$ref: "#/components/schemas/Modelo"}
+        "401": {$ref: "#/components/responses/NoAutenticado"}
+        "403": {$ref: "#/components/responses/SinPermiso"}
   /api/v1/predicciones:
     post:
       tags: [prediccion]
@@ -102,6 +110,7 @@ paths:
           application/json:
             schema: {$ref: "#/components/schemas/Consulta"}
             example: {departamento: LORETO, ano: 2024, semana: 10, edad: 34, tipo_edad: A, sexo: M}
+      security: [{bearerAuth: []}]
       responses:
         "200":
           description: Predicción.
@@ -113,6 +122,8 @@ paths:
             application/json:
               schema: {$ref: "#/components/schemas/Prediccion"}
         "400": {$ref: "#/components/responses/Error"}
+        "401": {$ref: "#/components/responses/NoAutenticado"}
+        "403": {$ref: "#/components/responses/SinPermiso"}
         "413": {$ref: "#/components/responses/Error"}
   /api/v1/riesgo:
     get:
@@ -125,6 +136,7 @@ paths:
         prioritarias. Comprimido con gzip si el cliente lo acepta; ETag para
         revalidar (304).
       operationId: verRiesgo
+      security: [{bearerAuth: []}]
       responses:
         "200":
           description: Riesgo cruzado.
@@ -134,6 +146,8 @@ paths:
             application/json:
               schema: {$ref: "#/components/schemas/DocumentoEvaluacion"}
         "304": {description: Sin cambios desde el ETag enviado.}
+        "401": {$ref: "#/components/responses/NoAutenticado"}
+        "403": {$ref: "#/components/responses/SinPermiso"}
         "503": {$ref: "#/components/responses/Error"}
   /api/v1/evaluacion:
     get:
@@ -145,6 +159,7 @@ paths:
         latencia de la API, con el sha256 de cada fuente. Gzip y ETag como
         /api/v1/riesgo.
       operationId: verEvaluacion
+      security: [{bearerAuth: []}]
       responses:
         "200":
           description: Evaluación.
@@ -154,18 +169,23 @@ paths:
             application/json:
               schema: {$ref: "#/components/schemas/DocumentoEvaluacion"}
         "304": {description: Sin cambios desde el ETag enviado.}
+        "401": {$ref: "#/components/responses/NoAutenticado"}
+        "403": {$ref: "#/components/responses/SinPermiso"}
         "503": {$ref: "#/components/responses/Error"}
   /api/v1/cluster:
     get:
       tags: [cluster]
       summary: Estado del clúster (nodos, carga, época y pérdida)
       operationId: verCluster
+      security: [{bearerAuth: []}]
       responses:
         "200":
           description: Estado actual del coordinador.
           content:
             application/json:
               schema: {$ref: "#/components/schemas/EstadoCluster"}
+        "401": {$ref: "#/components/responses/NoAutenticado"}
+        "403": {$ref: "#/components/responses/SinPermiso"}
         "503": {$ref: "#/components/responses/Error"}
   /api/v1/entrenamientos:
     post:
@@ -181,6 +201,7 @@ paths:
         content:
           application/json:
             schema: {$ref: "#/components/schemas/ParametrosEntrenamiento"}
+      security: [{bearerAuth: []}]
       responses:
         "202":
           description: Entrenamiento aceptado.
@@ -191,6 +212,8 @@ paths:
             application/json:
               schema: {$ref: "#/components/schemas/Entrenamiento"}
         "400": {$ref: "#/components/responses/Error"}
+        "401": {$ref: "#/components/responses/NoAutenticado"}
+        "403": {$ref: "#/components/responses/SinPermiso"}
         "409": {$ref: "#/components/responses/Error"}
         "503": {$ref: "#/components/responses/Error"}
   /api/v1/entrenamientos/{id}:
@@ -203,15 +226,47 @@ paths:
           in: path
           required: true
           schema: {type: string, example: ent-20261117T183000-1}
+      security: [{bearerAuth: []}]
       responses:
         "200":
           description: Estado del entrenamiento.
           content:
             application/json:
               schema: {$ref: "#/components/schemas/Entrenamiento"}
+        "401": {$ref: "#/components/responses/NoAutenticado"}
+        "403": {$ref: "#/components/responses/SinPermiso"}
         "404": {$ref: "#/components/responses/Error"}
 components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: |
+        Token de POST /api/v1/auth/login (HS256, 60 min). En Swagger UI, botón
+        «Authorize» y pegar solo el token. Matriz de roles en ADR-0007.
   responses:
+    NoAutenticado:
+      description: Falta el token, no verifica o venció.
+      headers:
+        WWW-Authenticate:
+          schema: {type: string, example: "Bearer realm=\"vigia\", error=\"invalid_token\""}
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [error]
+            properties:
+              error: {type: string, example: token inválido o vencido}
+    SinPermiso:
+      description: El rol del token no tiene acceso a esta ruta (p. ej., un analista en una ruta de admin).
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [error]
+            properties:
+              error: {type: string, example: tu rol no tiene acceso a este recurso}
     Error:
       description: Error con mensaje en español.
       content:

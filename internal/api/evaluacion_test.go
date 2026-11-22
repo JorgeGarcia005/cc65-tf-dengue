@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -40,7 +41,7 @@ func TestEvaluacionYRiesgoConElReporteReal(t *testing.T) {
 	}
 
 	res, b = pedirDoc(t, ts.URL+"/api/v1/riesgo", map[string]string{"Accept-Encoding": "gzip"})
-	if res.StatusCode != 200 || res.Header.Get("Content-Encoding") != "gzip" || res.Header.Get("Vary") != "Accept-Encoding" {
+	if res.StatusCode != 200 || res.Header.Get("Content-Encoding") != "gzip" || !slices.Contains(res.Header.Values("Vary"), "Accept-Encoding") {
 		t.Fatalf("riesgo: %d %v", res.StatusCode, res.Header)
 	}
 	zr, err := gzip.NewReader(bytes.NewReader(b))
