@@ -11,10 +11,15 @@
 // La latencia se mide en el cliente: desde que se envía la petición hasta leer
 // la respuesta completa, igual que la ve Postman.
 //
+// Las rutas exigen JWT desde #61 (ADR-0007): benchapi inicia sesión con
+// -correo y la clave de $BENCH_CLAVE (nunca como flag, para que no quede en el
+// historial), o usa un token ya emitido (-token / $BENCH_TOKEN). El login no
+// se mide; con token el reporte por defecto es bench_api_<maquina>_jwt.json.
+//
 // Uso, con la API levantada (scripts/evidencia-api.sh o el Compose en modo
 // servicio):
 //
-//	go run ./cmd/benchapi -url http://localhost:8080 -exigir-p95 100ms
+//	BENCH_CLAVE=… go run ./cmd/benchapi -url http://localhost:8080 -correo analista@vigia.pe -exigir-p95 100ms
 package main
 
 import (
@@ -48,6 +53,9 @@ type opciones struct {
 	calientes    int // consultas distintas de la corrida caliente
 	semilla      uint64
 	timeout      time.Duration
+	token        string // JWT de las peticiones; vacío = sin Authorization
+	correo       string // si no es vacío, inicia sesión con correo y clave
+	clave        string
 }
 
 // corrida es el resultado de una serie de peticiones.
@@ -77,6 +85,7 @@ type reporte struct {
 	SO            string    `json:"so"`
 	CPUs          int       `json:"cpus_cliente"`
 	URL           string    `json:"url"`
+	Autenticacion string    `json:"autenticacion"` // "jwt" o "ninguna"
 	VersionModelo string    `json:"version_modelo"`
 	Concurrencia  int       `json:"concurrencia"`
 	Semilla       uint64    `json:"semilla"`
@@ -94,8 +103,11 @@ func main() {
 	flag.DurationVar(&op.timeout, "timeout", 5*time.Second, "plazo de cada petición")
 	exigir := flag.Duration("exigir-p95", 0, "falla (código 1) si el p95 de alguna corrida no es menor que esto, p. ej. 100ms")
 	nombreMaquina := flag.String("maquina", "", "nombre de la máquina para el archivo (por defecto, el hostname)")
-	salida := flag.String("salida", "", "reporte (por defecto reports/bench_api_<maquina>.json)")
+	salida := flag.String("salida", "", "reporte (por defecto reports/bench_api_<maquina>[_jwt].json)")
+	flag.StringVar(&op.token, "token", os.Getenv("BENCH_TOKEN"), "JWT para Authorization: Bearer (por defecto $BENCH_TOKEN)")
+	flag.StringVar(&op.correo, "correo", os.Getenv("BENCH_CORREO"), "inicia sesión con este correo y la clave de $BENCH_CLAVE (por defecto $BENCH_CORREO)")
 	flag.Parse()
+	op.clave = os.Getenv("BENCH_CLAVE")
 
 	if op.semilla == 0 {
 		op.semilla = uint64(time.Now().UnixNano())
@@ -105,7 +117,11 @@ func main() {
 		host = nombreArchivo(*nombreMaquina)
 	}
 	if *salida == "" {
-		*salida = filepath.Join("reports", "bench_api_"+host+".json")
+		sufijo := ""
+		if op.token != "" || op.correo != "" {
+			sufijo = "_jwt"
+		}
+		*salida = filepath.Join("reports", "bench_api_"+host+sufijo+".json")
 	}
 
 	rep, err := medir(context.Background(), op, *exigir, log.Printf)
@@ -137,7 +153,18 @@ func medir(ctx context.Context, op opciones, limite time.Duration, logf func(str
 	cli := &http.Client{Timeout: op.timeout, Transport: tr}
 	defer cli.CloseIdleConnections()
 	op.url = strings.TrimRight(op.url, "/")
-	mod, err := leerModelo(ctx, cli, op.url)
+	if op.correo != "" {
+		if op.clave == "" {
+			return reporte{}, errors.New("-correo necesita la clave en $BENCH_CLAVE")
+		}
+		tok, err := iniciarSesion(ctx, cli, op.url, op.correo, op.clave)
+		if err != nil {
+			return reporte{}, err
+		}
+		op.token = tok
+		logf("sesión iniciada como %s", op.correo)
+	}
+	mod, err := leerModelo(ctx, cli, op.url, op.token)
 	if err != nil {
 		return reporte{}, err
 	}
@@ -150,22 +177,25 @@ func medir(ctx context.Context, op opciones, limite time.Duration, logf func(str
 	}
 	rep := reporte{
 		Generado: time.Now().Format(time.RFC3339), SO: runtime.GOOS + "/" + runtime.GOARCH, CPUs: runtime.NumCPU(),
-		URL: op.url, VersionModelo: mod.version, Concurrencia: op.concurrencia, Semilla: op.semilla,
+		URL: op.url, Autenticacion: "ninguna", VersionModelo: mod.version, Concurrencia: op.concurrencia, Semilla: op.semilla,
 		LimiteP95Ms: ms(limite),
+	}
+	if op.token != "" {
+		rep.Autenticacion = "jwt"
 	}
 
 	// Calentamiento de conexiones y del servidor (no se mide).
 	logf("calentando %d conexiones", op.concurrencia)
-	if _, err := serie(ctx, cli, op.url, op.concurrencia, op.concurrencia, func(i int) []byte { return gen.caliente(i % op.calientes) }); err != nil {
+	if _, err := serie(ctx, cli, op.url, op.token, op.concurrencia, op.concurrencia, func(i int) []byte { return gen.caliente(i % op.calientes) }); err != nil {
 		return reporte{}, err
 	}
 	// Las consultas calientes quedan en la caché antes de medir.
-	if _, err := serie(ctx, cli, op.url, op.calientes, 1, gen.caliente); err != nil {
+	if _, err := serie(ctx, cli, op.url, op.token, op.calientes, 1, gen.caliente); err != nil {
 		return reporte{}, err
 	}
 
 	logf("corrida fría: %d consultas distintas, %d clientes", op.peticiones, op.concurrencia)
-	fria, err := serie(ctx, cli, op.url, op.peticiones, op.concurrencia, gen.fria)
+	fria, err := serie(ctx, cli, op.url, op.token, op.peticiones, op.concurrencia, gen.fria)
 	if err != nil {
 		return reporte{}, err
 	}
@@ -173,7 +203,7 @@ func medir(ctx context.Context, op opciones, limite time.Duration, logf func(str
 	fria.Descripcion = "consultas distintas: calcula el modelo y guarda en la caché"
 
 	logf("corrida caliente: %d peticiones sobre %d consultas en caché", op.peticiones, op.calientes)
-	caliente, err := serie(ctx, cli, op.url, op.peticiones, op.concurrencia, func(i int) []byte { return gen.caliente(i % op.calientes) })
+	caliente, err := serie(ctx, cli, op.url, op.token, op.peticiones, op.concurrencia, func(i int) []byte { return gen.caliente(i % op.calientes) })
 	if err != nil {
 		return reporte{}, err
 	}
@@ -218,7 +248,7 @@ func verificar(rep reporte) error {
 // serie envía n peticiones con c clientes; cuerpo(i) es la consulta i. Cada
 // cliente acumula sus propias medidas (sin estado compartido) y al final se
 // juntan.
-func serie(ctx context.Context, cli *http.Client, base string, n, c int, cuerpo func(int) []byte) (corrida, error) {
+func serie(ctx context.Context, cli *http.Client, base, token string, n, c int, cuerpo func(int) []byte) (corrida, error) {
 	type medida struct {
 		dur   time.Duration
 		err   string
@@ -233,7 +263,7 @@ func serie(ctx context.Context, cli *http.Client, base string, n, c int, cuerpo 
 		go func() {
 			defer wg.Done()
 			for i := range indices {
-				d, cache, err := pedir(ctx, cli, base, cuerpo(i))
+				d, cache, err := pedir(ctx, cli, base, token, cuerpo(i))
 				m := medida{dur: d, cache: cache}
 				if err != nil {
 					m.err = err.Error()
@@ -290,12 +320,13 @@ func serie(ctx context.Context, cli *http.Client, base string, n, c int, cuerpo 
 
 // pedir hace una predicción y devuelve su latencia (hasta leer el cuerpo) y
 // el valor de X-Cache.
-func pedir(ctx context.Context, cli *http.Client, base string, cuerpo []byte) (time.Duration, string, error) {
+func pedir(ctx context.Context, cli *http.Client, base, token string, cuerpo []byte) (time.Duration, string, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, base+"/api/v1/predicciones", bytes.NewReader(cuerpo))
 	if err != nil {
 		return 0, "", err
 	}
 	req.Header.Set("Content-Type", "application/json")
+	conToken(req, token)
 	ini := time.Now()
 	res, err := cli.Do(req)
 	if err != nil {
@@ -328,17 +359,21 @@ type modeloPublicado struct {
 	anoMin  int
 }
 
-func leerModelo(ctx context.Context, cli *http.Client, base string) (modeloPublicado, error) {
+func leerModelo(ctx context.Context, cli *http.Client, base, token string) (modeloPublicado, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, base+"/api/v1/modelo", nil)
 	if err != nil {
 		return modeloPublicado{}, err
 	}
+	conToken(req, token)
 	res, err := cli.Do(req)
 	if err != nil {
 		return modeloPublicado{}, fmt.Errorf("la API no responde en %s: %w", base, err)
 	}
 	defer res.Body.Close()
-	if res.StatusCode != http.StatusOK {
+	switch {
+	case res.StatusCode == http.StatusUnauthorized:
+		return modeloPublicado{}, errors.New("GET /api/v1/modelo: HTTP 401; la API exige token: usa -correo (clave en $BENCH_CLAVE) o -token")
+	case res.StatusCode != http.StatusOK:
 		return modeloPublicado{}, fmt.Errorf("GET /api/v1/modelo: HTTP %d", res.StatusCode)
 	}
 	var m struct {
@@ -436,4 +471,38 @@ func escribirJSON(ruta string, v any) error {
 		return err
 	}
 	return os.WriteFile(ruta, append(b, '\n'), 0o644)
+}
+
+// conToken agrega Authorization: Bearer si hay token.
+func conToken(req *http.Request, token string) {
+	if token != "" {
+		req.Header.Set("Authorization", "Bearer "+token)
+	}
+}
+
+// iniciarSesion pide un JWT a POST /api/v1/auth/login (no se mide).
+func iniciarSesion(ctx context.Context, cli *http.Client, base, correo, clave string) (string, error) {
+	cuerpo, err := json.Marshal(map[string]string{"correo": correo, "clave": clave})
+	if err != nil {
+		return "", err
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, base+"/api/v1/auth/login", bytes.NewReader(cuerpo))
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	res, err := cli.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("login: la API no responde en %s: %w", base, err)
+	}
+	defer res.Body.Close()
+	var s struct {
+		Token string `json:"token"`
+		Error string `json:"error"`
+	}
+	_ = json.NewDecoder(io.LimitReader(res.Body, 1<<16)).Decode(&s)
+	if res.StatusCode != http.StatusOK || s.Token == "" {
+		return "", fmt.Errorf("login como %s: HTTP %d %s", correo, res.StatusCode, s.Error)
+	}
+	return s.Token, nil
 }

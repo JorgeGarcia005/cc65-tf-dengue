@@ -16,6 +16,7 @@ import (
 
 	"github.com/JorgeGarcia005/cc65-tf-dengue/internal/almacen"
 	"github.com/JorgeGarcia005/cc65-tf-dengue/internal/api"
+	"github.com/JorgeGarcia005/cc65-tf-dengue/internal/auth"
 	"github.com/JorgeGarcia005/cc65-tf-dengue/internal/features"
 	"github.com/JorgeGarcia005/cc65-tf-dengue/internal/ingest"
 )
@@ -40,7 +41,37 @@ func (cacheCaida) Guardar(context.Context, string, []byte, time.Duration) error 
 	return errors.New("redis caído")
 }
 
+// secretoBench firma los tokens de las pruebas; la API de prueba exige JWT
+// como la real (#61).
+const secretoBench = "secreto-de-las-pruebas-de-benchapi!"
+
+func firmadorBench(t *testing.T) *auth.Firmador {
+	t.Helper()
+	f, err := auth.NuevoFirmador([]byte(secretoBench), time.Hour)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return f
+}
+
+// tokenBench es un token de analista válido para la API de prueba.
+func tokenBench(t *testing.T) string {
+	t.Helper()
+	tok, _, err := firmadorBench(t).Firmar("analista@vigia.pe", auth.RolAnalista)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return tok
+}
+
 func apiConCache(t *testing.T, cache almacen.Cache) *httptest.Server {
+	ts, _ := apiCompleta(t, cache)
+	return ts
+}
+
+// apiCompleta levanta la API con JWT y devuelve también su almacén (para
+// sembrar usuarios).
+func apiCompleta(t *testing.T, cache almacen.Cache) (*httptest.Server, *almacen.Memoria) {
 	t.Helper()
 	var regs []ingest.Registro
 	for i := range 60 {
@@ -60,21 +91,22 @@ func apiConCache(t *testing.T, cache almacen.Cache) *httptest.Server {
 	if err != nil {
 		t.Fatal(err)
 	}
-	op := api.Opciones{Modelo: m, Cache: cache, Log: func(string, ...any) {}}
+	mem := almacen.NuevaMemoria()
+	op := api.Opciones{Modelo: m, Cache: cache, Almacen: mem, Firmador: firmadorBench(t), Log: func(string, ...any) {}}
 	s, err := api.Nuevo(op)
 	if err != nil {
 		t.Fatal(err)
 	}
 	ts := httptest.NewServer(s.Handler())
 	t.Cleanup(func() { ts.Close(); s.Cerrar() })
-	return ts
+	return ts, mem
 }
 
 func silencio(string, ...any) {}
 
 func TestMedirSeparaCacheFriaYCaliente(t *testing.T) {
 	ts := apiDePrueba(t, true)
-	op := opciones{url: ts.URL, peticiones: 300, concurrencia: 8, calientes: 16, semilla: 7, timeout: 5 * time.Second}
+	op := opciones{url: ts.URL, token: tokenBench(t), peticiones: 300, concurrencia: 8, calientes: 16, semilla: 7, timeout: 5 * time.Second}
 	rep, err := medir(context.Background(), op, time.Second, silencio)
 	if err != nil {
 		t.Fatal(err)
@@ -110,7 +142,7 @@ func TestMedirSeparaCacheFriaYCaliente(t *testing.T) {
 
 func TestSinCacheLoReporta(t *testing.T) {
 	ts := apiDePrueba(t, false)
-	rep, err := medir(context.Background(), opciones{url: ts.URL, peticiones: 50, concurrencia: 4, calientes: 4, semilla: 1, timeout: time.Second}, 0, silencio)
+	rep, err := medir(context.Background(), opciones{url: ts.URL, token: tokenBench(t), peticiones: 50, concurrencia: 4, calientes: 4, semilla: 1, timeout: time.Second}, 0, silencio)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -123,7 +155,7 @@ func TestSinCacheLoReporta(t *testing.T) {
 
 func TestExigirP95FallaSiNoSeCumple(t *testing.T) {
 	ts := apiDePrueba(t, true)
-	rep, err := medir(context.Background(), opciones{url: ts.URL, peticiones: 20, concurrencia: 2, calientes: 2, semilla: 3, timeout: time.Second}, time.Nanosecond, silencio)
+	rep, err := medir(context.Background(), opciones{url: ts.URL, token: tokenBench(t), peticiones: 20, concurrencia: 2, calientes: 2, semilla: 3, timeout: time.Second}, time.Nanosecond, silencio)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -166,7 +198,7 @@ func TestErroresDelServidorSeCuentanYFallan(t *testing.T) {
 		}
 	}))
 	t.Cleanup(falla.Close)
-	rep, err := medir(context.Background(), opciones{url: falla.URL, peticiones: 10, concurrencia: 1, calientes: 1, semilla: 5, timeout: time.Second}, 0, silencio)
+	rep, err := medir(context.Background(), opciones{url: falla.URL, token: tokenBench(t), peticiones: 10, concurrencia: 1, calientes: 1, semilla: 5, timeout: time.Second}, 0, silencio)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -263,7 +295,7 @@ func TestColeccionPostmanCubreLasRutas(t *testing.T) {
 // caliente no puede darse por buena.
 func TestCacheCaidaFallaLaCorridaCaliente(t *testing.T) {
 	ts := apiConCache(t, cacheCaida{})
-	rep, err := medir(context.Background(), opciones{url: ts.URL, peticiones: 40, concurrencia: 4, calientes: 4, semilla: 9, timeout: time.Second}, time.Second, silencio)
+	rep, err := medir(context.Background(), opciones{url: ts.URL, token: tokenBench(t), peticiones: 40, concurrencia: 4, calientes: 4, semilla: 9, timeout: time.Second}, time.Second, silencio)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -276,7 +308,7 @@ func TestCacheCaidaFallaLaCorridaCaliente(t *testing.T) {
 // salga de la caché; debe fallar.
 func TestSemillaRepetidaFallaLaCorridaFria(t *testing.T) {
 	ts := apiDePrueba(t, true)
-	op := opciones{url: ts.URL, peticiones: 40, concurrencia: 4, calientes: 4, semilla: 11, timeout: time.Second}
+	op := opciones{url: ts.URL, token: tokenBench(t), peticiones: 40, concurrencia: 4, calientes: 4, semilla: 11, timeout: time.Second}
 	if _, err := medir(context.Background(), op, 0, silencio); err != nil {
 		t.Fatal(err)
 	}
@@ -293,7 +325,7 @@ func TestSemillaRepetidaFallaLaCorridaFria(t *testing.T) {
 // tienen sentido se rechazan antes de medir.
 func TestOpcionesInvalidasSeRechazan(t *testing.T) {
 	ts := apiDePrueba(t, true)
-	base := opciones{url: ts.URL, peticiones: 10, concurrencia: 2, calientes: 2, semilla: 1, timeout: time.Second}
+	base := opciones{url: ts.URL, token: tokenBench(t), peticiones: 10, concurrencia: 2, calientes: 2, semilla: 1, timeout: time.Second}
 	casos := map[string]func(*opciones) time.Duration{
 		"n mayor que la mitad": func(o *opciones) time.Duration { o.peticiones = 10_000_000; return 0 },
 		"timeout cero":         func(o *opciones) time.Duration { o.timeout = 0; return 0 },
@@ -305,5 +337,45 @@ func TestOpcionesInvalidasSeRechazan(t *testing.T) {
 		if _, err := medir(context.Background(), op, limite, silencio); err == nil {
 			t.Errorf("%s: se esperaba error", nombre)
 		}
+	}
+}
+
+// #61: con -correo y $BENCH_CLAVE inicia sesión y mide con el token; sin
+// token la API responde 401 y benchapi lo explica en vez de medir errores.
+func TestMedirConLoginUsaJWT(t *testing.T) {
+	ts, mem := apiCompleta(t, almacen.NuevaCacheMemoria(time.Now))
+	hash, err := auth.Hash("clave-del-benchmark")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := mem.GuardarUsuario(context.Background(), almacen.Usuario{Correo: "bench@vigia.pe", Hash: hash, Rol: "analista"}); err != nil {
+		t.Fatal(err)
+	}
+	op := opciones{url: ts.URL, peticiones: 40, concurrencia: 4, calientes: 4, semilla: 13, timeout: 5 * time.Second,
+		correo: "bench@vigia.pe", clave: "clave-del-benchmark"}
+	rep, err := medir(context.Background(), op, time.Second, silencio)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rep.Autenticacion != "jwt" || verificar(rep) != nil {
+		t.Fatalf("autenticación %q, verificar: %v", rep.Autenticacion, verificar(rep))
+	}
+	for _, c := range rep.Corridas {
+		if c.Errores != 0 {
+			t.Fatalf("corrida %s con %d errores: %s", c.Nombre, c.Errores, c.PrimerError)
+		}
+	}
+
+	op.clave = "otra-clave-cualquiera"
+	if _, err := medir(context.Background(), op, 0, silencio); err == nil || !strings.Contains(err.Error(), "401") {
+		t.Fatalf("clave errada: err %v, quería el 401 del login", err)
+	}
+	op.correo, op.clave = "", ""
+	if _, err := medir(context.Background(), op, 0, silencio); err == nil || !strings.Contains(err.Error(), "exige token") {
+		t.Fatalf("sin token: err %v, quería el aviso de que la API exige token", err)
+	}
+	op.correo = "bench@vigia.pe"
+	if _, err := medir(context.Background(), op, 0, silencio); err == nil || !strings.Contains(err.Error(), "BENCH_CLAVE") {
+		t.Fatalf("correo sin clave: err %v", err)
 	}
 }

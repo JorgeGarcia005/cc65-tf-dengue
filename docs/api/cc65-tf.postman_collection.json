@@ -2,7 +2,7 @@
   "info": {
     "name": "CC65 TF · API de riesgo de dengue",
     "_postman_id": "5b0f7a52-cc65-4d1e-9f3a-7a0c0de9e8a1",
-    "description": "Una petición por ruta de docs/api/openapi.yaml, con tests de estado y de tiempo < 100 ms (issue #30). Correr con el clúster en modo servicio (scripts/evidencia-api.sh deja la API en http://localhost:18080) o con Newman: npx newman run docs/api/cc65-tf.postman_collection.json --env-var base_url=http://localhost:18080 La predicción nueva usa una semana y una edad al azar (variables de colección), así la repetida sale de Redis. Entre dos corridas completas debe terminar el entrenamiento lanzado por la anterior (si no, el POST responde 409); se deja en 600 épocas para no reemplazar el modelo vigente por uno con menos épocas.",
+    "description": "Una petición por ruta de docs/api/openapi.yaml, con tests de estado y de tiempo < 100 ms (issue #30). Correr con el clúster en modo servicio (scripts/evidencia-api.sh deja la API en http://localhost:18080) o con Newman: npx newman run docs/api/cc65-tf.postman_collection.json --env-var base_url=http://localhost:18080 La predicción nueva usa una semana y una edad al azar (variables de colección), así la repetida sale de Redis. Entre dos corridas completas debe terminar el entrenamiento lanzado por la anterior (si no, el POST responde 409); se deja en 600 épocas para no reemplazar el modelo vigente por uno con menos épocas. Desde #61 las rutas exigen JWT: la petición Login guarda el token y la colección lo envía como Bearer; correo y clave son variables (la clave nunca se versiona: --env-var clave=…).",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
@@ -16,7 +16,7 @@
     },
     {
       "key": "correo",
-      "value": "analista@vigia.pe"
+      "value": "admin@vigia.pe"
     },
     {
       "key": "clave",
@@ -55,7 +55,10 @@
             "healthz"
           ]
         },
-        "description": ""
+        "description": "",
+        "auth": {
+          "type": "noauth"
+        }
       }
     },
     {
@@ -98,7 +101,45 @@
             "login"
           ]
         },
-        "description": "Define las variables correo y clave de la colección con una cuenta de deploy/.env. Guarda el token en la variable token para las rutas protegidas (#61)."
+        "description": "Define las variables correo y clave de la colección con la cuenta de admin de deploy/.env (las rutas del clúster y del entrenamiento son solo de admin; ADR-0007). Guarda el token en la variable token, que la colección envía como Authorization: Bearer en el resto de las peticiones (#61).",
+        "auth": {
+          "type": "noauth"
+        }
+      }
+    },
+    {
+      "name": "Modelo sin token (401)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 401 sin Authorization\", function () { pm.response.to.have.status(401); });",
+              "pm.test(\"pide un token Bearer\", function () { pm.expect(pm.response.headers.get(\"WWW-Authenticate\")).to.include(\"Bearer\"); });",
+              "pm.test(\"responde en menos de 100 ms\", function () { pm.expect(pm.response.responseTime).to.be.below(100); });"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "auth": {
+          "type": "noauth"
+        },
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{base_url}}/api/v1/modelo",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "modelo"
+          ]
+        },
+        "description": "Las rutas /api/v1/*, salvo el login, exigen JWT (ADR-0007)."
       }
     },
     {
@@ -470,5 +511,15 @@
         "description": ""
       }
     }
-  ]
+  ],
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{token}}",
+        "type": "string"
+      }
+    ]
+  }
 }
