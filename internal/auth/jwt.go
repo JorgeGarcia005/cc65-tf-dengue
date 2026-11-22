@@ -75,8 +75,9 @@ func NuevoFirmador(secreto []byte, duracion time.Duration) (*Firmador, error) {
 	if len(secreto) < MinBytesSecreto {
 		return nil, ErrSecretoCorto
 	}
-	if duracion <= 0 {
-		return nil, errors.New("la duración del token debe ser positiva")
+	if duracion < time.Second {
+		// exp va en segundos enteros (NumericDate, RFC 7519): menos de 1 s nace vencido.
+		return nil, errors.New("la duración del token debe ser de al menos 1 segundo")
 	}
 	return &Firmador{secreto: bytes.Clone(secreto), duracion: duracion, ahora: time.Now}, nil
 }

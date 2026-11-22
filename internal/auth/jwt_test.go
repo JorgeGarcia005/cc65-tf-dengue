@@ -128,8 +128,19 @@ func TestJWTSecretoCorto(t *testing.T) {
 	if _, err := NuevoFirmador([]byte("corto"), time.Hour); !errors.Is(err, ErrSecretoCorto) {
 		t.Fatalf("error = %v, quería ErrSecretoCorto", err)
 	}
-	if _, err := NuevoFirmador(secretoPrueba, 0); err == nil {
-		t.Fatal("duración 0 debería fallar")
+	for _, d := range []time.Duration{0, -time.Second, 500 * time.Millisecond} {
+		if _, err := NuevoFirmador(secretoPrueba, d); err == nil {
+			t.Fatalf("duración %v debería fallar", d)
+		}
+	}
+	f, err := NuevoFirmador(secretoPrueba, time.Second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.ahora = func() time.Time { return time.Unix(1_800_000_000, 0) }
+	tok, _, _ := f.Firmar("x@y.pe", RolAdmin)
+	if _, err := f.Verificar(tok); err != nil {
+		t.Fatalf("un token de 1 s no debe nacer vencido: %v", err)
 	}
 }
 
