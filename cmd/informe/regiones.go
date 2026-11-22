@@ -305,7 +305,15 @@ type reporteAPI struct {
 }
 
 func apiReal() (reporteAPI, string, error) {
-	archivos, _ := filepath.Glob("reports/bench_api_*.json")
+	// El informe de la PC4 cita la medición sin JWT; las de TB2 (*_jwt.json)
+	// no deben desplazarla por orden alfabético (PR-83 H1).
+	todos, _ := filepath.Glob("reports/bench_api_*.json")
+	var archivos []string
+	for _, a := range todos {
+		if !strings.HasSuffix(a, "_jwt.json") {
+			archivos = append(archivos, a)
+		}
+	}
 	slices.Sort(archivos)
 	if len(archivos) == 0 {
 		return reporteAPI{}, "", fmt.Errorf("no hay reports/bench_api_*.json")
