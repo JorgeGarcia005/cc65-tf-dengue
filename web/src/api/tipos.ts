@@ -31,3 +31,68 @@ export interface DocumentoRiesgo {
 export const TODOS = 'TODOS'
 export const OTROS = 'OTROS'
 export const TODAS = 'todas'
+
+// GET /api/v1/evaluacion (reports/evaluacion.json completo): lo que usan el
+// inicio (#67) y la vista de evaluación (#68).
+export interface Metricas {
+  Umbral: number
+  VP: number
+  FP: number
+  VN: number
+  FN: number
+  Exactitud: number
+  Precision: number
+  Recall: number
+  F1: number
+  AUC: number
+}
+
+export interface DocumentoEvaluacion extends DocumentoRiesgo {
+  filas_test: number
+  positivos_test: number
+  metricas_test: Metricas
+  auc_trapecio: number
+  brier_calibrado: number
+}
+
+// GET /api/v1/modelo.
+export interface ModeloPublicado {
+  version: string
+  generado: string
+  umbral: number
+  ajuste_prior: number
+  sesgo: number
+  ano_min: number
+  departamentos: string[]
+  variables: { nombre: string; peso: number }[]
+}
+
+// POST /api/v1/predicciones.
+export interface Consulta {
+  departamento: string
+  ano: number
+  semana: number
+  edad: number
+  tipo_edad: 'A' | 'M' | 'D'
+  sexo: 'F' | 'M'
+}
+
+export interface Contribucion {
+  variable: string
+  valor: number
+  peso: number
+  aporte: number
+}
+
+export interface Prediccion {
+  riesgo: number
+  probabilidad_ponderada: number
+  clase: 0 | 1
+  etiqueta: string
+  umbral: number
+  departamento_modelo: string
+  version_modelo: string
+  logit: number
+  sesgo: number
+  contribuciones: Contribucion[]
+}
