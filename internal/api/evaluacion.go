@@ -9,6 +9,8 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"slices"
+	"strconv"
 	"strings"
 )
 
@@ -16,14 +18,16 @@ import (
 // API (internal/evaluacion.VersionEsquema).
 const VersionEvaluacion = 1
 
-// documento es un JSON fijo listo para servir: plano, comprimido y con ETag.
-// Se arma una vez al arrancar; servirlo no asigna memoria.
+// documento es un JSON fijo listo para servir: plano, comprimido y con un ETag
+// por representación (RFC 9110 §8.8.3: la versión gzip no es byte a byte la
+// misma, así que no comparte ETag fuerte). Se arma una vez al arrancar.
 type documento struct {
-	plano, gz []byte
-	etag      string
+	plano, gz      []byte
+	etag, etagGzip string
 }
 
 func nuevoDocumento(b []byte) (*documento, error) {
+	b = slices.Clone(b) // no depende de que el llamador no modifique su slice
 	var buf bytes.Buffer
 	zw, err := gzip.NewWriterLevel(&buf, gzip.BestCompression)
 	if err != nil {
@@ -36,7 +40,8 @@ func nuevoDocumento(b []byte) (*documento, error) {
 		return nil, err
 	}
 	h := sha256.Sum256(b)
-	return &documento{plano: b, gz: buf.Bytes(), etag: `"` + hex.EncodeToString(h[:8]) + `"`}, nil
+	huella := hex.EncodeToString(h[:8])
+	return &documento{plano: b, gz: buf.Bytes(), etag: `"` + huella + `"`, etagGzip: `"` + huella + `-gzip"`}, nil
 }
 
 // cargarEvaluacion valida reports/evaluacion.json y arma los dos documentos:
@@ -52,10 +57,18 @@ func cargarEvaluacion(b []byte) (completo, riesgo *documento, err error) {
 	if err := json.Unmarshal(campos["version_esquema"], &version); err != nil || version != VersionEvaluacion {
 		return nil, nil, fmt.Errorf("evaluación: version_esquema %s, se esperaba %d", campos["version_esquema"], VersionEvaluacion)
 	}
-	for _, k := range []string{"version_modelo", "riesgo", "prioridades"} {
-		if len(campos[k]) == 0 {
-			return nil, nil, errors.New("evaluación: falta " + k)
-		}
+	var (
+		modelo      string
+		riesgo_     map[string]json.RawMessage
+		prioridades []json.RawMessage
+	)
+	switch {
+	case json.Unmarshal(campos["version_modelo"], &modelo) != nil || modelo == "":
+		return nil, nil, errors.New("evaluación: version_modelo debe ser un texto no vacío")
+	case json.Unmarshal(campos["riesgo"], &riesgo_) != nil || riesgo_ == nil:
+		return nil, nil, errors.New("evaluación: riesgo debe ser un objeto")
+	case json.Unmarshal(campos["prioridades"], &prioridades) != nil || prioridades == nil:
+		return nil, nil, errors.New("evaluación: prioridades debe ser un arreglo")
 	}
 	sub, err := json.Marshal(map[string]json.RawMessage{
 		"version_esquema": campos["version_esquema"], "version_modelo": campos["version_modelo"],
@@ -71,27 +84,34 @@ func cargarEvaluacion(b []byte) (completo, riesgo *documento, err error) {
 	return completo, riesgo, err
 }
 
-// servirDocumento responde con ETag (304 si no cambió) y gzip si el cliente lo acepta.
+// servirDocumento negocia gzip, responde con el ETag de esa representación
+// (304 si el cliente ya la tiene) y deja que el navegador revalide siempre.
 func servirDocumento(w http.ResponseWriter, r *http.Request, d *documento) {
 	if d == nil {
 		responderError(w, http.StatusServiceUnavailable, "evaluación no disponible: genere reports/evaluacion.json con go run ./cmd/evaluacion")
 		return
 	}
 	cab := w.Header()
-	cab.Set("ETag", d.etag)
-	cab.Set("Cache-Control", "no-cache") // revalida con If-None-Match en cada visita
-	cab.Set("Vary", "Accept-Encoding")
-	if coincideETag(r.Header.Get("If-None-Match"), d.etag) {
+	// Add, no Set: el middleware de CORS (ADR-0007) ya pudo poner Vary: Origin.
+	cab.Add("Vary", "Accept-Encoding")
+	// private: es una ruta autenticada, no la deben guardar cachés compartidas;
+	// no-cache: el navegador sí la guarda, pero revalida con If-None-Match.
+	cab.Set("Cache-Control", "private, no-cache")
+	cuerpo, etag := d.plano, d.etag
+	gz := aceptaGzip(strings.Join(r.Header.Values("Accept-Encoding"), ","))
+	if gz {
+		cuerpo, etag = d.gz, d.etagGzip
+	}
+	cab.Set("ETag", etag)
+	if coincideETag(strings.Join(r.Header.Values("If-None-Match"), ","), etag) {
 		w.WriteHeader(http.StatusNotModified)
 		return
 	}
 	cab.Set("Content-Type", "application/json; charset=utf-8")
-	cuerpo := d.plano
-	if aceptaGzip(r.Header.Get("Accept-Encoding")) {
+	if gz {
 		cab.Set("Content-Encoding", "gzip")
-		cuerpo = d.gz
 	}
-	cab.Set("Content-Length", fmt.Sprint(len(cuerpo)))
+	cab.Set("Content-Length", strconv.Itoa(len(cuerpo)))
 	w.WriteHeader(http.StatusOK)
 	if r.Method != http.MethodHead {
 		_, _ = w.Write(cuerpo)
@@ -107,14 +127,30 @@ func coincideETag(cabecera, etag string) bool {
 	return false
 }
 
+// aceptaGzip lee Accept-Encoding (RFC 9110 §12.5.3): gzip con q > 0, o * con
+// q > 0 si gzip no aparece explícito.
 func aceptaGzip(cabecera string) bool {
+	comodin := false
 	for _, c := range strings.Split(cabecera, ",") {
-		nombre, q, _ := strings.Cut(strings.TrimSpace(c), ";")
-		if strings.EqualFold(strings.TrimSpace(nombre), "gzip") && strings.ReplaceAll(strings.TrimSpace(q), " ", "") != "q=0" {
-			return true
+		partes := strings.Split(c, ";")
+		nombre := strings.ToLower(strings.TrimSpace(partes[0]))
+		q := 1.0
+		for _, p := range partes[1:] {
+			k, v, _ := strings.Cut(strings.TrimSpace(p), "=")
+			if strings.EqualFold(strings.TrimSpace(k), "q") {
+				if f, err := strconv.ParseFloat(strings.TrimSpace(v), 64); err == nil {
+					q = f
+				}
+			}
+		}
+		switch nombre {
+		case "gzip", "x-gzip":
+			return q > 0
+		case "*":
+			comodin = q > 0
 		}
 	}
-	return false
+	return comodin
 }
 
 func (s *Servidor) verEvaluacion(w http.ResponseWriter, r *http.Request) {

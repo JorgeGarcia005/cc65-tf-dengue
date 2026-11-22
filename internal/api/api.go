@@ -7,6 +7,8 @@
 //	GET  /healthz
 //	GET  /api/v1/modelo
 //	POST /api/v1/predicciones
+//	GET  /api/v1/riesgo       (cubo de riesgo para el mapa, de reports/evaluacion.json)
+//	GET  /api/v1/evaluacion   (reports/evaluacion.json completo)
 //	GET  /api/v1/cluster
 //	POST /api/v1/entrenamientos
 //	GET  /api/v1/entrenamientos/{id}

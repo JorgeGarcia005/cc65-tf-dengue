@@ -17,6 +17,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"io/fs"
 	"log"
 	"math"
 	"net"
@@ -100,7 +101,9 @@ func main() {
 	}
 	log.Printf("coordinador escuchando en %s; espera %d nodos", ln.Addr(), op.nodos)
 	if *dirAPI != "" {
-		op.evaluacion = leerEvaluacion(*rutaEval, log.Printf)
+		if op.evaluacion, err = leerEvaluacion(*rutaEval, log.Printf); err != nil {
+			log.Fatal(err)
+		}
 		if err := servicio(ln, *dirAPI, *rutaModelo, *uriMongo, *baseMongo, *dirRedis, op); err != nil {
 			log.Fatal(err)
 		}
@@ -305,19 +308,26 @@ func escribirJSON(ruta string, v any) error {
 	return os.WriteFile(ruta, append(b, '\n'), 0o644)
 }
 
-// leerEvaluacion carga reports/evaluacion.json si existe. Sin él la API arranca
-// igual y sus dos rutas responden 503: la evaluación se genera aparte con
-// go run ./cmd/evaluacion, y no debe impedir predecir ni entrenar.
-func leerEvaluacion(ruta string, logf func(string, ...any)) []byte {
+// leerEvaluacion carga reports/evaluacion.json si existe. Si no existe, la API
+// arranca igual y sus dos rutas responden 503 (la evaluación se genera aparte
+// con go run ./cmd/evaluacion y no debe impedir predecir ni entrenar). Un
+// archivo que existe pero está vacío es un error: es un reporte roto.
+func leerEvaluacion(ruta string, logf func(string, ...any)) ([]byte, error) {
 	if ruta == "" {
 		logf("sin -evaluacion: /api/v1/riesgo y /api/v1/evaluacion responden 503")
-		return nil
+		return nil, nil
 	}
 	b, err := os.ReadFile(ruta)
+	if errors.Is(err, fs.ErrNotExist) {
+		logf("evaluación no disponible (%s no existe): /api/v1/riesgo y /api/v1/evaluacion responden 503", ruta)
+		return nil, nil
+	}
 	if err != nil {
-		logf("evaluación no disponible (%v): /api/v1/riesgo y /api/v1/evaluacion responden 503", err)
-		return nil
+		return nil, fmt.Errorf("evaluación: %w", err)
+	}
+	if len(b) == 0 {
+		return nil, fmt.Errorf("evaluación: %s está vacío; vuelva a generarlo con go run ./cmd/evaluacion", ruta)
 	}
 	logf("evaluación cargada de %s (%d bytes)", ruta, len(b))
-	return b
+	return b, nil
 }

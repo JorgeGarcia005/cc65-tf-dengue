@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"strings"
 	"testing"
 )
 
@@ -59,9 +60,35 @@ func TestEvaluacionYRiesgoConElReporteReal(t *testing.T) {
 		t.Errorf("gzip no comprime: %d → %d bytes", len(plano), len(b))
 	}
 
-	res, _ = pedirDoc(t, ts.URL+"/api/v1/riesgo", map[string]string{"If-None-Match": res.Header.Get("ETag")})
+	etagGz := res.Header.Get("ETag")
+	if cc := res.Header.Get("Cache-Control"); cc != "private, no-cache" {
+		t.Fatalf("Cache-Control %q", cc)
+	}
+	res, _ = pedirDoc(t, ts.URL+"/api/v1/riesgo", map[string]string{"Accept-Encoding": "gzip", "If-None-Match": etagGz})
 	if res.StatusCode != http.StatusNotModified {
 		t.Fatalf("con el mismo ETag se esperaba 304, llegó %d", res.StatusCode)
+	}
+	// La representación sin gzip tiene otro ETag (RFC 9110 §8.8.3): el de gzip no la valida.
+	res, _ = pedirDoc(t, ts.URL+"/api/v1/riesgo", map[string]string{"If-None-Match": etagGz})
+	if res.StatusCode != 200 || res.Header.Get("ETag") == etagGz {
+		t.Fatalf("sin gzip: %d con ETag %q (el de gzip es %q)", res.StatusCode, res.Header.Get("ETag"), etagGz)
+	}
+}
+
+// PR-82 H3: el handler no borra el Vary: Origin que pone el middleware de CORS.
+func TestEvaluacionConservaVaryDeCORS(t *testing.T) {
+	real, _ := os.ReadFile("../../reports/evaluacion.json")
+	cors := func(h http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Add("Vary", "Origin")
+			h.ServeHTTP(w, r)
+		})
+	}
+	_, ts := servidorDePrueba(t, Opciones{Evaluacion: real, Middleware: []Middleware{cors}})
+	res, _ := pedirDoc(t, ts.URL+"/api/v1/riesgo", nil)
+	vary := strings.Join(res.Header.Values("Vary"), ",")
+	if !strings.Contains(vary, "Origin") || !strings.Contains(vary, "Accept-Encoding") {
+		t.Fatalf("Vary = %q, quería Origin y Accept-Encoding", vary)
 	}
 }
 
@@ -76,7 +103,11 @@ func TestEvaluacionSinReporteDa503(t *testing.T) {
 
 func TestEvaluacionInvalidaNoArranca(t *testing.T) {
 	for _, b := range []string{`{`, `{"version_esquema":2,"version_modelo":"x","riesgo":{},"prioridades":[]}`,
-		`{"version_esquema":1,"version_modelo":"x","riesgo":{}}`} {
+		`{"version_esquema":1,"version_modelo":"x","riesgo":{}}`,
+		`{"version_esquema":1,"version_modelo":null,"riesgo":null,"prioridades":null}`,
+		`{"version_esquema":1,"version_modelo":"","riesgo":{},"prioridades":[]}`,
+		`{"version_esquema":1,"version_modelo":"x","riesgo":[],"prioridades":[]}`,
+		`{"version_esquema":1,"version_modelo":"x","riesgo":{},"prioridades":{}}`} {
 		if _, _, err := cargarEvaluacion([]byte(b)); err == nil {
 			t.Errorf("%s: debía fallar", b)
 		}
@@ -84,12 +115,26 @@ func TestEvaluacionInvalidaNoArranca(t *testing.T) {
 }
 
 func TestAceptaGzipYETag(t *testing.T) {
-	for cab, quiere := range map[string]bool{"gzip": true, "br, gzip;q=0.8": true, "GZIP": true, "gzip;q=0": false, "br": false, "": false} {
+	for cab, quiere := range map[string]bool{"gzip": true, "br, gzip;q=0.8": true, "GZIP": true, "gzip;q=0": false,
+		"gzip;q=0.0": false, "gzip;q=0.000": false, "gzip; Q=0": false, "br": false, "": false, "*": true,
+		"*;q=0": false, "gzip;q=0, *": false, "deflate, x-gzip": true} {
 		if aceptaGzip(cab) != quiere {
 			t.Errorf("aceptaGzip(%q) != %v", cab, quiere)
 		}
 	}
 	if !coincideETag(`"a", W/"b"`, `"b"`) || coincideETag(`"a"`, `"b"`) || !coincideETag("*", `"x"`) {
 		t.Error("coincideETag")
+	}
+}
+
+func TestDocumentoNoCompartePlano(t *testing.T) {
+	b := []byte(`{"a":1}`)
+	d, err := nuevoDocumento(b)
+	if err != nil {
+		t.Fatal(err)
+	}
+	b[2] = 'X'
+	if string(d.plano) != `{"a":1}` {
+		t.Fatalf("el documento cambió con el slice del llamador: %s", d.plano)
 	}
 }
