@@ -9,6 +9,7 @@ Las reglas generales están en `AGENTS.md` (importado arriba). Aquí va solo lo 
 1. Lee el issue completo y sus criterios de aceptación. Si alguno no es verificable, pídele
    al orquestador que lo reescriba antes de empezar.
 2. Crea la rama desde `develop` actualizado: `git switch -c feature/<n>-<slug> origin/develop`.
+   En la TB2, desde `integracion/tb2` (AGENTS §4): `git switch -c feature/<n>-<slug> origin/integracion/tb2`.
 3. Escribe primero los tests (TDD). Para código concurrente, el test corre con `-race`.
 
 ## Antes de abrir el PR

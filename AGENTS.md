@@ -70,6 +70,9 @@ SPA (D) ◄─ WebSocket/REST ─► C. coordinator (API HTTP + parameter server
 - Un PR = un issue = una unidad revisable (idealmente < 400 líneas de código).
 - Commits en español, imperativo, convencionales: `feat(ml): agrega reducción ordenada`.
 - Release por entregable con tag: `pc3`, `pc4`, `tb2`.
+- **TB2 (temporal):** mientras la PC4 (tag `pc4`) está en revisión, `develop` y `main` quedan
+  congelados. Las ramas de la TB2 salen de `integracion/tb2` y sus PR apuntan ahí; pasa a
+  `develop` y `main` recién en el release `tb2` (#73).
 - Cada issue vive en el tablero Kanban del repo (Backlog → En curso → En revisión → Hecho).
 - Los tres integrantes deben tener commits propios en cada entregable.
 
