@@ -326,6 +326,8 @@ func TestCabecerasLimiteDeCuerpo413(t *testing.T) {
 		{"/api/v1/predicciones", a.analista},
 		{"/api/v1/entrenamientos", a.admin},
 		{"/api/v1/auth/login", ""},
+		{"/api/v1/ws/ticket", a.admin},                // PR-84 H3: no leen el cuerpo,
+		{"/api/v1/demo/nodos/nodo-1/cortar", a.admin}, // pero el límite también vale
 	} {
 		if res, b := a.pedir(t, "POST", c.ruta, c.token, grande, nil); res.StatusCode != http.StatusRequestEntityTooLarge {
 			t.Errorf("POST %s con %d bytes: %d %s, quería 413", c.ruta, len(grande), res.StatusCode, b)

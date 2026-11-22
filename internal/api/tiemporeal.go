@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"slices"
 	"sync"
@@ -108,6 +109,9 @@ func (s *Servidor) origenPermitido(origen string) bool {
 // (3) rol sin acceso → 403 (defensa en profundidad: la emisión ya lo filtra).
 func (s *Servidor) conTicket(h http.Handler, roles []auth.Rol) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Respuestas de error del handshake (401/403/400/426): como toda respuesta
+		// autenticada, sin copia en cachés (PR-84 H3). No afecta al 101.
+		w.Header().Set("Cache-Control", "no-store")
 		if !s.origenPermitido(r.Header.Get("Origin")) {
 			responderError(w, http.StatusForbidden, "origen no permitido para el WebSocket")
 			return
@@ -132,6 +136,9 @@ type RespuestaTicket struct {
 }
 
 func (s *Servidor) emitirTicket(w http.ResponseWriter, r *http.Request) {
+	if !descartarCuerpo(w, r) {
+		return
+	}
 	rec, _ := auth.ReclamosDe(r.Context()) // proteger ya exigió el token
 	id, vence, err := s.tickets.Emitir(rec)
 	switch {
@@ -149,15 +156,22 @@ func (s *Servidor) emitirTicket(w http.ResponseWriter, r *http.Request) {
 // servirWS hace el handshake y conecta al cliente con el hub: recibe los
 // eventos del clúster (cluster.Evento en JSON) hasta que se cierre.
 func (s *Servidor) servirWS(w http.ResponseWriter, r *http.Request) {
+	// Suscribir antes del 101: cuando el navegador recibe el handshake ya está
+	// en el hub y no pierde los eventos siguientes (PR-84 H2).
+	cliente := s.op.Hub.Suscribir()
 	conn, err := ws.Aceptar(w, r, nil) // el Origin ya lo validó conTicket
 	if err != nil {
+		s.op.Hub.Desuscribir(cliente)
 		return // Aceptar ya respondió con el código adecuado
 	}
-	s.op.Hub.Servir(conn, s.op.Hub.Suscribir(), IntervaloPingWS)
+	s.op.Hub.Servir(conn, cliente, IntervaloPingWS)
 }
 
 // cortarNodo es POST /api/v1/demo/nodos/{nombre}/cortar (solo con -demo).
 func (s *Servidor) cortarNodo(w http.ResponseWriter, r *http.Request) {
+	if !descartarCuerpo(w, r) {
+		return
+	}
 	nombre := r.PathValue("nombre")
 	err := s.op.Demo.CortarNodo(nombre)
 	switch {
@@ -171,4 +185,21 @@ func (s *Servidor) cortarNodo(w http.ResponseWriter, r *http.Request) {
 	rec, _ := auth.ReclamosDe(r.Context())
 	s.op.Log("api: demo: %s cortó el nodo %s", rec.Sub, nombre)
 	responder(w, http.StatusAccepted, map[string]string{"nodo": nombre, "estado": "cortado"})
+}
+
+// descartarCuerpo lee y descarta el cuerpo de un POST que no lo usa, para que
+// el límite de MaxCuerpo también valga ahí (413, como declara el OpenAPI;
+// PR-84 H3). Va después de la autenticación: 401/403 antes que 413.
+func descartarCuerpo(w http.ResponseWriter, r *http.Request) bool {
+	_, err := io.Copy(io.Discard, http.MaxBytesReader(w, r.Body, MaxCuerpo))
+	var grande *http.MaxBytesError
+	switch {
+	case errors.As(err, &grande):
+		responderError(w, http.StatusRequestEntityTooLarge, fmt.Sprintf("el cuerpo supera %d bytes", MaxCuerpo))
+		return false
+	case err != nil:
+		responderError(w, http.StatusBadRequest, "no se pudo leer el cuerpo")
+		return false
+	}
+	return true
 }

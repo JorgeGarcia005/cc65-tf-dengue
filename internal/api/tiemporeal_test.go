@@ -159,6 +159,16 @@ func TestTicketSoloAdminUnUsoYVence(t *testing.T) {
 	if cod, _ := a.handshake(t, rt.Ticket, origenSPA); cod != 101 {
 		t.Fatalf("primer uso: %d", cod)
 	}
+	// PR-84 H3: los rechazos del handshake no se guardan en cachés.
+	for _, c := range []struct {
+		origen string
+		quiere int
+	}{{origenSPA, 401}, {origenAjeno, 403}} {
+		res, _ := a.pedir(t, "GET", "/api/v1/ws?ticket="+rt.Ticket, "", "", map[string]string{"Origin": c.origen})
+		if res.StatusCode != c.quiere || res.Header.Get("Cache-Control") != "no-store" {
+			t.Errorf("WS %d desde %s: %d Cache-Control %q", c.quiere, c.origen, res.StatusCode, res.Header.Get("Cache-Control"))
+		}
+	}
 	if cod, _ := a.handshake(t, rt.Ticket, origenSPA); cod != 401 {
 		t.Fatalf("reuso: %d, quería 401", cod)
 	}
@@ -336,4 +346,24 @@ func httptestServer(t *testing.T, h http.Handler) *httptest.Server {
 	ts := httptest.NewServer(h)
 	t.Cleanup(ts.Close)
 	return ts
+}
+
+// PR-84 H2: el cliente queda suscrito antes del 101: lo que se publica justo
+// después de recibir el handshake le llega, sin esperar nada más.
+func TestWSSuscritoAntesDelHandshake(t *testing.T) {
+	a := nuevaApiSegura(t, Opciones{})
+	for i := range 20 {
+		_, rt := a.pedirTicket(t, a.admin)
+		cod, c := a.handshake(t, rt.Ticket, origenSPA)
+		if cod != 101 {
+			t.Fatalf("handshake %d: %d", i, cod)
+		}
+		msg := fmt.Sprintf(`{"n":%d}`, i)
+		a.s.op.Hub.Publicar([]byte(msg))
+		if _, p := c.frame(t); string(p) != msg {
+			t.Fatalf("intento %d: llegó %q, quería %q", i, p, msg)
+		}
+		c.conn.Close()
+		esperarClientes(t, a, 0)
+	}
 }

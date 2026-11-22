@@ -102,11 +102,15 @@ func TestServicioDemoCortarNodoPorLaAPI(t *testing.T) {
 	})
 	evs := eventosWS(t, base, origen)
 	lanzarNodos(t, dirCluster, 3)
-	for i := range 3 {
-		esperarEvento(t, evs, "el registro de los nodos", func(e cluster.Evento) bool {
-			return e.Tipo == cluster.EvRegistro && e.Nodo == fmt.Sprintf("nodo-%d", i)
-		})
-	}
+	// Los nodos se conectan en paralelo: sus registros llegan en cualquier
+	// orden (PR-84 H2).
+	registrados := map[string]bool{}
+	esperarEvento(t, evs, "el registro de los 3 nodos", func(e cluster.Evento) bool {
+		if e.Tipo == cluster.EvRegistro {
+			registrados[e.Nodo] = true
+		}
+		return registrados["nodo-0"] && registrados["nodo-1"] && registrados["nodo-2"]
+	})
 
 	var ubicacion string
 	esperar(t, "el clúster acepta un entrenamiento", func() bool {
