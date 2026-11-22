@@ -4,7 +4,7 @@ import { MemoryRouter } from 'react-router-dom'
 import { describe, expect, it, vi } from 'vitest'
 import App from '../App'
 import { TODAS, TODOS, type DocumentoEvaluacion } from '../api/tipos'
-import { enlaceMapa, gruposDeEdad, semanasPico, topPrioridades } from '../inicio/datos'
+import { enlaceMapa, esEvaluacion, gruposDeEdad, proporcion, semanasPico, topPrioridades } from '../inicio/datos'
 import { etiquetaDepto, etiquetaEtapa, formato } from '../mapa/datos'
 import { ProveedorSesion } from '../sesion/Sesion'
 
@@ -92,6 +92,24 @@ describe('inicio: respuesta a la pregunta de impacto', () => {
   it('topPrioridades no reordena', () => {
     const al = [...REAL.prioridades].reverse()
     expect(topPrioridades(al, 3)).toEqual(al.slice(0, 3))
+  })
+
+  // PR-85 H1: un 200 con otra forma no llega a la vista.
+  it.each([
+    ['HTML de un proxy', '<html>proxy</html>'],
+    ['sin métricas', JSON.stringify({ ...REAL, metricas_test: undefined })],
+    ['sin prioridades', JSON.stringify({ ...REAL, prioridades: null })],
+    ['otra versión de esquema', JSON.stringify({ ...REAL, version_esquema: 2 })],
+  ])('%s → aviso de formato, sin pantalla en blanco', async (_, cuerpo) => {
+    montar({ evaluacion: new Response(cuerpo) })
+    expect(await screen.findByRole('alert')).toHaveTextContent('formato esperado')
+    expect(screen.getByRole('heading', { name: 'Dónde y cuándo reforzar' })).toBeInTheDocument()
+  })
+
+  it('denominadores en cero no pintan NaN', () => {
+    expect(proporcion(5, 0)).toBe(0)
+    expect(proporcion(1, 4)).toBe(0.25)
+    expect(esEvaluacion(REAL, 1)).toBe(true)
   })
 
   it('si la API falla, lo dice', async () => {

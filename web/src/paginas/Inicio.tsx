@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { ErrorApi } from '../api/cliente'
 import type { DocumentoEvaluacion, ModeloPublicado } from '../api/tipos'
-import { enlaceMapa, gruposDeEdad, semanasPico, topPrioridades } from '../inicio/datos'
+import { enlaceMapa, esEvaluacion, gruposDeEdad, proporcion, semanasPico, topPrioridades } from '../inicio/datos'
 import { etiquetaDepto, etiquetaEtapa, formato } from '../mapa/datos'
 import { useSesion } from '../sesion/Sesion'
 
@@ -21,10 +21,10 @@ export default function Inicio() {
     let vivo = true
     const fallar = (e: unknown) => vivo && setError(e instanceof ErrorApi ? e.message : String(e))
     api
-      .get<DocumentoEvaluacion>('/api/v1/evaluacion')
+      .get<unknown>('/api/v1/evaluacion')
       .then((d) => {
         if (!vivo) return
-        if (d?.version_esquema !== VERSION_ESPERADA) throw new Error('versión de datos no soportada')
+        if (!esEvaluacion(d, VERSION_ESPERADA)) throw new Error('la evaluación no tiene el formato esperado (versión o campos)')
         setDoc(d)
       })
       .catch(fallar)
@@ -32,7 +32,7 @@ export default function Inicio() {
     // falla, el inicio sigue.
     api
       .get<ModeloPublicado>('/api/v1/modelo')
-      .then((m) => vivo && setModelo(m))
+      .then((m) => vivo && typeof m?.version === 'string' && setModelo(m))
       .catch(() => undefined)
     return () => {
       vivo = false
@@ -88,40 +88,42 @@ export default function Inicio() {
         <h2 id="titulo-prioridades" className="titulo-panel">
           Las {top.length} prioridades
         </h2>
-        <table className="tabla" aria-describedby="titulo-prioridades">
-          <thead>
-            <tr>
-              <th scope="col">#</th>
-              <th scope="col">Departamento</th>
-              <th scope="col">Semana</th>
-              <th scope="col">Grupo de edad</th>
-              <th scope="col">Casos</th>
-              <th scope="col">Tasa observada</th>
-              <th scope="col">Riesgo calibrado</th>
-              <th scope="col">Casos esperados</th>
-            </tr>
-          </thead>
-          <tbody>
-            {top.map((c, i) => (
-              <tr key={`${c.departamento}-${c.semana}-${c.etapa}`} data-prioridad={i + 1}>
-                <td>{i + 1}</td>
-                <td>
-                  <Link to={enlaceMapa(c)} aria-label={`Ver ${etiquetaDepto(c.departamento)}, semana ${c.semana}, ${etiquetaEtapa(c.etapa)} en el mapa`}>
-                    {etiquetaDepto(c.departamento)}
-                  </Link>
-                </td>
-                <td>{c.semana}</td>
-                <td>{etiquetaEtapa(c.etapa)}</td>
-                <td>{formato.entero(c.casos)}</td>
-                <td>{formato.porcentaje(c.tasa_observada)}</td>
-                <td>{formato.porcentaje(c.riesgo_calibrado_medio)}</td>
-                <td>
-                  <strong>{formato.uno(c.casos_esperados)}</strong>
-                </td>
+        <div className="tabla-envoltura">
+          <table className="tabla" aria-describedby="titulo-prioridades">
+            <thead>
+              <tr>
+                <th scope="col">#</th>
+                <th scope="col">Departamento</th>
+                <th scope="col">Semana</th>
+                <th scope="col">Grupo de edad</th>
+                <th scope="col">Casos</th>
+                <th scope="col">Tasa observada</th>
+                <th scope="col">Riesgo calibrado</th>
+                <th scope="col">Casos esperados</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {top.map((c, i) => (
+                <tr key={`${c.departamento}-${c.semana}-${c.etapa}`} data-prioridad={i + 1}>
+                  <td>{i + 1}</td>
+                  <td>
+                    <Link to={enlaceMapa(c)} aria-label={`Ver ${etiquetaDepto(c.departamento)}, semana ${c.semana}, ${etiquetaEtapa(c.etapa)} en el mapa`}>
+                      {etiquetaDepto(c.departamento)}
+                    </Link>
+                  </td>
+                  <td>{c.semana}</td>
+                  <td>{etiquetaEtapa(c.etapa)}</td>
+                  <td>{formato.entero(c.casos)}</td>
+                  <td>{formato.porcentaje(c.tasa_observada)}</td>
+                  <td>{formato.porcentaje(c.riesgo_calibrado_medio)}</td>
+                  <td>
+                    <strong>{formato.uno(c.casos_esperados)}</strong>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
         <p className="nota">Orden de reports/evaluacion.json · mínimo {doc.riesgo.min_casos} casos por combinación</p>
       </section>
 
@@ -135,7 +137,7 @@ export default function Inicio() {
             {picos.map((c) => (
               <li key={c.semana} data-semana={c.semana}>
                 <span className="barras-etiqueta">Semana {c.semana}</span>
-                <span className="barras-barra" style={{ width: `${(100 * c.casos_esperados) / picos[0]!.casos_esperados}%` }} aria-hidden="true" />
+                <span className="barras-barra" style={{ width: `${100 * proporcion(c.casos_esperados, picos[0]!.casos_esperados)}%` }} aria-hidden="true" />
                 <span className="barras-valor">{formato.uno(c.casos_esperados)}</span>
               </li>
             ))}
@@ -147,26 +149,28 @@ export default function Inicio() {
             Grupos de edad
           </h2>
           <p className="bajada">Riesgo calibrado nacional, de mayor a menor, frente a la tasa observada.</p>
-          <table className="tabla">
-            <thead>
-              <tr>
-                <th scope="col">Grupo</th>
-                <th scope="col">Riesgo calibrado</th>
-                <th scope="col">Tasa observada</th>
-                <th scope="col">Casos</th>
-              </tr>
-            </thead>
-            <tbody>
-              {edades.map((c) => (
-                <tr key={c.etapa} data-etapa={c.etapa}>
-                  <td>{etiquetaEtapa(c.etapa)}</td>
-                  <td>{formato.porcentaje(c.riesgo_calibrado_medio)}</td>
-                  <td>{formato.porcentaje(c.tasa_observada)}</td>
-                  <td>{formato.entero(c.casos)}</td>
+          <div className="tabla-envoltura">
+            <table className="tabla">
+              <thead>
+                <tr>
+                  <th scope="col">Grupo</th>
+                  <th scope="col">Riesgo calibrado</th>
+                  <th scope="col">Tasa observada</th>
+                  <th scope="col">Casos</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {edades.map((c) => (
+                  <tr key={c.etapa} data-etapa={c.etapa}>
+                    <td>{etiquetaEtapa(c.etapa)}</td>
+                    <td>{formato.porcentaje(c.riesgo_calibrado_medio)}</td>
+                    <td>{formato.porcentaje(c.tasa_observada)}</td>
+                    <td>{formato.entero(c.casos)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </section>
       </div>
 
@@ -197,7 +201,7 @@ export default function Inicio() {
           </div>
           <div>
             <dt>Prevalencia en test</dt>
-            <dd data-kpi="prevalencia">{formato.porcentaje(doc.positivos_test / doc.filas_test)}</dd>
+            <dd data-kpi="prevalencia">{formato.porcentaje(proporcion(doc.positivos_test, doc.filas_test))}</dd>
           </div>
         </dl>
         <p className="bajada" data-kpi="lectura">

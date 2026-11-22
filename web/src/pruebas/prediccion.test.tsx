@@ -5,7 +5,7 @@ import { describe, expect, it, vi } from 'vitest'
 import App from '../App'
 import type { Contribucion, Prediccion } from '../api/tipos'
 import { formato } from '../mapa/datos'
-import { contribucionesActivas, edadEnAnios, etiquetaVariable, sumaLogit, validar, type Formulario } from '../prediccion/datos'
+import { contribucionesActivas, edadEnAnios, esPrediccion, etiquetaVariable, sumaLogit, validar, type Formulario } from '../prediccion/datos'
 import { ProveedorSesion } from '../sesion/Sesion'
 
 const AHORA = 1_800_000_000
@@ -31,10 +31,10 @@ function prediccion(departamento_modelo = 'PIURA'): Prediccion {
   }
 }
 
-function montar(respuesta: () => Response) {
+function montar(respuesta: () => Response, modelo: () => Response = () => new Response(JSON.stringify(MODELO))) {
   sessionStorage.setItem('vigia.sesion', JSON.stringify({ token: 't', correo: 'a@b.pe', rol: 'analista', expira: AHORA + 3600 }))
   const f = vi.fn((url: string, _init?: RequestInit) => {
-    if (url.endsWith('/api/v1/modelo')) return Promise.resolve(new Response(JSON.stringify(MODELO)))
+    if (url.endsWith('/api/v1/modelo')) return Promise.resolve(modelo())
     if (url.endsWith('/api/v1/predicciones')) return Promise.resolve(respuesta())
     return Promise.resolve(new Response('{}', { status: 404 }))
   })
@@ -102,6 +102,9 @@ describe('predicción: validación del formulario', () => {
     expect(screen.getByLabelText('Departamento')).toHaveAttribute('aria-invalid', 'true')
     expect(screen.getByText('Elige un departamento.')).toBeInTheDocument()
     expect(screen.getByText('La semana epidemiológica va de 1 a 53.')).toBeInTheDocument()
+    // El grupo de radios también queda marcado (PR-85 H3).
+    expect(screen.getByRole('radiogroup', { name: 'Sexo' })).toHaveAttribute('aria-invalid', 'true')
+    expect(screen.getByText('Elige el sexo.')).toBeInTheDocument()
   })
 })
 
@@ -166,7 +169,38 @@ describe('predicción: resultado', () => {
   it('nombres legibles de las variables del modelo', () => {
     expect(etiquetaVariable('edad_z')).toBe('Edad')
     expect(etiquetaVariable('etapa_adulto_mayor_60_mas')).toBe('Grupo: Adultos mayores 60+')
-    expect(etiquetaVariable('depto_madre_de_dios', ['MADRE DE DIOS'])).toBe('Departamento: Madre de Dios')
+    expect(etiquetaVariable('depto_madre_de_dios')).toBe('Departamento: Madre de Dios')
     expect(etiquetaVariable('semana_cos')).toBe('Semana del año (coseno)')
+  })
+})
+
+// PR-85 H1: un 200 que no es una predicción no rompe la vista: avisa.
+describe('predicción: respuestas inesperadas', () => {
+  it.each([
+    ['HTML de un proxy', () => new Response('<html>proxy</html>', { status: 200 })],
+    ['JSON sin contribuciones', () => new Response(JSON.stringify({ ...prediccion(), contribuciones: undefined }))],
+    ['logit no numérico', () => new Response(JSON.stringify({ ...prediccion(), logit: 'x' }))],
+  ])('%s → mensaje de error, sin pantalla en blanco', async (_, respuesta) => {
+    const u = userEvent.setup()
+    montar(respuesta)
+    await screen.findByText(/versión abc123def456/)
+    await llenar(u)
+    await u.click(screen.getByRole('button', { name: 'Calcular riesgo' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent('formato inesperado')
+    expect(screen.getByRole('button', { name: 'Calcular riesgo' })).toBeInTheDocument()
+    expect(document.querySelector('[data-resultado]')).toBeNull()
+  })
+
+  it('un modelo 200 sin versión se avisa en vez de mostrar «undefined»', async () => {
+    montar(() => new Response('{}'), () => new Response('{}'))
+    expect(await screen.findByRole('alert')).toHaveTextContent('modelo con un formato inesperado')
+    expect(screen.queryByText(/undefined/)).toBeNull()
+  })
+
+  it('esPrediccion exige la forma completa', () => {
+    expect(esPrediccion(prediccion())).toBe(true)
+    expect(esPrediccion(undefined)).toBe(false)
+    expect(esPrediccion({ ...prediccion(), contribuciones: [{ variable: 'x', valor: 1, peso: 1 }] })).toBe(false)
+    expect(esPrediccion({ ...prediccion(), clase: 2 })).toBe(false)
   })
 })

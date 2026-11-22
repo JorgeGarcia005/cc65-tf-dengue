@@ -1,4 +1,4 @@
-import { TODAS, TODOS, type Celda, type Cubo } from '../api/tipos'
+import { TODAS, TODOS, type Celda, type Cubo, type DocumentoEvaluacion } from '../api/tipos'
 
 /** Cuántas combinaciones muestra el inicio (criterio de #67). */
 export const TOP = 10
@@ -26,6 +26,27 @@ export function gruposDeEdad(cubo: Cubo): Celda[] {
     .filter((c) => c.departamento === TODOS && c.semana === 0 && c.etapa !== TODAS)
     .sort((a, b) => b.riesgo_calibrado_medio - a.riesgo_calibrado_medio)
 }
+
+const finito = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v)
+
+/**
+ * Forma mínima de GET /api/v1/evaluacion que usa el inicio; la API valida
+ * riesgo y prioridades, pero no las métricas (PR-85 H1).
+ */
+export function esEvaluacion(v: unknown, version: number): v is DocumentoEvaluacion {
+  const d = v as Record<string, unknown> | null
+  if (!d || typeof d !== 'object' || d.version_esquema !== version || typeof d.version_modelo !== 'string') return false
+  const r = d.riesgo as Record<string, unknown> | null
+  const m = d.metricas_test as Record<string, unknown> | null
+  return (
+    !!r && Array.isArray(r.celdas) && Array.isArray(r.etapas) && finito(r.min_casos) && Array.isArray(d.prioridades) &&
+    Number.isInteger(d.filas_test) && Number.isInteger(d.positivos_test) && finito(d.auc_trapecio) && finito(d.brier_calibrado) &&
+    !!m && finito(m.Recall) && finito(m.Precision) && finito(m.Umbral)
+  )
+}
+
+/** a/b, o 0 si b no es positivo: un reporte vacío no pinta NaN. */
+export const proporcion = (a: number, b: number) => (b > 0 ? a / b : 0)
 
 /** Enlace al mapa con la combinación ya filtrada (los filtros del mapa viven en la URL). */
 export function enlaceMapa(c: Celda): string {

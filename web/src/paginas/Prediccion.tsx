@@ -3,7 +3,7 @@ import { ErrorApi } from '../api/cliente'
 import { OTROS, type ModeloPublicado, type Prediccion as Resultado } from '../api/tipos'
 import { etiquetaDepto, formato } from '../mapa/datos'
 import { DEPARTAMENTOS } from '../mapa/geo'
-import { contribucionesActivas, etiquetaVariable, sumaLogit, validar, type Errores, type Formulario } from '../prediccion/datos'
+import { contribucionesActivas, esModelo, esPrediccion, etiquetaVariable, sumaLogit, validar, type Errores, type Formulario } from '../prediccion/datos'
 import { useSesion } from '../sesion/Sesion'
 
 const NOMBRES = DEPARTAMENTOS.features.map((f) => f.properties.NOMBDEP).sort((a, b) => a.localeCompare(b, 'es'))
@@ -31,8 +31,12 @@ export default function Prediccion() {
   useEffect(() => {
     let vivo = true
     api
-      .get<ModeloPublicado>('/api/v1/modelo')
-      .then((m) => vivo && setModelo(m))
+      .get<unknown>('/api/v1/modelo')
+      .then((m) => {
+        if (!vivo) return
+        if (!esModelo(m)) throw new Error('La API devolvió un modelo con un formato inesperado.')
+        setModelo(m)
+      })
       .catch((e: unknown) => vivo && setErrorApi(e instanceof ErrorApi ? e.message : String(e)))
     return () => {
       vivo = false
@@ -50,7 +54,8 @@ export default function Prediccion() {
     if (!consulta) return
     setEnviando(true)
     try {
-      const r = await api.postMedido<Resultado>('/api/v1/predicciones', consulta)
+      const r = await api.postMedido<unknown>('/api/v1/predicciones', consulta)
+      if (!esPrediccion(r.datos)) throw new Error('La API devolvió una predicción con un formato inesperado.')
       setResp({ pred: r.datos, ms: r.ms, cache: r.cabeceras.get('X-Cache'), pedido: consulta.departamento })
     } catch (err) {
       setResp(null)
@@ -123,8 +128,13 @@ export default function Prediccion() {
           {mensaje('edad')}
           {mensaje('tipo_edad')}
 
-          <fieldset aria-invalid={errores.sexo ? true : undefined} aria-describedby={errores.sexo ? `${id}-sexo-error` : undefined}>
-            <legend>Sexo</legend>
+          <fieldset
+            role="radiogroup"
+            aria-labelledby={`${id}-sexo-leyenda`}
+            aria-invalid={errores.sexo ? true : undefined}
+            aria-describedby={errores.sexo ? `${id}-sexo-error` : undefined}
+          >
+            <legend id={`${id}-sexo-leyenda`}>Sexo</legend>
             {(['F', 'M'] as const).map((s) => (
               <label key={s} className="opcion">
                 <input type="radio" name={`${id}-sexo`} value={s} checked={form.sexo === s} onChange={cambiar('sexo')} />
@@ -144,13 +154,13 @@ export default function Prediccion() {
           )}
         </form>
 
-        {resp && <ResultadoCaso resp={resp} departamentos={modelo?.departamentos ?? []} />}
+        {resp && <ResultadoCaso resp={resp} />}
       </div>
     </div>
   )
 }
 
-function ResultadoCaso({ resp, departamentos }: { resp: Respuesta; departamentos: string[] }) {
+function ResultadoCaso({ resp }: { resp: Respuesta }) {
   const { pred, ms, cache, pedido } = resp
   const activas = useMemo(() => contribucionesActivas(pred.contribuciones), [pred])
   const mayor = Math.max(...activas.map((c) => Math.abs(c.aporte)), Math.abs(pred.sesgo), Number.MIN_VALUE)
@@ -209,7 +219,7 @@ function ResultadoCaso({ resp, departamentos }: { resp: Respuesta; departamentos
         {activas.map((c) => (
           <li key={c.variable} className="contribucion" data-variable={c.variable}>
             <span className="contribucion-nombre" title={`valor ${formato.decimal(c.valor)} × peso ${formato.decimal(c.peso)}`}>
-              {etiquetaVariable(c.variable, departamentos)}
+              {etiquetaVariable(c.variable)}
             </span>
             <Barra aporte={c.aporte} mayor={mayor} />
             <span className="contribucion-valor">{signo(c.aporte)}</span>
@@ -241,4 +251,4 @@ function Barra({ aporte, mayor }: { aporte: number; mayor: number }) {
 
 const signo = (v: number) => (v >= 0 ? '+' : '−') + formato.decimal(Math.abs(v))
 
-const ceros = (n: number) => (n === 1 ? '1 variable en 0 (otra categoría) no aporta' : `${n} variables en 0 (otras categorías) no aportan`)
+const ceros = (n: number) => (n === 1 ? '1 variable con aporte 0 no se muestra' : `${n} variables con aporte 0 no se muestran`)
