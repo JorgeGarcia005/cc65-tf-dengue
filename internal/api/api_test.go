@@ -20,6 +20,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/JorgeGarcia005/cc65-tf-dengue/internal/auth"
 	"github.com/JorgeGarcia005/cc65-tf-dengue/internal/cluster"
 	"github.com/JorgeGarcia005/cc65-tf-dengue/internal/features"
 	"github.com/JorgeGarcia005/cc65-tf-dengue/internal/ingest"
@@ -55,7 +56,36 @@ func modeloDePrueba(t *testing.T) []byte {
 	return b
 }
 
+// servidorDePrueba levanta la API. Si op no trae Firmador, crea uno y el
+// servidor de prueba agrega un token de admin a toda petición que no traiga
+// Authorization: así las pruebas funcionales anteriores a la autorización
+// (#61) siguen probando lo suyo. La autorización se prueba sin esa ayuda en
+// seguridad_test.go (servidorSeguro).
 func servidorDePrueba(t *testing.T, op Opciones) (*Servidor, *httptest.Server) {
+	t.Helper()
+	inyectar := ""
+	if op.Firmador == nil {
+		op.Firmador = firmadorDePrueba(t)
+		inyectar = tokenDePrueba(t, op.Firmador, "admin@vigia.pe", auth.RolAdmin)
+	}
+	s, h := servidorSeguro(t, op)
+	if inyectar != "" {
+		interno := h
+		h = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.Header.Get("Authorization") == "" {
+				r.Header.Set("Authorization", "Bearer "+inyectar)
+			}
+			interno.ServeHTTP(w, r)
+		})
+	}
+	ts := httptest.NewServer(h)
+	t.Cleanup(func() { ts.Close() })
+	return s, ts
+}
+
+// servidorSeguro crea el servidor con el modelo de prueba y devuelve su
+// Handler tal cual, sin tokens agregados.
+func servidorSeguro(t *testing.T, op Opciones) (*Servidor, http.Handler) {
 	t.Helper()
 	m, err := CargarModelo(modeloDePrueba(t))
 	if err != nil {
@@ -66,9 +96,26 @@ func servidorDePrueba(t *testing.T, op Opciones) (*Servidor, *httptest.Server) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	ts := httptest.NewServer(s.Handler())
-	t.Cleanup(func() { ts.Close(); s.Cerrar() })
-	return s, ts
+	t.Cleanup(s.Cerrar)
+	return s, s.Handler()
+}
+
+func firmadorDePrueba(t *testing.T) *auth.Firmador {
+	t.Helper()
+	f, err := auth.NuevoFirmador([]byte(secretoLogin), time.Hour)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return f
+}
+
+func tokenDePrueba(t *testing.T, f *auth.Firmador, correo string, rol auth.Rol) string {
+	t.Helper()
+	tok, _, err := f.Firmar(correo, rol)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return tok
 }
 
 func pedir(t *testing.T, metodo, url, cuerpo string) (int, map[string]any) {

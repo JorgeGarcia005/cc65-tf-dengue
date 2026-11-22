@@ -100,5 +100,15 @@ Docker: `cd web && npm ci && npm run dev` (usa `web/public/config.json`).
 El modo servicio lee de `deploy/.env` (no versionado; plantilla en `deploy/.env.example`) el
 secreto `JWT_SECRETO` (≥ 32 bytes) y las cuentas `VIGIA_ADMIN_*` y `VIGIA_ANALISTA_*`, que el
 coordinador crea o actualiza en MongoDB al arrancar (claves guardadas con PBKDF2-SHA256). También
-se pueden crear desde el anfitrión con `go run ./cmd/usuarios -mongo <URI>`. Sin `JWT_SECRETO`,
-`POST /api/v1/auth/login` responde 503.
+se pueden crear desde el anfitrión con `go run ./cmd/usuarios -mongo <URI>`. `JWT_SECRETO` es
+obligatorio: sin él el coordinador no arranca en modo servicio (#61).
+
+## Roles y CORS (TB2, #61)
+
+Las rutas `/api/v1/*`, salvo el login, exigen `Authorization: Bearer <jwt>`. El analista ve el
+modelo, las predicciones, el riesgo y la evaluación; el admin, además, el clúster y los
+entrenamientos (matriz en ADR-0007; sin token → 401, rol sin acceso → 403). `CORS_ORIGENES` es la
+lista blanca de orígenes del navegador (por defecto, la SPA en `http://localhost:8081`): si entras
+a la SPA por IP, agrega `http://<ip>:8081`. El p95 con token se mide con
+`BENCH_CLAVE=<clave> go run ./cmd/benchapi -correo analista@vigia.pe -exigir-p95 100ms`, que
+escribe `reports/bench_api_<maquina>_jwt.json`.

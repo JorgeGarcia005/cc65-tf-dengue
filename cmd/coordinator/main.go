@@ -28,6 +28,7 @@ import (
 	"time"
 
 	"github.com/JorgeGarcia005/cc65-tf-dengue/internal/almacen"
+	"github.com/JorgeGarcia005/cc65-tf-dengue/internal/api"
 	"github.com/JorgeGarcia005/cc65-tf-dengue/internal/cluster"
 	"github.com/JorgeGarcia005/cc65-tf-dengue/internal/gold"
 	"github.com/JorgeGarcia005/cc65-tf-dengue/internal/ml"
@@ -47,6 +48,8 @@ type opciones struct {
 	// evaluacion es reports/evaluacion.json para GET /api/v1/riesgo y
 	// /api/v1/evaluacion (modo servicio); vacío = esas rutas dan 503.
 	evaluacion []byte
+	// origenes es la lista blanca de CORS de la API (-cors / $CORS_ORIGENES).
+	origenes []string
 }
 
 // reporte usa las mismas claves que reports/entrenamiento.json para épocas,
@@ -94,6 +97,7 @@ func main() {
 	baseMongo := flag.String("base", "cc65_dengue", "modo servicio: base de datos de MongoDB")
 	dirRedis := flag.String("redis", os.Getenv("REDIS_ADDR"), "modo servicio: host:puerto de Redis (vacío = sin caché; por defecto $REDIS_ADDR)")
 	rutaEval := flag.String("evaluacion", os.Getenv("EVALUACION"), "modo servicio: reports/evaluacion.json para /api/v1/riesgo y /api/v1/evaluacion (por defecto $EVALUACION)")
+	cors := flag.String("cors", os.Getenv("CORS_ORIGENES"), "modo servicio: orígenes del navegador permitidos, separados por coma (p. ej. http://localhost:8081; por defecto $CORS_ORIGENES)")
 	flag.Parse()
 
 	ln, err := net.Listen("tcp", *escucha)
@@ -104,6 +108,12 @@ func main() {
 	if *dirAPI != "" {
 		if op.evaluacion, err = leerEvaluacion(*rutaEval, log.Printf); err != nil {
 			log.Fatal(err)
+		}
+		if op.origenes, err = api.ParsearOrigenes(*cors); err != nil {
+			log.Fatal(err)
+		}
+		if len(op.origenes) == 0 {
+			log.Printf("sin -cors / CORS_ORIGENES: el navegador solo puede usar la API desde su propio origen")
 		}
 		if err := servicio(ln, *dirAPI, *rutaModelo, *uriMongo, *baseMongo, *dirRedis, op); err != nil {
 			log.Fatal(err)
