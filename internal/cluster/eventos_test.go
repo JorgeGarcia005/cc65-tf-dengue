@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"math"
@@ -331,5 +332,53 @@ func TestTerminarEmiteUnSoloFin(t *testing.T) {
 	}
 	if n != 1 {
 		t.Fatalf("%d eventos fin, quería 1", n)
+	}
+}
+
+// #65: cortar un nodo en la época k (como el botón «Tumbar nodo» del modo
+// demo) reasigna su shard y el resultado sigue siendo el secuencial bit a bit.
+func TestCortarNodoEnLaEpocaKReasignaYEsIgualAlSecuencial(t *testing.T) {
+	const k = 2
+	e := nuevoEscenario(t, 3, 6)
+	var r recolector
+	var cp *clusterDePrueba
+	var errCorte error
+	cp = nuevoClusterObservado(t, e, 10*time.Second, func(ev Evento) {
+		r.observar(ev)
+		if ev.Tipo == EvEpoca && ev.Epoca == k {
+			errCorte = cp.c.CortarNodo("nodo-2") // desde el bucle de épocas: no debe trabarse
+		}
+	})
+	cp.registrar(3, func() {
+		for i := 1; i <= 3; i++ {
+			cp.nodoReal(fmt.Sprintf("nodo-%d", i), 2)
+			cp.esperarRegistrados(i)
+		}
+	})
+	res, err := cp.entrenar(30 * time.Second)
+	if errCorte != nil {
+		t.Fatalf("CortarNodo: %v", errCorte)
+	}
+	cp.exigirIgualAlSecuencial(res, err)
+
+	tipos := r.tipos()
+	iDesc, iReas := slices.Index(tipos, EvDescarte), slices.Index(tipos, EvReasignacion)
+	if iDesc < 0 || iReas < iDesc {
+		t.Fatalf("se esperaba descarte y luego reasignación: %v", tipos)
+	}
+	if d := r.evs[iDesc]; d.Nodo != "nodo-2" || d.Epoca != k {
+		t.Fatalf("descarte: nodo %q en la época %d, se esperaba nodo-2 en la %d", d.Nodo, d.Epoca, k)
+	}
+	if est := cp.c.Estado(); est.Reasignaciones < 1 || est.Nodos[1].Sano {
+		t.Fatalf("estado tras el corte: %+v", est)
+	}
+	if !cp.logs.contiene("demo: se corta la conexión del nodo nodo-2") {
+		t.Fatal("el corte no quedó en el log")
+	}
+	if err := cp.c.CortarNodo("nodo-2"); !errors.Is(err, ErrNodoDesconocido) {
+		t.Fatalf("cortar un nodo ya caído: %v, se esperaba ErrNodoDesconocido", err)
+	}
+	if err := cp.c.CortarNodo("no-existe"); !errors.Is(err, ErrNodoDesconocido) {
+		t.Fatalf("cortar un nodo inexistente: %v", err)
 	}
 }

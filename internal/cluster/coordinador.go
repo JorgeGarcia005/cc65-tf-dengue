@@ -125,6 +125,7 @@ type Coordinador struct {
 
 	muConns sync.Mutex
 	conns   map[int]*protocolo.Conexion // todas las abiertas, para Cerrar
+	nombres map[int]string              // nombre registrado de cada conexión abierta, para CortarNodo
 	// bytes de las conexiones ya cerradas, para que Tiempos no los pierda
 	bytesEnvCerradas, bytesRecCerradas int64
 }
@@ -174,6 +175,7 @@ func Nuevo(ln net.Listener, op Opciones) (*Coordinador, error) {
 		vence:     make([]time.Time, len(op.Shards)),
 		parciales: make([]ml.Parcial, bloques),
 		conns:     map[int]*protocolo.Conexion{},
+		nombres:   map[int]string{},
 	}
 	for s := range c.duenio {
 		c.duenio[s] = -1
@@ -214,6 +216,7 @@ func (c *Coordinador) leer(id int, pc *protocolo.Conexion) {
 		c.bytesEnvCerradas += e
 		c.bytesRecCerradas += r
 		delete(c.conns, id)
+		delete(c.nombres, id)
 		c.muConns.Unlock()
 	}()
 	m, err := pc.Recibir(c.op.TimeoutRegistro)
@@ -221,6 +224,9 @@ func (c *Coordinador) leer(id int, pc *protocolo.Conexion) {
 		c.op.Log("conexión de %s rechazada: registro inválido (%s): %v", pc.Remoto(), m.Tipo, err)
 		return
 	}
+	c.muConns.Lock()
+	c.nombres[id] = m.Nodo
+	c.muConns.Unlock()
 	if !c.entregar(evento{id: id, conn: pc, msg: m}) {
 		return
 	}
@@ -230,6 +236,32 @@ func (c *Coordinador) leer(id int, pc *protocolo.Conexion) {
 			return
 		}
 	}
+}
+
+// ErrNodoDesconocido: CortarNodo no encontró un nodo conectado con ese nombre.
+var ErrNodoDesconocido = errors.New("cluster: no hay un nodo conectado con ese nombre")
+
+// CortarNodo cierra la conexión TCP del nodo, como si se cortara el cable (modo
+// demo de la API, #65). No toca el estado del entrenamiento: la lectora de esa
+// conexión recibe el error y el bucle de épocas descarta al nodo y reasigna sus
+// shards por el camino normal de una caída (ADR-0005). Si no hay entrenamiento
+// en curso, el descarte se procesa al empezar el siguiente. Se puede llamar
+// desde cualquier goroutine, también desde el Observador.
+func (c *Coordinador) CortarNodo(nombre string) error {
+	c.muConns.Lock()
+	var pc *protocolo.Conexion
+	for id, n := range c.nombres {
+		if n == nombre {
+			pc = c.conns[id]
+			break
+		}
+	}
+	c.muConns.Unlock()
+	if pc == nil {
+		return fmt.Errorf("%w: %q", ErrNodoDesconocido, nombre)
+	}
+	c.op.Log("demo: se corta la conexión del nodo %s", nombre)
+	return pc.Cerrar()
 }
 
 // entregar pasa un evento al bucle de épocas; devuelve false si el coordinador
