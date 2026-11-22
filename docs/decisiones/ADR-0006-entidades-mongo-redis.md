@@ -34,7 +34,7 @@ sin contenedores.
 | `modelos` | `version` (12 hex del sha256 del modelo) | `pesos` [D+1], `esquema` (departamentos, medias, desviaciones, nombres), `umbral`, `ajuste_prior`, `generado`, `publicado` (la publicación más reciente), `entrenamientos` [resumen final de cada entrenamiento que publicó esta versión: `id`, `epoca`, `perdida`, `historia`, `nodos`, `reasignaciones`, `fin`] | `{publicado: -1}`, para obtener el vigente; `{"entrenamientos.id": 1}`, para reconciliar |
 | `entrenamientos` | `id` (`ent-<fecha>-<n>`) | `estado` (`en_curso`/`terminado`/`fallido`), `epocas`, `tasa`, `lambda`, `epoca`, `perdida`, `historia` [pérdida por época], `nodos` [nombre, remoto, workers, sano, carga, motivo], `reasignaciones`, `inicio`, `fin`, `version_modelo`, `error` | `{inicio: -1}`, `{estado: 1}` |
 | `predicciones` | ObjectId | `fecha`, `version_modelo`, `consulta` {departamento, ano, semana, edad_anios, sexo}, `riesgo`, `clase`, `desde_cache`, `microsegundos` | `{fecha: -1}`, `{version_modelo: 1, "consulta.departamento": 1}` y TTL de 90 días sobre `fecha` |
-| `usuarios` (TB2) | `correo` | `hash` (bcrypt o PBKDF2), `rol` (`admin`/`analista`), `creado` | Único por `_id`. Se implementa con JWT en TB2 |
+| `usuarios` (TB2) | `correo` | `hash` (PBKDF2-SHA256, ver ADR-0007), `rol` (`admin`/`analista`), `creado` | Único por `_id`. Se implementa con JWT en TB2 (ADR-0007) |
 
 Las predicciones se agrupan por `version_modelo` y `consulta.departamento` para que el panel admin de
 TB2 muestre la demanda por departamento. El TTL evita que la colección crezca sin límite.
