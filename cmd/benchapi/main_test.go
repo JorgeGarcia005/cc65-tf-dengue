@@ -242,8 +242,14 @@ func TestColeccionPostmanCubreLasRutas(t *testing.T) {
 				tests += strings.Join(e.Script.Exec, "\n")
 			}
 		}
-		if !strings.Contains(tests, "pm.response.to.have.status") || !strings.Contains(tests, "responseTime).to.be.below(100)") {
-			t.Errorf("%s: falta el test de estado o de tiempo < 100 ms", it.Name)
+		// El login deriva la clave con PBKDF2 (600 000 iteraciones, ADR-0007): es
+		// lento a propósito y tiene su propio tope; el de 100 ms es de la API de datos.
+		limite := "responseTime).to.be.below(100)"
+		if strings.HasSuffix(ruta, "/auth/login") {
+			limite = "responseTime).to.be.below(1000)"
+		}
+		if !strings.Contains(tests, "pm.response.to.have.status") || !strings.Contains(tests, limite) {
+			t.Errorf("%s: falta el test de estado o de tiempo (%s)", it.Name, limite)
 		}
 	}
 	for _, r := range api.Rutas() {

@@ -94,3 +94,11 @@ API=:8080 docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.a
 
 `PUERTO_WEB` cambia el puerto de la SPA en el anfitrión (8081 por defecto). Para desarrollar sin
 Docker: `cd web && npm ci && npm run dev` (usa `web/public/config.json`).
+
+## Login y cuentas (TB2, #60)
+
+El modo servicio lee de `deploy/.env` (no versionado; plantilla en `deploy/.env.example`) el
+secreto `JWT_SECRETO` (≥ 32 bytes) y las cuentas `VIGIA_ADMIN_*` y `VIGIA_ANALISTA_*`, que el
+coordinador crea o actualiza en MongoDB al arrancar (claves guardadas con PBKDF2-SHA256). También
+se pueden crear desde el anfitrión con `go run ./cmd/usuarios -mongo <URI>`. Sin `JWT_SECRETO`,
+`POST /api/v1/auth/login` responde 503.

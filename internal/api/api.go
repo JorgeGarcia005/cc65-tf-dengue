@@ -5,6 +5,7 @@
 // Rutas (documentadas en docs/api/openapi.yaml y servidas en /docs):
 //
 //	GET  /healthz
+//	POST /api/v1/auth/login   (JWT, ADR-0007)
 //	GET  /api/v1/modelo
 //	POST /api/v1/predicciones
 //	GET  /api/v1/riesgo       (cubo de riesgo para el mapa, de reports/evaluacion.json)
@@ -34,6 +35,7 @@ import (
 
 	apidoc "github.com/JorgeGarcia005/cc65-tf-dengue/docs/api"
 	"github.com/JorgeGarcia005/cc65-tf-dengue/internal/almacen"
+	"github.com/JorgeGarcia005/cc65-tf-dengue/internal/auth"
 	"github.com/JorgeGarcia005/cc65-tf-dengue/internal/cluster"
 )
 
@@ -64,6 +66,11 @@ type Opciones struct {
 	// Evaluacion es el contenido de reports/evaluacion.json (#59): lo sirven
 	// GET /api/v1/evaluacion y, recortado, GET /api/v1/riesgo. Vacío = 503.
 	Evaluacion []byte
+	// Usuarios guarda las cuentas del login. Si es nil y Almacen implementa
+	// almacen.Usuarios (Memoria y Mongo lo hacen), se usa Almacen.
+	Usuarios almacen.Usuarios
+	// Firmador emite los JWT del login (ADR-0007). Sin él, el login responde 503.
+	Firmador   *auth.Firmador
 	Middleware []Middleware // se aplican en orden: el primero es el más externo
 	Log        func(formato string, args ...any)
 	// PlazoCierre acota cuánto espera Cerrar a que se vacíe el registro de
@@ -106,6 +113,7 @@ type Servidor struct {
 	cerrarUnaVez  sync.Once
 
 	evaluacion, riesgo *documento // reports/evaluacion.json precomprimido; nil si no hay
+	limite             *limitador // intentos fallidos de login por IP
 }
 
 // Nuevo crea el servidor: elige el modelo inicial (el vigente del almacén o,
@@ -122,13 +130,21 @@ func Nuevo(op Opciones) (*Servidor, error) {
 	if op.PlazoCierre <= 0 {
 		op.PlazoCierre = DefectoPlazoCierre
 	}
+	if u, ok := op.Almacen.(almacen.Usuarios); op.Usuarios == nil && ok {
+		op.Usuarios = u
+	}
+	if op.Firmador != nil {
+		// El hash señuelo cuesta un PBKDF2 completo: se calcula ya, en segundo
+		// plano, para que el primer login no pague dos derivaciones.
+		go auth.HashSenuelo()
+	}
 	ctx, cancelar := context.WithTimeout(context.Background(), plazoArranque)
 	defer cancelar()
 	inicial, err := modeloInicial(ctx, op)
 	if err != nil {
 		return nil, err
 	}
-	s := &Servidor{op: op, registros: make(chan almacen.RegistroPrediccion, BufferRegistros)}
+	s := &Servidor{op: op, registros: make(chan almacen.RegistroPrediccion, BufferRegistros), limite: nuevoLimitador()}
 	if len(op.Evaluacion) > 0 {
 		if s.evaluacion, s.riesgo, err = cargarEvaluacion(op.Evaluacion); err != nil {
 			return nil, err
@@ -252,6 +268,7 @@ type Ruta struct {
 func Rutas() []Ruta {
 	return []Ruta{
 		{"GET", "/healthz", true, (*Servidor).salud},
+		{"POST", "/api/v1/auth/login", true, (*Servidor).login},
 		{"GET", "/api/v1/modelo", true, (*Servidor).verModelo},
 		{"POST", "/api/v1/predicciones", true, (*Servidor).predecir},
 		{"GET", "/api/v1/riesgo", true, (*Servidor).verRiesgo},

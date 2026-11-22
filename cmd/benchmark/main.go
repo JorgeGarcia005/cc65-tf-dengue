@@ -88,6 +88,7 @@ func main() {
 	semilla := flag.Uint64("semilla", 2026, "semilla del dataset y del barajado")
 	rutaGold := flag.String("gold", "", "archivo gold real (p. ej. data/gold/train.bin) en vez del sintético")
 	modoCluster := flag.Bool("cluster", false, "benchmark del clúster por número de nodos (issue #32) en vez del de gradiente")
+	modoObservador := flag.Bool("observador", false, "sobrecosto del observador de eventos del clúster (#64): -cluster sin y con observador")
 	listaNodos := flag.String("nodos", "1,2,3,4,5", "-cluster: nodos a medir, separados por coma")
 	repsCluster := flag.Int("reps-cluster", 5, "-cluster: repeticiones medidas por número de nodos")
 	epocasCluster := flag.Int("epocas-cluster", 30, "-cluster: épocas por repetición")
@@ -127,6 +128,16 @@ func main() {
 		log.Printf("generando dataset sintético: %d filas × %d features", *filas, *features)
 		ds, _ = ml.Sintetico(*filas, *features, *semilla)
 		fuente = fmt.Sprintf("sintetico(filas=%d, features=%d, semilla=%d)", *filas, *features, *semilla)
+	}
+	if *modoObservador {
+		if *salida == "" {
+			*salida = filepath.Join("reports", "bench_observador_"+maquina.Host()+sufijo+".json")
+		}
+		ejecutarObservador(gold.Archivo{Dataset: ds, TamBloque: *tamBloque}, fuente, opcionesCluster{
+			nodos: parsearLista(*listaNodos), reps: *repsCluster, epocas: *epocasCluster, workersNodo: *workersNodo,
+			tasa: 2, lambda: 1e-4, recorte: *recorteCluster, logf: log.Printf,
+		}, *salida)
+		return
 	}
 	if *modoCluster {
 		if *salida == "" {
