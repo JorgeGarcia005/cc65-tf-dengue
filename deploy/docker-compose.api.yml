@@ -16,12 +16,15 @@ services:
       # reports/ ya está montado en /reports (docker-compose.yml): mapa y evaluación (#66).
       EVALUACION: /reports/evaluacion.json
       # Login (ADR-0007): secreto del JWT y cuentas iniciales, desde deploy/.env
-      # (no versionado; ver deploy/.env.example). Sin JWT_SECRETO el login da 503.
+      # (no versionado; ver deploy/.env.example). Sin JWT_SECRETO el coordinador no arranca (#61).
       JWT_SECRETO: ${JWT_SECRETO:-}
       VIGIA_ADMIN_CORREO: ${VIGIA_ADMIN_CORREO:-}
       VIGIA_ADMIN_CLAVE: ${VIGIA_ADMIN_CLAVE:-}
       VIGIA_ANALISTA_CORREO: ${VIGIA_ANALISTA_CORREO:-}
       VIGIA_ANALISTA_CLAVE: ${VIGIA_ANALISTA_CLAVE:-}
+      # Orígenes del navegador que pueden llamar a la API (CORS, ADR-0007): la SPA.
+      # Para entrar por IP en la sustentación: CORS_ORIGENES=http://<ip>:8081
+      CORS_ORIGENES: ${CORS_ORIGENES:-http://localhost:${PUERTO_WEB:-8081}}
     depends_on:
       mongo:
         condition: service_healthy

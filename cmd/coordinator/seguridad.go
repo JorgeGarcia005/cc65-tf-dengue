@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -15,17 +16,16 @@ const DuracionToken = 60 * time.Minute
 
 // prepararSeguridad arma el firmador de JWT con $JWT_SECRETO y siembra las
 // cuentas definidas en $VIGIA_ADMIN_* y $VIGIA_ANALISTA_* en alm (el mismo
-// almacén que usará la API). Sin JWT_SECRETO devuelve nil y el login responde
-// 503 (en #61 pasa a ser obligatorio, cuando las rutas exijan token).
+// almacén que usará la API). JWT_SECRETO es obligatorio (#61): sin él las
+// rutas protegidas no podrían verificar tokens, y el servicio no arranca.
 func prepararSeguridad(ctx context.Context, alm almacen.Almacen, getenv func(string) string, logf func(string, ...any)) (*auth.Firmador, error) {
-	var f *auth.Firmador
-	if secreto := getenv("JWT_SECRETO"); secreto != "" {
-		var err error
-		if f, err = auth.NuevoFirmador([]byte(secreto), DuracionToken); err != nil {
-			return nil, fmt.Errorf("JWT_SECRETO: %w", err)
-		}
-	} else {
-		logf("sin JWT_SECRETO: POST /api/v1/auth/login responde 503")
+	secreto := getenv("JWT_SECRETO")
+	if secreto == "" {
+		return nil, errors.New("JWT_SECRETO es obligatorio en modo servicio: cópialo en deploy/.env (ver deploy/.env.example)")
+	}
+	f, err := auth.NuevoFirmador([]byte(secreto), DuracionToken)
+	if err != nil {
+		return nil, fmt.Errorf("JWT_SECRETO: %w", err)
 	}
 	repo, ok := alm.(almacen.Usuarios)
 	if !ok {

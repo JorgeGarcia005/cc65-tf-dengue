@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/JorgeGarcia005/cc65-tf-dengue/internal/almacen"
+	"github.com/JorgeGarcia005/cc65-tf-dengue/internal/auth"
 	"github.com/JorgeGarcia005/cc65-tf-dengue/internal/cluster"
 	"github.com/JorgeGarcia005/cc65-tf-dengue/internal/features"
 	"github.com/JorgeGarcia005/cc65-tf-dengue/internal/gold"
@@ -67,7 +68,9 @@ func servicioDePrueba(t *testing.T, modelo []byte, op opciones) (base, dirCluste
 	ln, lnHTTP := escuchar(t), escuchar(t)
 	ctx, cancelar := context.WithCancel(context.Background())
 	fin := make(chan error, 1)
-	go func() { fin <- ejecutarAPI(ctx, ln, lnHTTP, op, modelo, baseDatos{}, silencio) }()
+	go func() {
+		fin <- ejecutarAPI(ctx, ln, lnHTTP, op, modelo, baseDatos{Firmador: firmadorServicio(t)}, silencio)
+	}()
 	detenido := false
 	var errFin error
 	detener = func() error {
@@ -86,12 +89,36 @@ func servicioDePrueba(t *testing.T, modelo []byte, op opciones) (base, dirCluste
 	return "http://" + lnHTTP.Addr().String(), ln.Addr().String(), detener
 }
 
+// secretoServicio firma los tokens de las pruebas del modo servicio.
+const secretoServicio = "secreto-de-las-pruebas-del-servicio!"
+
+func firmadorServicio(t *testing.T) *auth.Firmador {
+	t.Helper()
+	f, err := auth.NuevoFirmador([]byte(secretoServicio), time.Hour)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return f
+}
+
+// tokenAdmin firma un token de admin con el secreto del servicio de prueba.
+func tokenAdmin(t *testing.T) string {
+	t.Helper()
+	tok, _, err := firmadorServicio(t).Firmar("admin@vigia.pe", auth.RolAdmin)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return tok
+}
+
+// pedirJSON hace la petición como admin (las rutas /api/v1 exigen token, #61).
 func pedirJSON(t *testing.T, metodo, url, cuerpo string) (int, map[string]any, http.Header) {
 	t.Helper()
 	req, err := http.NewRequest(metodo, url, strings.NewReader(cuerpo))
 	if err != nil {
 		t.Fatal(err)
 	}
+	req.Header.Set("Authorization", "Bearer "+tokenAdmin(t))
 	if cuerpo != "" {
 		req.Header.Set("Content-Type", "application/json")
 	}
@@ -310,5 +337,43 @@ func TestServicioNoPersisteUnModeloIncompatible(t *testing.T) {
 	}
 	if _, hay, err := mem.ModeloVigente(context.Background()); err != nil || hay {
 		t.Fatalf("el almacén quedó con un modelo vigente (hay=%v, err=%v)", hay, err)
+	}
+}
+
+// #61: el modo servicio aplica la autorización por rol y la lista blanca de
+// CORS que recibe en -cors / CORS_ORIGENES.
+func TestServicioExigeTokenYAplicaCORS(t *testing.T) {
+	modelo, dir, _ := modeloYGold(t, 1_000, 1)
+	op := opciones{gold: dir, nodos: 1, tRegistro: 10 * time.Second, tEpoca: 10 * time.Second,
+		origenes: []string{"http://localhost:8081"}}
+	base, _, _ := servicioDePrueba(t, modelo, op)
+	esperar(t, "la API responde", func() bool {
+		res, err := http.Get(base + "/healthz")
+		if err == nil {
+			res.Body.Close()
+		}
+		return err == nil
+	})
+	analista, _, err := firmadorServicio(t).Firmar("ana@diresa.pe", auth.RolAnalista)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range []struct {
+		ruta, token string
+		codigo      int
+	}{{"/api/v1/modelo", "", 401}, {"/api/v1/modelo", analista, 200}, {"/api/v1/cluster", analista, 403}, {"/api/v1/cluster", tokenAdmin(t), 200}} {
+		req, _ := http.NewRequest("GET", base+c.ruta, nil)
+		req.Header.Set("Origin", "http://localhost:8081")
+		if c.token != "" {
+			req.Header.Set("Authorization", "Bearer "+c.token)
+		}
+		res, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		res.Body.Close()
+		if res.StatusCode != c.codigo || res.Header.Get("Access-Control-Allow-Origin") != "http://localhost:8081" {
+			t.Errorf("GET %s: %d (quería %d), ACAO %q", c.ruta, res.StatusCode, c.codigo, res.Header.Get("Access-Control-Allow-Origin"))
+		}
 	}
 }

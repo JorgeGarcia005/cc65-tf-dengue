@@ -31,7 +31,8 @@ const PlazoCierreHTTP = 10 * time.Second
 type baseDatos struct {
 	Almacen almacen.Almacen
 	Cache   almacen.Cache
-	// Firmador emite los JWT del login (prepararSeguridad); nil = login en 503.
+	// Firmador emite y verifica los JWT (prepararSeguridad, obligatorio en
+	// modo servicio); nil = login y rutas protegidas en 503 (solo tests).
 	Firmador *auth.Firmador
 }
 
@@ -57,7 +58,8 @@ func ejecutarAPI(ctx context.Context, ln, lnHTTP net.Listener, op opciones, mode
 	ctx, cancelarNodos := context.WithCancel(ctx)
 	defer cancelarNodos()
 	ent := &entrenadorCluster{calc: c, d: p.d, lambda: op.lambda, progreso: op.progreso, logf: logf}
-	srv, err := api.Nuevo(api.Opciones{Modelo: base, Entrenador: ent, Cluster: c, Almacen: bd.Almacen, Cache: bd.Cache, Firmador: bd.Firmador, Evaluacion: op.evaluacion, Log: logf})
+	srv, err := api.Nuevo(api.Opciones{Modelo: base, Entrenador: ent, Cluster: c, Almacen: bd.Almacen, Cache: bd.Cache, Firmador: bd.Firmador,
+		Evaluacion: op.evaluacion, OrigenesCORS: op.origenes, Log: logf})
 	if err != nil {
 		lnHTTP.Close()
 		return err
