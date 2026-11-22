@@ -42,6 +42,7 @@ func (f *Firmador) Autenticar(next http.Handler) http.Handler {
 // Requiere deja pasar solo a los roles dados: sin reclamos en el contexto → 401;
 // rol no incluido → 403. Se coloca detrás de Autenticar.
 func Requiere(roles ...Rol) func(http.Handler) http.Handler {
+	permitidos := slices.Clone(roles) // el llamador no puede cambiar la política después
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			rec, ok := ReclamosDe(r.Context())
@@ -49,7 +50,7 @@ func Requiere(roles ...Rol) func(http.Handler) http.Handler {
 				noAutenticado(w, `Bearer realm="vigia"`, "falta el token de acceso")
 				return
 			}
-			if !slices.Contains(roles, rec.Rol) {
+			if !slices.Contains(permitidos, rec.Rol) {
 				escribirError(w, http.StatusForbidden, "tu rol no tiene acceso a este recurso")
 				return
 			}
