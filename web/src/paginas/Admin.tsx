@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useReducer, useRef, useState, type FormEvent } from 'react'
 import { ErrorApi } from '../api/cliente'
 import { BarrasPesos, CurvaPerdida, Topologia } from '../admin/Graficos'
+import { MapaVivo } from '../admin/MapaVivo'
+import { pesosDelModelo } from '../admin/mapaVivo'
 import { parsearJsonl, reproducir, VELOCIDADES } from '../admin/replica'
 import {
   anotar,
@@ -403,6 +405,25 @@ export default function Admin() {
             <figcaption>Log-loss ponderada del conjunto de entrenamiento, una por época (evento «epoca»).</figcaption>
           </figure>
         </section>
+        <section className="tarjeta" aria-labelledby="titulo-mapa-vivo" data-seccion="mapa-vivo">
+          <h2 id="titulo-mapa-vivo" className="titulo-panel">
+            Mapa en vivo
+          </h2>
+          <figure className="grafico">
+            <MapaVivo
+              pesos={estado.pesos ?? pesosDelModelo(modelo)}
+              variables={modelo?.variables.map((v) => v.nombre) ?? []}
+              origen={estado.pesos ? `época ${estado.epoca}` : modelo ? `modelo publicado ${modelo.version}` : 'sin pesos'}
+            />
+            <figcaption>
+              Se repinta con los pesos de cada época: razón de odds de cada departamento frente al promedio (e<sup>Δ</sup>, Δ = w<sub>depto</sub> − media
+              de los w<sub>depto</sub>). No depende de la edad ni de la semana del caso. Antes de la primera época muestra el modelo publicado.
+            </figcaption>
+          </figure>
+        </section>
+      </div>
+
+      <div className="admin-columnas">
         <section className="tarjeta" aria-labelledby="titulo-pesos" data-seccion="pesos">
           <h2 id="titulo-pesos" className="titulo-panel">
             Pesos
@@ -432,7 +453,10 @@ export default function Admin() {
           <h2 id="titulo-replica" className="titulo-panel">
             Réplica sin clúster
           </h2>
-          <p className="bajada">Reproduce un eventos_*.jsonl grabado por el coordinador, con el mismo reducer que en vivo.</p>
+          <p className="bajada">
+            Reproduce un eventos_*.jsonl grabado por el coordinador (<code>-eventos</code> o <code>EVENTOS=/reports/eventos_demo.jsonl</code> en el
+            Compose), con el mismo reducer que en vivo.
+          </p>
           <div className="formulario">
             <label htmlFor="adm-jsonl">Archivo .jsonl</label>
             <input id="adm-jsonl" type="file" accept=".jsonl,application/jsonl,application/x-ndjson" onChange={(e) => void elegirArchivo(e.target.files?.[0])} disabled={reproduciendo} />

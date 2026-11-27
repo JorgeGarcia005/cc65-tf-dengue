@@ -117,6 +117,33 @@ describe('panel admin en vivo', () => {
     await waitFor(() => expect(seccion('pesos')).toHaveTextContent('Sesgo (intercepto)'))
   })
 
+  it('el mapa en vivo parte del modelo publicado y se repinta con cada época', async () => {
+    // edad, Lima, Loreto, Otros + sesgo: los departamentos sin columna (p. ej. Tacna) usan la de Otros.
+    const modelo = { ...MODELO, sesgo: 0, variables: [
+      { nombre: 'edad_z', peso: 0.2 },
+      { nombre: 'depto_lima', peso: 0 },
+      { nombre: 'depto_loreto', peso: 0 },
+      { nombre: 'depto_otros', peso: 0 },
+    ] }
+    montar({ modelo })
+    const ws = await conectado()
+    const delta = (d: string) => Number(seccion('mapa-vivo').querySelector(`[data-depto="${d}"]`)?.getAttribute('data-delta'))
+    await waitFor(() => expect(seccion('mapa-vivo').querySelectorAll('path[data-depto]')).toHaveLength(25))
+    expect(delta('LIMA')).toBe(0)
+    expect(seccion('mapa-vivo').querySelector('svg')!.getAttribute('aria-label')).toMatch(/modelo publicado v-final/)
+
+    const fillLoreto = () => seccion('mapa-vivo').querySelector('[data-depto="LORETO"]')!.getAttribute('fill')
+    const antes = fillLoreto()
+    // depto: 0,3 · 0,6 · 0 → media 0,3 → Δ Lima 0, Loreto 0,3, Otros −0,3
+    ws.emitir({ tipo: 'epoca', epoca: 1, perdida: 0.69, pesos: [0.2, 0.3, 0.6, 0, -1] })
+    expect(delta('LIMA')).toBeCloseTo(0, 12)
+    expect(delta('LORETO')).toBeCloseTo(0.3, 12)
+    expect(delta('TACNA')).toBeCloseTo(-0.3, 12)
+    expect(seccion('mapa-vivo').querySelector('[data-depto="TACNA"]')).toHaveAttribute('data-agrupado', 'true')
+    expect(fillLoreto()).not.toBe(antes)
+    expect(seccion('mapa-vivo').querySelector('svg')!.getAttribute('aria-label')).toMatch(/época 1.*el mayor es Loreto/)
+  })
+
   it('sin modo demo, reintenta el lanzamiento sin ritmo_ms', async () => {
     const { llamadas } = montar({ rechazarRitmo: true })
     await conectado()

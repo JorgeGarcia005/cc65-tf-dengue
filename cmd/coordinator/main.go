@@ -56,6 +56,9 @@ type opciones struct {
 	demo bool
 	// observador recibe los eventos del clúster (el hub del WebSocket).
 	observador func(cluster.Evento)
+	// grabar, si no es nil, recibe además cada evento para el .jsonl de
+	// -eventos (#69: el modo réplica del panel admin lo reproduce sin clúster).
+	grabar func(cluster.Evento)
 }
 
 // reporte usa las mismas claves que reports/entrenamiento.json para épocas,
@@ -105,6 +108,7 @@ func main() {
 	rutaEval := flag.String("evaluacion", os.Getenv("EVALUACION"), "modo servicio: reports/evaluacion.json para /api/v1/riesgo y /api/v1/evaluacion (por defecto $EVALUACION)")
 	demoEnv, errDemo := strconv.ParseBool(cmp.Or(os.Getenv("DEMO"), "false"))
 	flag.BoolVar(&op.demo, "demo", demoEnv, "modo servicio: habilita POST /api/v1/demo/nodos/{nombre}/cortar y ritmo_ms (por defecto $DEMO)")
+	rutaEventos := flag.String("eventos", os.Getenv("EVENTOS"), "graba cada evento del clúster en este .jsonl (p. ej. reports/eventos_demo.jsonl) para el modo réplica del panel admin; vacío = no graba (por defecto $EVENTOS)")
 	cors := flag.String("cors", os.Getenv("CORS_ORIGENES"), "modo servicio: orígenes del navegador permitidos, separados por coma (p. ej. http://localhost:8081; por defecto $CORS_ORIGENES)")
 	flag.Parse()
 	if errDemo != nil {
@@ -116,6 +120,10 @@ func main() {
 		log.Fatal(err)
 	}
 	log.Printf("coordinador escuchando en %s; espera %d nodos", ln.Addr(), op.nodos)
+	cerrarEventos, err := abrirEventos(*rutaEventos, &op, log.Printf)
+	if err != nil {
+		log.Fatal(err)
+	}
 	if *dirAPI != "" {
 		if op.evaluacion, err = leerEvaluacion(*rutaEval, log.Printf); err != nil {
 			log.Fatal(err)
@@ -126,7 +134,9 @@ func main() {
 		if len(op.origenes) == 0 {
 			log.Printf("sin -cors / CORS_ORIGENES: el navegador solo puede usar la API desde su propio origen")
 		}
-		if err := servicio(ln, *dirAPI, *rutaModelo, *uriMongo, *baseMongo, *dirRedis, op); err != nil {
+		err := servicio(ln, *dirAPI, *rutaModelo, *uriMongo, *baseMongo, *dirRedis, op)
+		cerrarEventos() // antes de log.Fatal: el .jsonl queda completo aunque el servicio falle
+		if err != nil {
 			log.Fatal(err)
 		}
 		return
@@ -142,6 +152,7 @@ func main() {
 		signal.Ignore(syscall.SIGTERM)
 		return nil
 	})
+	cerrarEventos()
 	if err != nil {
 		log.Fatal(err)
 	}

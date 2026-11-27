@@ -28,6 +28,9 @@ services:
       # Modo demo (#65): DEMO=true habilita «Tumbar nodo» (POST /api/v1/demo/nodos/{nombre}/cortar)
       # y ritmo_ms en los entrenamientos, para la sustentación. Apagado por defecto.
       DEMO: ${DEMO:-false}
+      # Réplica del panel admin (#69): EVENTOS=/reports/eventos_demo.jsonl graba cada
+      # evento del clúster en ../reports para reproducirlo luego sin clúster. Vacío = no graba.
+      EVENTOS: ${EVENTOS:-}
     depends_on:
       mongo:
         condition: service_healthy

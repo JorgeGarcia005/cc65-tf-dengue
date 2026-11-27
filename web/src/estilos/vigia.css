@@ -1005,3 +1005,22 @@ a {
   fill: var(--error);
   font-weight: 700;
 }
+
+/* Mapa en vivo del panel admin (#69): colores por clase, sin estilos inline (CSP). */
+.vista-admin .depto-vivo {
+  stroke: var(--tinta);
+  stroke-width: 0.6;
+}
+.vista-admin [data-grafico='mapa-vivo'] {
+  max-width: 340px;
+  margin: 0 auto;
+}
+.leyenda-baja {
+  background: var(--azul);
+}
+.leyenda-neutra {
+  background: var(--papel);
+}
+.leyenda-sube {
+  background: var(--rosa);
+}
