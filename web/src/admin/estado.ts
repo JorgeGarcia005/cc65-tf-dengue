@@ -5,7 +5,9 @@
 /** Versión de cluster.Evento que sabe leer la SPA (cluster.VersionEventos). */
 export const VERSION_EVENTOS = 1
 
-export const TIPOS = ['registro', 'tarea', 'gradiente', 'epoca', 'reasignacion', 'descarte', 'abortado', 'fin'] as const
+// «modelo» lo emite la API al publicar el modelo entrenado (versión en detalle,
+// pesos finales); los de «epoca» son los usados en esa época, antes de actualizarlos.
+export const TIPOS = ['registro', 'tarea', 'gradiente', 'epoca', 'reasignacion', 'descarte', 'abortado', 'fin', 'modelo'] as const
 export type TipoEvento = (typeof TIPOS)[number]
 
 /** cluster.EstadoNodo. */
@@ -58,6 +60,8 @@ export interface EstadoPanel {
   reasignaciones: number
   terminado: boolean
   abortado: string | null
+  /** El modelo que la API anunció al publicarlo (evento «modelo»). */
+  modelo: { version: string; pesos: number[] } | null
   /** Contador para el id de cada línea de la bitácora (clave estable en React). */
   siguienteLinea: number
 }
@@ -71,6 +75,7 @@ export const ESTADO_INICIAL: EstadoPanel = {
   reasignaciones: 0,
   terminado: false,
   abortado: null,
+  modelo: null,
   siguienteLinea: 1,
 }
 
@@ -171,6 +176,10 @@ export function reducir(e: EstadoPanel, ev: EventoCluster): EstadoPanel {
     }
     case 'abortado':
       return conLinea({ ...e, abortado: ev.detalle ?? 'el entrenamiento falló' }, ev.t, ev.tipo, 'alerta', `entrenamiento abortado: ${ev.detalle ?? 'sin detalle'}`)
+    case 'modelo': {
+      const s = { ...e, modelo: { version: ev.detalle ?? '', pesos: ev.pesos ?? [] } }
+      return conLinea(s, ev.t, ev.tipo, 'info', `la API publicó el modelo ${ev.detalle ?? '¿?'} (${ev.pesos?.length ?? 0} pesos)`)
+    }
     case 'fin':
       return conLinea({ ...e, terminado: true }, ev.t, ev.tipo, 'info', `fin del entrenamiento tras ${ev.epoca} épocas`)
   }
@@ -178,7 +187,7 @@ export function reducir(e: EstadoPanel, ev: EventoCluster): EstadoPanel {
 
 /** Antes de lanzar otro entrenamiento: curva y pesos de cero; nodos y bitácora siguen. */
 export function reiniciarEntrenamiento(e: EstadoPanel): EstadoPanel {
-  return { ...e, curva: [], pesos: null, epoca: 0, reasignaciones: 0, terminado: false, abortado: null }
+  return { ...e, curva: [], pesos: null, epoca: 0, reasignaciones: 0, terminado: false, abortado: null, modelo: null }
 }
 
 /** GET /api/v1/cluster (cluster.Estado). */
@@ -201,4 +210,40 @@ export function esEstadoCluster(v: unknown): v is EstadoCluster {
  */
 export function conCluster(e: EstadoPanel, c: EstadoCluster): EstadoPanel {
   return conInstantanea(e, c.nodos)
+}
+
+/** Lo que usa el sello de GET /api/v1/modelo. */
+export interface ModeloParaSello {
+  version: string
+  sesgo: number
+  variables: { nombre: string; peso: number }[]
+}
+
+export type Sello = { ok: true; comparados: number } | { ok: false; motivo: string; primeraDiferencia?: number }
+
+/**
+ * Sello «bit a bit»: los pesos que anunció la API por el WebSocket al publicar
+ * el modelo son idénticos (===, sin tolerancia) a los que sirve GET
+ * /api/v1/modelo. Que además sean iguales al entrenamiento secuencial lo
+ * garantiza el test de Go TestServicioDemoCortarNodoPorLaAPI.
+ */
+export function selloBitABit(anunciado: { version: string; pesos: number[] }, publicado: ModeloParaSello): Sello {
+  if (anunciado.version !== publicado.version) return { ok: false, motivo: `la versión anunciada (${anunciado.version}) no es la publicada (${publicado.version})` }
+  const esperados = [...publicado.variables.map((v) => v.peso), publicado.sesgo]
+  if (anunciado.pesos.length !== esperados.length) return { ok: false, motivo: `${anunciado.pesos.length} pesos anunciados frente a ${esperados.length} publicados` }
+  const i = esperados.findIndex((p, j) => p !== anunciado.pesos[j])
+  return i < 0 ? { ok: true, comparados: esperados.length } : { ok: false, motivo: `el peso ${i} difiere`, primeraDiferencia: i }
+}
+
+/** Forma mínima de GET /api/v1/modelo que necesita el sello (y los nombres de las barras). */
+export function esModeloParaSello(v: unknown): v is ModeloParaSello {
+  const m = v as Record<string, unknown> | null
+  return (
+    !!m &&
+    typeof m === 'object' &&
+    texto(m.version) &&
+    finito(m.sesgo) &&
+    Array.isArray(m.variables) &&
+    m.variables.every((x) => !!x && typeof x === 'object' && texto((x as Record<string, unknown>).nombre) && finito((x as Record<string, unknown>).peso))
+  )
 }

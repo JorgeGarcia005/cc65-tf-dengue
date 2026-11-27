@@ -140,3 +140,27 @@ describe('conCluster', () => {
     expect(e.bitacora).toEqual([])
   })
 })
+
+describe('evento modelo y sello bit a bit', () => {
+  it('guarda la versión y los pesos finales que anuncia la API', () => {
+    const e = aplicar([...registros, ev({ tipo: 'epoca', epoca: 1, perdida: 0.69, pesos: [0, 0] }), ev({ tipo: 'fin', epoca: 1 }), ev({ tipo: 'modelo', epoca: 1, detalle: 'abc123', pesos: [0.1, -0.2] })])
+    expect(e.modelo).toEqual({ version: 'abc123', pesos: [0.1, -0.2] })
+    expect(e.bitacora.at(-1)!.texto).toContain('abc123')
+    // Los de la época siguen siendo los de la época: el modelo final no los pisa.
+    expect(e.pesos).toEqual([0, 0])
+  })
+
+  it('selloBitABit: ✓ solo si cada peso es idéntico (===), incluido el sesgo', async () => {
+    const { selloBitABit } = await import('../admin/estado')
+    const publicado = { version: 'abc', sesgo: -0.2, variables: [{ nombre: 'a', peso: 0.1 }] }
+    expect(selloBitABit({ version: 'abc', pesos: [0.1, -0.2] }, publicado)).toEqual({ ok: true, comparados: 2 })
+    expect(selloBitABit({ version: 'abc', pesos: [0.1000000000000001, -0.2] }, publicado)).toMatchObject({ ok: false, primeraDiferencia: 0 })
+    expect(selloBitABit({ version: 'abc', pesos: [0.1, -0.2, 0] }, publicado).ok).toBe(false)
+    expect(selloBitABit({ version: 'otra', pesos: [0.1, -0.2] }, publicado)).toMatchObject({ ok: false, motivo: expect.stringContaining('versión') })
+  })
+
+  it('reiniciarEntrenamiento olvida el modelo anunciado', () => {
+    const e = aplicar([ev({ tipo: 'modelo', epoca: 1, detalle: 'abc', pesos: [1] })])
+    expect(reiniciarEntrenamiento(e).modelo).toBeNull()
+  })
+})
