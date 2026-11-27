@@ -164,3 +164,26 @@ describe('evento modelo y sello bit a bit', () => {
     expect(reiniciarEntrenamiento(e).modelo).toBeNull()
   })
 })
+
+// Visto en vivo: el contador de épocas del coordinador es acumulado entre
+// entrenamientos de la misma corrida (el segundo arranca en 301).
+describe('épocas relativas al entrenamiento', () => {
+  it('la curva y la época cuentan desde 1 aunque el coordinador venga de otro entrenamiento', () => {
+    const e = aplicar([
+      ev({ tipo: 'epoca', epoca: 301, perdida: 0.69, pesos: [0] }),
+      ev({ tipo: 'epoca', epoca: 302, perdida: 0.68, pesos: [0] }),
+      ev({ tipo: 'reasignacion', epoca: 302, nodo: 'nodo-0', shard: 1 }),
+    ])
+    expect(e.curva.map((p) => p.epoca)).toEqual([1, 2])
+    expect(e.epoca).toBe(2)
+    expect(e.bitacora.at(-1)!.texto).toMatch(/en la época 2$/)
+    expect(e.bitacora[0]!.texto).toMatch(/^época 1 /)
+  })
+
+  it('tras reiniciarEntrenamiento, el siguiente vuelve a contar desde 1', () => {
+    const uno = aplicar([ev({ tipo: 'epoca', epoca: 1, perdida: 0.69, pesos: [0] }), ev({ tipo: 'epoca', epoca: 2, perdida: 0.6, pesos: [0] })])
+    const dos = aplicar([ev({ tipo: 'epoca', epoca: 3, perdida: 0.69, pesos: [0] })], reiniciarEntrenamiento(uno))
+    expect(dos.curva).toEqual([{ epoca: 1, perdida: 0.69 }])
+    expect(dos.epoca).toBe(1)
+  })
+})

@@ -55,6 +55,12 @@ export interface EstadoPanel {
   /** Pesos de la última época (con el sesgo al final), o null antes de la primera. */
   pesos: number[] | null
   epoca: number
+  /**
+   * El contador de épocas del coordinador es acumulado entre entrenamientos de
+   * una misma corrida: se resta este desfase (la primera época vista − 1) para
+   * que cada entrenamiento cuente desde 1. null hasta la primera época.
+   */
+  baseEpoca: number | null
   nodos: Record<string, NodoVista>
   bitacora: LineaBitacora[]
   reasignaciones: number
@@ -70,6 +76,7 @@ export const ESTADO_INICIAL: EstadoPanel = {
   curva: [],
   pesos: null,
   epoca: 0,
+  baseEpoca: null,
   nodos: {},
   bitacora: [],
   reasignaciones: 0,
@@ -143,6 +150,9 @@ function tocarNodo(e: EstadoPanel, nombre: string | undefined, cambio: Partial<N
   return { ...e, nodos: { ...e.nodos, [nombre]: { ...previo, ...cambio } } }
 }
 
+/** Época del evento contada desde el inicio del entrenamiento en curso. */
+const relativa = (e: EstadoPanel, epoca: number) => (e.baseEpoca === null ? epoca : epoca - e.baseEpoca)
+
 const shardDe = (ev: EventoCluster) => (ev.shard === undefined ? '' : ` el shard ${ev.shard}`)
 
 export function reducir(e: EstadoPanel, ev: EventoCluster): EstadoPanel {
@@ -156,19 +166,20 @@ export function reducir(e: EstadoPanel, ev: EventoCluster): EstadoPanel {
     case 'gradiente':
       return tocarNodo(e, ev.nodo, { ultimoShard: ev.shard, microsCalculo: ev.micros_calculo })
     case 'epoca': {
+      const base = e.baseEpoca ?? ev.epoca - 1
+      const epoca = ev.epoca - base
       const s: EstadoPanel = {
         ...e,
-        epoca: ev.epoca,
-        curva: ev.perdida === undefined ? e.curva : [...e.curva, { epoca: ev.epoca, perdida: ev.perdida }],
+        epoca,
+        baseEpoca: base,
+        curva: ev.perdida === undefined ? e.curva : [...e.curva, { epoca, perdida: ev.perdida }],
         pesos: ev.pesos ?? e.pesos,
       }
-      return ev.epoca === 1 || ev.epoca % ANOTAR_CADA === 0
-        ? conLinea(s, ev.t, ev.tipo, 'info', `época ${ev.epoca} · pérdida ${ev.perdida?.toFixed(6) ?? '—'}`)
-        : s
+      return epoca === 1 || epoca % ANOTAR_CADA === 0 ? conLinea(s, ev.t, ev.tipo, 'info', `época ${epoca} · pérdida ${ev.perdida?.toFixed(6) ?? '—'}`) : s
     }
     case 'reasignacion': {
       const s = tocarNodo({ ...e, reasignaciones: e.reasignaciones + 1 }, ev.nodo, { ultimoShard: ev.shard })
-      return conLinea(s, ev.t, ev.tipo, 'aviso', `reasignacion:${shardDe(ev)} pasa a ${ev.nodo ?? '¿?'} en la época ${ev.epoca}`)
+      return conLinea(s, ev.t, ev.tipo, 'aviso', `reasignacion:${shardDe(ev)} pasa a ${ev.nodo ?? '¿?'} en la época ${relativa(e, ev.epoca)}`)
     }
     case 'descarte': {
       const s = conInstantanea(tocarNodo(e, ev.nodo, { sano: false, motivo: ev.detalle }), ev.nodos)
@@ -187,7 +198,7 @@ export function reducir(e: EstadoPanel, ev: EventoCluster): EstadoPanel {
 
 /** Antes de lanzar otro entrenamiento: curva y pesos de cero; nodos y bitácora siguen. */
 export function reiniciarEntrenamiento(e: EstadoPanel): EstadoPanel {
-  return { ...e, curva: [], pesos: null, epoca: 0, reasignaciones: 0, terminado: false, abortado: null, modelo: null }
+  return { ...e, curva: [], pesos: null, epoca: 0, baseEpoca: null, reasignaciones: 0, terminado: false, abortado: null, modelo: null }
 }
 
 /** GET /api/v1/cluster (cluster.Estado). */
