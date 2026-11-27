@@ -150,6 +150,17 @@ func TestServicioDemoCortarNodoPorLaAPI(t *testing.T) {
 	if s := m["sesgo"].(float64); math.Float64bits(s) != math.Float64bits(ref.W[train.D]) {
 		t.Fatalf("sesgo tras el corte %v, secuencial %v", s, ref.W[train.D])
 	}
+	// #69: el evento `modelo` del WebSocket, con el que el panel admin arma el
+	// sello «bit a bit», trae esos mismos pesos y la versión publicada.
+	em := esperarEvento(t, evs, "el modelo publicado", func(e cluster.Evento) bool { return e.Tipo == cluster.EvModelo })
+	if em.Detalle != m["version"] || len(em.Pesos) != len(ref.W) {
+		t.Fatalf("evento modelo: versión %q (publicada %v), %d pesos (secuencial %d)", em.Detalle, m["version"], len(em.Pesos), len(ref.W))
+	}
+	for j := range ref.W {
+		if math.Float64bits(em.Pesos[j]) != math.Float64bits(ref.W[j]) {
+			t.Fatalf("peso %d del evento modelo %v, secuencial %v", j, em.Pesos[j], ref.W[j])
+		}
+	}
 	_, c, _ := pedirJSON(t, "GET", base+"/api/v1/cluster", "")
 	if c["reasignaciones"].(float64) < 1 {
 		t.Fatalf("clúster sin reasignaciones: %v", c)

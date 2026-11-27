@@ -273,7 +273,10 @@ paths:
         vencido o usado → 401; ticket sin rol admin → 403. Conectado, recibe un
         mensaje de texto por evento del coordinador (`cluster.Evento` en JSON:
         registro, tarea, gradiente, epoca, reasignacion, descarte, abortado,
-        fin). El servidor manda ping cada 20 s y cierra con 1001 al apagarse.
+        fin) y, al publicarse un modelo entrenado, uno `modelo` de la API con la
+        versión en `detalle` y los pesos finales en `pesos` (los de `epoca` son
+        los usados en esa época, antes de actualizarlos). El servidor manda ping
+        cada 20 s y cierra con 1001 al apagarse.
       operationId: servirWS
       security: [{ticketWS: []}]
       parameters:

@@ -22,6 +22,10 @@ const (
 	EvDescarte     = "descarte"     // un nodo salió del clúster
 	EvAbortado     = "abortado"     // el entrenamiento falló
 	EvFin          = "fin"          // el entrenamiento terminó bien
+	// EvModelo lo emite la API (no el coordinador) al publicar el modelo
+	// entrenado: Detalle = versión, Pesos = pesos finales con el sesgo al final.
+	// Los de EvEpoca son los usados en esa época, antes de su actualización.
+	EvModelo = "modelo"
 )
 
 // Evento es lo que ve el observador del coordinador. Pesos y Nodos son copias:
