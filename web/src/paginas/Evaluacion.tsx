@@ -10,7 +10,17 @@ import { useSesion } from '../sesion/Sesion'
 const VERSION_ESPERADA = 1
 const ORIGEN = 'reports/evaluacion.json'
 
-const nombreCorrida = (n: string) => ({ fria: 'Fría', caliente: 'Caliente' })[n] ?? n
+// switch y no un objeto literal: «constructor» o «toString» no deben salir del prototipo (PR-86 H1).
+function nombreCorrida(n: string): string {
+  switch (n) {
+    case 'fria':
+      return 'Fría'
+    case 'caliente':
+      return 'Caliente'
+    default:
+      return n
+  }
+}
 const ms = (seg: number) => formato.uno(seg * 1000)
 
 /** Nombre del archivo de origen tomado de doc.fuentes; si no está declarado, lo dice. */

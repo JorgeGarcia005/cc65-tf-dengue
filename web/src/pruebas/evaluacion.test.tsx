@@ -171,6 +171,15 @@ describe('evaluación: vista', () => {
     expect(within(fila).getAllByRole('cell')[6]).toHaveTextContent('no cumple')
   })
 
+  it('latencia: un nombre de corrida desconocido (incluso «constructor») se muestra tal cual (PR-86 H1)', async () => {
+    const raro = structuredClone(REAL)
+    raro.latencia_api.corridas[0]!.nombre = 'constructor'
+    montar(new Response(JSON.stringify(raro)))
+    await cargada()
+    const fila = seccion('latencia').querySelector('tr[data-corrida="constructor"]') as HTMLElement
+    expect(within(fila).getAllByRole('cell')[0]).toHaveTextContent(/^constructor · /)
+  })
+
   it('cada sección cita su reports/*.json; escalabilidad y latencia lo toman de fuentes', async () => {
     montar()
     await cargada()
@@ -201,6 +210,10 @@ describe('evaluación: vista', () => {
     expect(lecturaAuc(0.62)).toMatch(/priorizar, no para diagnosticar/)
     expect(lecturaAuc(0.85)).not.toMatch(/modesta/)
     expect(lecturaAuc(0.5)).toMatch(/azar/)
+    expect(lecturaAuc(REAL.auc_trapecio)).toMatch(/pobre según Hosmer y Lemeshow/)
+    expect(lecturaAuc(0.75)).toMatch(/aceptable/)
+    expect(lecturaAuc(0.85)).toMatch(/excelente/)
+    expect(lecturaAuc(0.95)).toMatch(/sobresaliente/)
   })
 
   // PR-85 H1: un 200 con otra forma no llega a la vista.

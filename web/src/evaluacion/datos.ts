@@ -74,12 +74,15 @@ export function tramosDentroIC(tramos: TramoCalibracion[]): number {
 }
 
 /**
- * Lectura honesta del AUC, armada con su valor. Los cortes son los usuales
- * (Hosmer y Lemeshow): < 0,6 casi azar, < 0,7 modesta, < 0,8 aceptable.
+ * Lectura honesta del AUC, armada con su valor. Cortes de Hosmer y Lemeshow
+ * (Applied Logistic Regression, 3.ª ed., 2013, cap. 5): 0,5 sin discriminación;
+ * 0,5–0,7 pobre; 0,7–0,8 aceptable; 0,8–0,9 excelente; ≥ 0,9 sobresaliente.
+ * El corte de 0,6 es nuestro, para separar «casi azar» dentro del tramo pobre.
  */
 export function lecturaAuc(auc: number): string {
   if (auc < 0.6) return 'apenas mejor que el azar: no sirve para ordenar casos'
-  if (auc < 0.7) return 'capacidad de discriminación modesta: sirve para priorizar, no para diagnosticar'
+  if (auc < 0.7) return 'capacidad de discriminación modesta (pobre según Hosmer y Lemeshow, < 0,7): sirve para priorizar, no para diagnosticar'
   if (auc < 0.8) return 'capacidad de discriminación aceptable: sirve para priorizar; para diagnosticar hace falta la clínica'
-  return 'buena capacidad de discriminación en el conjunto de prueba'
+  if (auc < 0.9) return 'capacidad de discriminación excelente en el conjunto de prueba'
+  return 'capacidad de discriminación sobresaliente en el conjunto de prueba'
 }
