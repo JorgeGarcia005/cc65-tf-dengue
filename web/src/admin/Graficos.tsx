@@ -100,8 +100,9 @@ export function Topologia({ nodos }: { nodos: NodoVista[] }) {
     return { x: r1(cx + radio * Math.cos(ang)), y: r1(cy + radio * Math.sin(ang)) }
   })
   const sanos = nodos.filter((n) => n.sano).length
+  const caidas = nodos.reduce((a, n) => a + (n.caidas ?? 0), 0)
   return (
-    <svg viewBox={`0 0 ${A} ${H}`} width="100%" role="img" aria-label={`Topología en estrella: coordinador y ${nodos.length} nodos, ${sanos} sanos${nodos.length > sanos ? `, ${nodos.length - sanos} caídos` : ''}`} data-grafico="topologia">
+    <svg viewBox={`0 0 ${A} ${H}`} width="100%" role="img" aria-label={`Topología en estrella: coordinador y ${nodos.length} nodos, ${sanos} sanos${nodos.length > sanos ? `, ${nodos.length - sanos} caídos` : ''}${caidas ? `; ${caidas} caída${caidas === 1 ? '' : 's'} en esta sesión` : ''}`} data-grafico="topologia">
       {nodos.map((n, i) => (
         <line key={`l-${n.nombre}`} className={n.sano ? 'enlace-sano' : 'enlace-caido'} x1={cx} y1={cy} x2={pos[i]!.x} y2={pos[i]!.y} />
       ))}
@@ -111,6 +112,7 @@ export function Topologia({ nodos }: { nodos: NodoVista[] }) {
       </text>
       {nodos.map((n, i) => (
         <g key={n.nombre} data-nodo={n.nombre} data-sano={n.sano}>
+          {(n.caidas ?? 0) > 0 && <circle className="nodo-reincorporado" cx={pos[i]!.x} cy={pos[i]!.y} r={32} />}
           <circle className={n.sano ? 'nodo-sano' : 'nodo-caido'} cx={pos[i]!.x} cy={pos[i]!.y} r={26} />
           <text className="topo-texto" x={pos[i]!.x} y={pos[i]!.y - 2} textAnchor="middle">
             {n.nombre.length > 10 ? `${n.nombre.slice(0, 9)}…` : n.nombre}
@@ -118,6 +120,11 @@ export function Topologia({ nodos }: { nodos: NodoVista[] }) {
           <text className="topo-sub" x={pos[i]!.x} y={pos[i]!.y + 12} textAnchor="middle">
             {n.sano ? `${n.carga} shard${n.carga === 1 ? '' : 's'}` : 'caído'}
           </text>
+          {(n.caidas ?? 0) > 0 && (
+            <text className="topo-caidas" x={pos[i]!.x} y={pos[i]!.y + 46} textAnchor="middle">
+              cayó {n.caidas}×{n.sano ? ' · volvió' : ''}
+            </text>
+          )}
         </g>
       ))}
     </svg>

@@ -38,6 +38,8 @@ export interface EventoCluster {
 export interface NodoVista extends EstadoNodo {
   ultimoShard?: number
   microsCalculo?: number
+  /** Veces que salió del clúster en esta sesión del panel (un nodo cortado se vuelve a registrar enseguida). */
+  caidas?: number
 }
 
 export type Nivel = 'info' | 'aviso' | 'alerta'
@@ -182,7 +184,7 @@ export function reducir(e: EstadoPanel, ev: EventoCluster): EstadoPanel {
       return conLinea(s, ev.t, ev.tipo, 'aviso', `reasignacion:${shardDe(ev)} pasa a ${ev.nodo ?? '¿?'} en la época ${relativa(e, ev.epoca)}`)
     }
     case 'descarte': {
-      const s = conInstantanea(tocarNodo(e, ev.nodo, { sano: false, motivo: ev.detalle }), ev.nodos)
+      const s = conInstantanea(tocarNodo(e, ev.nodo, { sano: false, motivo: ev.detalle, caidas: (ev.nodo ? (e.nodos[ev.nodo]?.caidas ?? 0) : 0) + 1 }), ev.nodos)
       return conLinea(s, ev.t, ev.tipo, 'alerta', `${ev.nodo ?? 'un nodo'} salió del clúster${ev.detalle ? `: ${ev.detalle}` : ''}`)
     }
     case 'abortado':

@@ -187,3 +187,19 @@ describe('épocas relativas al entrenamiento', () => {
     expect(dos.epoca).toBe(1)
   })
 })
+
+// Visto en vivo: el nodo cortado se vuelve a registrar en el mismo milisegundo,
+// así que «sano» vuelve a true enseguida. La caída queda contada.
+describe('caídas por nodo', () => {
+  it('descarte suma una caída que el registro siguiente no borra', () => {
+    const e = aplicar([
+      ...registros,
+      ev({ tipo: 'descarte', epoca: 5, nodo: 'nodo-2', detalle: 'cortado', nodos: [nodo('nodo-0'), nodo('nodo-1'), nodo('nodo-2', false, 0)] }),
+      ev({ tipo: 'registro', epoca: 5, nodo: 'nodo-2', nodos: [nodo('nodo-0'), nodo('nodo-1'), nodo('nodo-2', true, 0)] }),
+    ])
+    const n2 = nodosOrdenados(e).find((n) => n.nombre === 'nodo-2')!
+    expect(n2.sano).toBe(true)
+    expect(n2.caidas).toBe(1)
+    expect(nodosOrdenados(e).find((n) => n.nombre === 'nodo-0')!.caidas ?? 0).toBe(0)
+  })
+})

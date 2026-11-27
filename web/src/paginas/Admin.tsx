@@ -344,7 +344,7 @@ export default function Admin() {
           </h2>
           <figure className="grafico">
             <Topologia nodos={nodos} />
-            <figcaption>Estrella: el coordinador agrega; cada nodo calcula el gradiente de sus shards. Rojo = fuera del clúster.</figcaption>
+            <figcaption>Estrella: el coordinador agrega; cada nodo calcula el gradiente de sus shards. Rojo = fuera del clúster; anillo rosa = se cayó y volvió a registrarse.</figcaption>
           </figure>
           {nodos.length === 0 ? (
             <p className="nota">Todavía no hay nodos registrados.</p>
@@ -354,7 +354,8 @@ export default function Admin() {
                 <li key={n.nombre} data-nodo={n.nombre}>
                   <span className={n.sano ? 'punto-sano' : 'punto-caido'} aria-hidden="true" />
                   <span className="lista-nodos-nombre">{n.nombre}</span>
-                  <span className="lista-nodos-info">{n.sano ? `${n.carga} shard${n.carga === 1 ? '' : 's'} · ${n.workers} workers` : (n.motivo ?? 'caído')}</span>
+                  <span className="lista-nodos-info">{n.sano ? `${n.carga} shard${n.carga === 1 ? '' : 's'} · ${n.workers} workers` : (n.motivo ?? 'caído')}
+                    {(n.caidas ?? 0) > 0 ? ` · cayó ${n.caidas}×` : ''}</span>
                   <button type="button" className="boton boton-fantasma" disabled={!n.sano || cortando !== null || reproduciendo} onClick={() => void tumbar(n.nombre)} aria-label={`Tumbar ${n.nombre}`}>
                     {cortando === n.nombre ? 'Cortando…' : 'Tumbar'}
                   </button>

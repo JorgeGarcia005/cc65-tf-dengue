@@ -993,3 +993,15 @@ a {
   font-size: 0.95em;
   overflow-wrap: anywhere;
 }
+.nodo-reincorporado {
+  fill: none;
+  stroke: var(--rosa);
+  stroke-width: 3;
+  stroke-dasharray: 5 3;
+}
+.vista-admin .topo-caidas {
+  font-family: var(--mono);
+  font-size: 10px;
+  fill: var(--error);
+  font-weight: 700;
+}
