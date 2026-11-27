@@ -9,12 +9,24 @@ url="https://www.datosabiertos.gob.pe/sites/default/files/datos_abiertos_vigilan
 dir="$raiz/data/bronze"
 archivo="$dir/vigilancia_dengue_2000_2025.csv"
 manifiesto="$raiz/data/MANIFEST.sha256"
+rel_destino="data/bronze/$(basename "$archivo")"
 
 mkdir -p "$dir"
 
 if [ ! -s "$archivo" ]; then
   echo "Descargando $url"
-  curl -fL --retry 3 --retry-delay 5 -o "$archivo.part" "$url"
+  codigo=$(curl -sSL --retry 3 --retry-delay 5 -w '%{http_code}' -o "$archivo.part" "$url") || true
+  codigo=${codigo:-000}
+  if [ "$codigo" != "200" ]; then
+    rm -f "$archivo.part"
+    # El portal está detrás de un firewall de aplicaciones que responde 418 (o
+    # 403) a IPs de centros de datos y a clientes sin navegador (auditoría TB2 B1).
+    echo "ERROR: el portal respondió HTTP $codigo." >&2
+    echo "Descárgalo con un navegador desde una red doméstica o de la universidad:" >&2
+    echo "  $url" >&2
+    echo "guárdalo como $rel_destino y vuelve a correr este script: verificará el sha256." >&2
+    exit 1
+  fi
   mv -f "$archivo.part" "$archivo"
 fi
 

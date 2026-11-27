@@ -65,7 +65,7 @@ Número de PR `<n>` y rama `<rama>`. Si te dan solo uno, deduce el otro con
 - [ ] Implementación (8): >1M concurrente, entrenamiento paralelo, Docker, puertos, canales, API
 - [ ] Interfaz (5): SPA con menú, parámetros desde la UI, tiempo real, impacto social
 - [ ] Informe (2): estructura a)–j) del enunciado, APA7, Git Flow, Kanban
-- [ ] Video (2): end to end, ≤ 6 min, los tres integrantes
+- [ ] Video (2): end to end, ≤ 6 min, todos los integrantes
 
 ### Sustentación
 - [ ] ¿Un integrante podría explicar este PR en 1 minuto sin leer? Si no, pide una sección

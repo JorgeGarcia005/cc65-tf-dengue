@@ -79,6 +79,27 @@ func Ajustar(train []ingest.Registro, anoMin, minCasosDepto int) (*Esquema, erro
 	return e, nil
 }
 
+// NuevoEsquema arma un esquema con departamentos y estadísticas dados, sin
+// ajustarlo a datos: lo usa el gold sintético (cmd/gold -sintetico) para que
+// cmd/entrenar y la API funcionen sin el CSV del MINSA. Los departamentos se
+// ordenan y se agrega OTROS al final, como en Ajustar.
+func NuevoEsquema(anoMin, minCasosDepto int, departamentos []string, mediaEdad, desvEdad, mediaAno, desvAno float64) (*Esquema, error) {
+	if !(desvEdad > 0) || !(desvAno > 0) || math.IsInf(desvEdad, 0) || math.IsInf(desvAno, 0) {
+		return nil, errors.New("features: las desviaciones deben ser finitas y positivas")
+	}
+	e := &Esquema{AnoMin: anoMin, MinCasosDepto: minCasosDepto, MediaEdad: mediaEdad, DesvEdad: desvEdad,
+		MediaAno: mediaAno, DesvAno: desvAno}
+	for _, d := range departamentos {
+		if d != OtrosDepartamentos && !slices.Contains(e.Departamentos, d) {
+			e.Departamentos = append(e.Departamentos, d)
+		}
+	}
+	slices.Sort(e.Departamentos)
+	e.Departamentos = append(e.Departamentos, OtrosDepartamentos)
+	e.construirNombres()
+	return e, nil
+}
+
 func (e *Esquema) construirNombres() {
 	e.Nombres = []string{"edad_z"}
 	for _, t := range ingest.TramosEdad {

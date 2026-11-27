@@ -1,10 +1,13 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
+	"os"
 	"path/filepath"
 	"testing"
 
+	"github.com/JorgeGarcia005/cc65-tf-dengue/internal/features"
 	"github.com/JorgeGarcia005/cc65-tf-dengue/internal/gold"
 )
 
@@ -45,6 +48,16 @@ func TestGenerarSinteticoEscribeTrainTestYShardsContiguos(t *testing.T) {
 	}
 	if filas != train.N {
 		t.Fatalf("los shards suman %d filas, el train tiene %d", filas, train.N)
+	}
+	// Auditoría TB2 B1: también el esquema, con las mismas variables que el gold,
+	// para que cmd/entrenar escriba modelo.json y la API arranque.
+	b, err := os.ReadFile(filepath.Join(dir, "esquema.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var esq features.Esquema
+	if err := json.Unmarshal(b, &esq); err != nil || esq.Preparar() != nil || esq.D() != train.D {
+		t.Fatalf("esquema.json: %v (D %d, gold %d)", err, esq.D(), train.D)
 	}
 	if err := generarSintetico(dir, 100, 5, 512, 0.2); err == nil {
 		t.Error("5 shards para 1 bloque: esperaba error")

@@ -1,0 +1,31 @@
+# syntax=docker/dockerfile:1
+# Imagen de la Parte A (carga y preparación de datos): loader, gold y entrenar.
+# Va aparte de la imagen del clúster (cc65-tf) para que esa siga mínima (< 40 MB
+# en el CI) y porque solo se usa una vez, antes de levantar el servicio.
+#
+#   docker build -f deploy/Dockerfile.datos -t cc65-tf-datos .
+#
+# La usan los servicios loader, gold y entrenar del perfil «datos» de
+# deploy/docker-compose.yml: CSV bronze → silver → gold + shards → modelo.json.
+# El directorio de trabajo es /trabajo, donde el Compose monta ../data y
+# ../reports, así que las rutas por defecto de los tres comandos (data/…,
+# reports/…) son las mismas que en el anfitrión.
+
+# Etapa 1: compila los tres comandos (solo biblioteca estándar: no necesitan
+# los drivers de MongoDB y Redis, pero go.sum los lista y se descargan igual).
+FROM golang:1.24-bookworm AS construccion
+WORKDIR /src
+COPY go.mod go.su[m] ./
+RUN go mod download
+COPY cmd ./cmd
+COPY internal ./internal
+COPY docs/api ./docs/api
+RUN --mount=type=cache,target=/root/.cache/go-build \
+    CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /out/ ./cmd/loader ./cmd/gold ./cmd/entrenar
+
+# Etapa 2: solo los binarios, sin shell y sin privilegios.
+FROM gcr.io/distroless/static-debian12:nonroot
+COPY --from=construccion /out/ /usr/local/bin/
+WORKDIR /trabajo
+USER nonroot:nonroot
+CMD ["/usr/local/bin/loader"]

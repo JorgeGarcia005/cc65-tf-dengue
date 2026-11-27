@@ -28,11 +28,21 @@ fi
 echo "== MongoDB ($BASE)"
 salida=$("${COMPOSE[@]}" exec -T mongo mongosh --quiet "$BASE" --eval "
 const pedido = '$ID';
-for (const c of ['modelos', 'entrenamientos', 'predicciones']) {
+for (const c of ['modelos', 'entrenamientos', 'predicciones', 'usuarios']) {
   if (!db.getCollectionNames().includes(c)) { print('-- ' + c + ': (no existe)'); continue; }
   const col = db.getCollection(c);
   print('-- ' + c + ': ' + col.countDocuments() + ' documentos; índices ' +
     col.getIndexes().map(i => JSON.stringify(i.key) + (i.expireAfterSeconds ? ' TTL ' + i.expireAfterSeconds + 's' : '')).join(', '));
+}
+// Usuarios (ADR-0007, auditoría TB2 B11): cuántos hay por rol y que toda clave
+// esté guardada como hash PBKDF2, sin imprimir correos completos ni hashes.
+if (db.getCollectionNames().includes('usuarios')) {
+  const roles = db.usuarios.aggregate([{\$group: {_id: '\$rol', n: {\$sum: 1}}}, {\$sort: {_id: 1}}]).toArray()
+    .map(r => r._id + ' ' + r.n).join(', ');
+  const total = db.usuarios.countDocuments();
+  const pbkdf2 = db.usuarios.countDocuments({hash: /^pbkdf2-sha256\\\$[0-9]+\\\$/});
+  print('-- usuarios por rol: ' + roles + '; claves guardadas como hash PBKDF2-SHA256: ' + pbkdf2 + ' de ' + total);
+  if (total === 0 || pbkdf2 !== total) { print('FALTA: usuarios con la clave guardada como hash PBKDF2'); quit(1); }
 }
 const ent = pedido
   ? db.entrenamientos.findOne({_id: pedido})

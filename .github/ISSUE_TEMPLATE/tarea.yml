@@ -40,4 +40,4 @@ body:
     id: responsable
     attributes:
       label: Integrante responsable (defiende esta parte en la sustentación)
-      options: [Jorge, José, Marco]
+      options: [Jorge, José]

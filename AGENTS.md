@@ -74,7 +74,8 @@ SPA (D) ◄─ WebSocket/REST ─► C. coordinator (API HTTP + parameter server
   congelados. Las ramas de la TB2 salen de `integracion/tb2` y sus PR apuntan ahí; pasa a
   `develop` y `main` recién en el release `tb2` (#73).
 - Cada issue vive en el tablero Kanban del repo (Backlog → En curso → En revisión → Hecho).
-- Los tres integrantes deben tener commits propios en cada entregable.
+- Todos los integrantes deben tener commits propios en cada entregable (desde el 27/11/2026 el
+  equipo son Jorge y José: Marco se retiró del curso; el enunciado admite equipos de 2 a 3).
 
 ## 5. Roles del ecosistema multiagente
 
@@ -83,7 +84,7 @@ SPA (D) ◄─ WebSocket/REST ─► C. coordinator (API HTTP + parameter server
 | **Orquestador** | Claude (chat del Project "Concurrente TF") | Divide el trabajo en issues, asigna, decide cuando hay desacuerdo, integra |
 | **Implementador** | Claude Code | Escribe código + tests + sección del informe; abre el PR; responde al juez |
 | **Juez** | Antigravity (Gemini) | Revisa cada PR contra la rúbrica y estas reglas; emite veredicto con evidencia |
-| **Equipo humano** | Jorge, José, Marco | Aprueban el merge, entienden y defienden cada parte en la sustentación |
+| **Equipo humano** | Jorge, José | Aprueban el merge, entienden y defienden cada parte en la sustentación |
 
 Protocolo completo: [`docs/agentes/PROTOCOLO.md`](docs/agentes/PROTOCOLO.md). Resumen:
 
@@ -115,7 +116,7 @@ informe con PC3 corregido.
 **TB2 — dom 29/11/2026 23:30:** SPA integrada con la API (JWT, CORS); evaluación
 experimental (métricas del modelo, escalabilidad por número de nodos, respuesta a la
 pregunta de impacto social); informe final con PC3 + PC4 corregidos; video ≤ 6 min con los
-tres integrantes; sustentación en semana 15.
+integrantes; sustentación en semana 15.
 
 **Rúbrica TB2 (20):** Planteamiento 3 · Implementación 8 · Interfaz 5 · Informe 2 · Video 2.
 

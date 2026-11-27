@@ -165,6 +165,15 @@ jobs:
           docker compose -f deploy/docker-compose.yml up --exit-code-from coordinator
           python3 -c "import json; r = json.load(open('reports/entrenamiento_cluster.json')); assert r['igual_al_secuencial'] is True and r['epocas'] == 60 and len(r['cluster']['nodos']) == 3, r['cluster']; print('nodos:', [n['nombre'] for n in r['cluster']['nodos']], '· ms/época:', round(1000 * r['seg_por_epoca'], 1))"
           docker compose -f deploy/docker-compose.yml down
+      - name: Parte A en Docker (perfil datos) sin el CSV — gold sintético, entrenar y modelo.json
+        run: |
+          export USUARIO="$(id -u):$(id -g)"
+          mkdir -p data reports
+          docker compose -f deploy/docker-compose.yml --profile datos build loader
+          docker compose -f deploy/docker-compose.yml --profile datos run --rm --no-deps gold /usr/local/bin/gold -sintetico 60000 -shards 3
+          docker compose -f deploy/docker-compose.yml --profile datos run --rm --no-deps entrenar /usr/local/bin/entrenar -epocas 20 -salida reports/entrenamiento_sintetico.json
+          python3 -c "import json; m = json.load(open('data/gold/modelo.json')); assert len(m['pesos']) == 32 and len(m['esquema']['nombres']) == 31, m.keys(); print('modelo.json:', len(m['pesos']), 'pesos')"
+          rm -rf data/gold reports/entrenamiento_sintetico.json
       - name: Caída de un nodo a mitad del entrenamiento
         env:
           EPOCAS: "1000"

@@ -93,6 +93,49 @@ services:
       retries: 12
     networks: [cluster]
 
+  # ---- Parte A en Docker (perfil «datos», auditoría TB2 B1) ----------------
+  # Del CSV bronze al gold y al modelo inicial, en contenedores y en orden:
+  #   docker compose -f deploy/docker-compose.yml --profile datos up entrenar
+  # Requiere data/bronze/vigilancia_dengue_2000_2025.csv (make data o descarga
+  # manual, ver README). Escriben en ../data y ../reports del anfitrión con las
+  # mismas rutas que `go run` (directorio de trabajo /trabajo). No usan la red.
+  loader:
+    image: cc65-tf-datos
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.datos
+    profiles: [datos]
+    user: "${USUARIO:-65532:65532}"
+    command: ["/usr/local/bin/loader"]
+    volumes:
+      - ../data:/trabajo/data
+      - ../reports:/trabajo/reports
+    network_mode: none
+  gold:
+    image: cc65-tf-datos
+    profiles: [datos]
+    user: "${USUARIO:-65532:65532}"
+    command: ["/usr/local/bin/gold", "-shards=${NODOS:-3}"]
+    volumes:
+      - ../data:/trabajo/data
+      - ../reports:/trabajo/reports
+    network_mode: none
+    depends_on:
+      loader:
+        condition: service_completed_successfully
+  entrenar:
+    image: cc65-tf-datos
+    profiles: [datos]
+    user: "${USUARIO:-65532:65532}"
+    command: ["/usr/local/bin/entrenar", "-epocas=${EPOCAS:-600}", "-tasa=${TASA:-2}", "-lambda=${LAMBDA:-0.0001}"]
+    volumes:
+      - ../data:/trabajo/data
+      - ../reports:/trabajo/reports
+    network_mode: none
+    depends_on:
+      gold:
+        condition: service_completed_successfully
+
 volumes:
   mongo-datos: {}
 
