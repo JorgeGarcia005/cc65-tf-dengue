@@ -55,6 +55,65 @@ export interface DocumentoEvaluacion extends DocumentoRiesgo {
   brier_calibrado: number
 }
 
+// El resto de reports/evaluacion.json: lo que dibuja la vista de evaluación (#68).
+export interface Fuente {
+  archivo: string
+  sha256: string
+}
+
+export interface PuntoROC {
+  fpr: number
+  tpr: number
+  umbral_calibrado: number
+}
+
+/** Un decil de riesgo calibrado con la tasa observada y su IC 95 %. */
+export interface TramoCalibracion {
+  casos: number
+  riesgo_calibrado_medio: number
+  tasa_observada: number
+  ic95_inf: number
+  ic95_sup: number
+}
+
+export interface MedicionNodos {
+  nodos: number
+  seg_por_epoca: { media_recortada: number; ic95_inf: number; ic95_sup: number }
+  speedup: number
+  eficiencia: number
+  desglose_por_epoca: { fraccion_red_y_espera: number }
+}
+
+export interface Escalabilidad {
+  maquina: { cpu: string; so: string; arquitectura?: string; go?: string; num_cpu?: number; gomaxprocs?: number }
+  mediciones: MedicionNodos[]
+}
+
+export interface CorridaLatencia {
+  nombre: string
+  peticiones: number
+  errores: number
+  p50_ms: number
+  p95_ms: number
+  p99_ms: number
+  rps: number
+  cumple_limite: boolean
+}
+
+export interface LatenciaApi {
+  maquina: string
+  limite_p95_ms: number
+  corridas: CorridaLatencia[]
+}
+
+export interface DocumentoEvaluacionCompleto extends DocumentoEvaluacion {
+  fuentes: Fuente[]
+  roc: PuntoROC[]
+  calibracion: TramoCalibracion[]
+  escalabilidad: Escalabilidad
+  latencia_api: LatenciaApi
+}
+
 // GET /api/v1/modelo.
 export interface ModeloPublicado {
   version: string
