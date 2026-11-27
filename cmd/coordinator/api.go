@@ -49,9 +49,13 @@ func ejecutarAPI(ctx context.Context, ln, lnHTTP net.Listener, op opciones, mode
 	// observador no bloquea: Publicar encola sin esperar y descarta si un
 	// navegador va lento (ADR-0007); json.Marshal de un evento son µs.
 	hub := ws.NuevoHub(api.BuferWS)
+	grabar := op.grabar
 	op.observador = func(e cluster.Evento) {
 		if b, err := json.Marshal(e); err == nil {
 			hub.Publicar(b)
+		}
+		if grabar != nil {
+			grabar(e) // tampoco bloquea: cluster.Grabador descarta si su cola está llena
 		}
 	}
 	c, p, err := prepararCluster(ln, op, logf)

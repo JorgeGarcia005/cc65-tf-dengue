@@ -20,6 +20,8 @@ function leerGuardada(ahora: number): Sesion | null {
 interface ValorSesion {
   sesion: Sesion | null
   api: Cliente
+  /** URL base de la API (para abrir el WebSocket del panel admin). */
+  apiUrl: string
   /** Motivo del último cierre forzado (token vencido), para mostrarlo en el login. */
   aviso: string | null
   entrar(correo: string, clave: string): Promise<Sesion>
@@ -84,12 +86,13 @@ export function ProveedorSesion({
     () => ({
       sesion,
       api,
+      apiUrl,
       aviso,
       entrar,
       salir,
       puede: (...roles) => sesion !== null && roles.includes(sesion.rol),
     }),
-    [sesion, api, aviso, entrar, salir],
+    [sesion, api, apiUrl, aviso, entrar, salir],
   )
   return <Contexto.Provider value={valor}>{children}</Contexto.Provider>
 }

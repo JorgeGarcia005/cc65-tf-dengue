@@ -10,6 +10,7 @@ import (
 	"net"
 	"net/http"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -92,6 +93,14 @@ func TestServicioDemoCortarNodoPorLaAPI(t *testing.T) {
 	origen := "http://localhost:8081"
 	op := opciones{gold: dir, nodos: 3, lambda: 1e-3, tRegistro: 10 * time.Second, tEpoca: 10 * time.Second,
 		origenes: []string{origen}, demo: true}
+	// #69: con -eventos, el grabador recibe lo mismo que el WebSocket (modo réplica).
+	var muGrabados sync.Mutex
+	grabados := map[string]int{}
+	op.grabar = func(e cluster.Evento) {
+		muGrabados.Lock()
+		grabados[e.Tipo]++
+		muGrabados.Unlock()
+	}
 	base, dirCluster, _ := servicioDePrueba(t, modelo, op)
 	esperar(t, "la API responde", func() bool {
 		res, err := http.Get(base + "/healthz")
@@ -150,6 +159,22 @@ func TestServicioDemoCortarNodoPorLaAPI(t *testing.T) {
 	if s := m["sesgo"].(float64); math.Float64bits(s) != math.Float64bits(ref.W[train.D]) {
 		t.Fatalf("sesgo tras el corte %v, secuencial %v", s, ref.W[train.D])
 	}
+	// #69: el evento `modelo` del WebSocket, con el que el panel admin arma el
+	// sello «bit a bit», trae esos mismos pesos y la versión publicada.
+	em := esperarEvento(t, evs, "el modelo publicado", func(e cluster.Evento) bool { return e.Tipo == cluster.EvModelo })
+	if em.Detalle != m["version"] || len(em.Pesos) != len(ref.W) {
+		t.Fatalf("evento modelo: versión %q (publicada %v), %d pesos (secuencial %d)", em.Detalle, m["version"], len(em.Pesos), len(ref.W))
+	}
+	for j := range ref.W {
+		if math.Float64bits(em.Pesos[j]) != math.Float64bits(ref.W[j]) {
+			t.Fatalf("peso %d del evento modelo %v, secuencial %v", j, em.Pesos[j], ref.W[j])
+		}
+	}
+	muGrabados.Lock()
+	if grabados[cluster.EvEpoca] != epocas || grabados[cluster.EvDescarte] < 1 || grabados[cluster.EvReasignacion] < 1 || grabados[cluster.EvRegistro] < 3 {
+		t.Fatalf("eventos para -eventos: %v; quería %d épocas, descarte, reasignación y 3 registros", grabados, epocas)
+	}
+	muGrabados.Unlock()
 	_, c, _ := pedirJSON(t, "GET", base+"/api/v1/cluster", "")
 	if c["reasignaciones"].(float64) < 1 {
 		t.Fatalf("clúster sin reasignaciones: %v", c)

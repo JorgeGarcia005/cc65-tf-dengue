@@ -152,14 +152,21 @@ describe('sesión y destino tras el login (PR-79 H3, H4)', () => {
 
   it('un 401 tardío de la sesión anterior no cierra la sesión nueva', async () => {
     let responderViejo: (r: Response) => void = () => undefined
-    const f = vi
-      .fn()
-      .mockImplementationOnce(() => new Promise<Response>((ok) => (responderViejo = ok))) // con t1, queda pendiente
-      .mockResolvedValueOnce(okLogin('t2', 'analista')) // login nuevo
+    // Desde #69 el panel admin también pide datos al montar: el mock separa la
+    // petición de la sonda (la que queda pendiente con t1) del login y del resto.
+    let sondaEnCurso = false
+    const f = vi.fn((url: string, init?: RequestInit) => {
+      if (url.endsWith('/api/v1/auth/login')) return Promise.resolve(okLogin('t2', 'analista'))
+      if (sondaEnCurso) {
+        sondaEnCurso = false
+        expect(new Headers(init?.headers).get('Authorization')).toBe('Bearer t1')
+        return new Promise<Response>((ok) => (responderViejo = ok))
+      }
+      return Promise.resolve(new Response('{}'))
+    })
     vi.stubGlobal('fetch', f)
-    // Desde /admin, que no pide datos al montar (el inicio sí, desde #67): así
-    // la primera petición es la de la sonda con t1.
     montarConSonda('/admin', { rol: 'admin' })
+    sondaEnCurso = true
     await userEvent.click(screen.getByRole('button', { name: 'sonda' }))
     await userEvent.click(screen.getByRole('button', { name: 'Salir' }))
     await userEvent.type(screen.getByLabelText('Correo'), 'analista@vigia.pe')
@@ -173,7 +180,9 @@ describe('sesión y destino tras el login (PR-79 H3, H4)', () => {
   })
 
   it('admin sale desde /admin y el analista que entra aterriza en el inicio, no en 403', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(okLogin('t2', 'analista')))
+    // Una Response nueva por llamada: desde #69 el panel admin también pide
+    // datos al montar, y un cuerpo ya leído no se puede volver a leer.
+    vi.stubGlobal('fetch', vi.fn(() => Promise.resolve(okLogin('t2', 'analista'))))
     montarConSonda('/admin', { rol: 'admin' })
     await userEvent.click(screen.getByRole('button', { name: 'Salir' }))
     await userEvent.type(screen.getByLabelText('Correo'), 'analista@vigia.pe')

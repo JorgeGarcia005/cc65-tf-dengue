@@ -557,6 +557,7 @@ func (s *Servidor) entrenar(id string, p ParametrosEntrenamiento, base *Modelo) 
 			} else {
 				s.modelo.Store(m) // las claves de caché cambian con la versión
 				version = m.Version
+				s.anunciarModelo(m, p.Epocas)
 			}
 		}
 	}
@@ -565,6 +566,19 @@ func (s *Servidor) entrenar(id string, p ParametrosEntrenamiento, base *Modelo) 
 		s.op.Log("api: entrenamiento %s falló tras %v: %v", id, time.Since(inicio).Round(time.Millisecond), err)
 	} else {
 		s.op.Log("api: entrenamiento %s terminado en %v; modelo publicado %s", id, time.Since(inicio).Round(time.Millisecond), version)
+	}
+}
+
+// anunciarModelo publica por el WebSocket el modelo recién publicado (#69):
+// versión y pesos finales, para que el panel admin compare bit a bit contra
+// GET /api/v1/modelo. Los pesos de cada EvEpoca son los de antes de su
+// actualización, así que ese sello no podía armarse solo con ellos. Como el
+// observador del coordinador, Publicar no bloquea.
+func (s *Servidor) anunciarModelo(m *Modelo, epocas int) {
+	e := cluster.Evento{V: cluster.VersionEventos, Tipo: cluster.EvModelo, T: time.Now(), Epoca: epocas,
+		Detalle: m.Version, Pesos: append([]float64(nil), m.Pesos...)}
+	if b, err := json.Marshal(e); err == nil {
+		s.op.Hub.Publicar(b)
 	}
 }
 

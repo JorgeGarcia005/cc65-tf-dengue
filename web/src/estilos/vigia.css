@@ -896,3 +896,256 @@ a {
 .vista-evaluacion .no-cuadra {
   white-space: nowrap;
 }
+
+/* ---------- Panel admin en vivo (#69) ----------
+   Reglas con prefijo .vista-admin: no chocan con las de la vista de
+   evaluación (#68), que llega en otra rama. */
+.vista-admin {
+  display: grid;
+  gap: 24px;
+}
+.admin-columnas {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(440px, 100%), 1fr));
+  gap: 24px;
+  align-items: start;
+}
+.vista-admin > *,
+.admin-columnas > * {
+  min-width: 0;
+}
+.conexion {
+  display: inline-block;
+  margin: 0;
+  padding: 2px 10px;
+  border: 2px solid var(--tinta);
+  font-size: 13px;
+}
+.conexion-abierto {
+  background: var(--amarillo);
+}
+.conexion-reintentando,
+.conexion-cerrado {
+  background: var(--rosa-suave);
+}
+.formulario-fila-3 {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+@media (max-width: 480px) {
+  .formulario-fila-3 {
+    grid-template-columns: 1fr;
+  }
+}
+.vista-admin .grafico {
+  margin: 0;
+}
+.vista-admin .grafico svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-width: 560px;
+}
+.vista-admin .grafico-ancho svg {
+  max-width: none;
+}
+.vista-admin .grafico figcaption {
+  font-size: 12px;
+  margin-top: 6px;
+}
+.vista-admin .eje line {
+  stroke: var(--tinta);
+  stroke-width: 1.5;
+}
+.vista-admin .eje .eje-guia {
+  stroke: rgba(17, 17, 17, 0.12);
+  stroke-width: 1;
+}
+.vista-admin .eje text,
+.vista-admin .barra-nombre,
+.vista-admin .barra-valor,
+.vista-admin .topo-sub {
+  font-family: var(--mono);
+  font-size: 10px;
+  fill: var(--tinta-2);
+}
+.vista-admin .eje .eje-titulo,
+.vista-admin .topo-texto {
+  font-family: var(--mono);
+  font-size: 11px;
+  fill: var(--tinta);
+}
+.vista-admin .referencia {
+  stroke: var(--tinta-2);
+  stroke-width: 1.5;
+  stroke-dasharray: 5 4;
+}
+.vista-admin .serie {
+  fill: none;
+  stroke-width: 2.5;
+  stroke-linejoin: round;
+}
+.vista-admin .serie-rosa {
+  stroke: var(--rosa);
+}
+.vista-admin .marca-umbral {
+  fill: var(--amarillo);
+  stroke: var(--tinta);
+  stroke-width: 2;
+}
+.barra-sube {
+  fill: var(--rosa);
+}
+.barra-baja {
+  fill: var(--azul);
+}
+.enlace-sano {
+  stroke: var(--azul);
+  stroke-width: 2;
+}
+.enlace-caido {
+  stroke: var(--error);
+  stroke-width: 2;
+  stroke-dasharray: 4 4;
+}
+.coordinador {
+  fill: var(--amarillo);
+  stroke: var(--tinta);
+  stroke-width: 2;
+}
+.nodo-sano {
+  fill: #d6def9;
+  stroke: var(--tinta);
+  stroke-width: 2;
+}
+.nodo-caido {
+  fill: var(--rosa-suave);
+  stroke: var(--error);
+  stroke-width: 2.5;
+}
+.lista-nodos {
+  list-style: none;
+  margin: 12px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+}
+.lista-nodos li {
+  display: grid;
+  grid-template-columns: 12px minmax(0, 1fr) auto;
+  grid-template-areas:
+    'punto nombre boton'
+    'punto info boton';
+  column-gap: 10px;
+  align-items: center;
+  font-size: 14px;
+}
+.lista-nodos .boton {
+  grid-area: boton;
+  padding: 4px 12px;
+}
+.lista-nodos-nombre {
+  grid-area: nombre;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+.lista-nodos-info {
+  grid-area: info;
+  font-size: 12px;
+  color: var(--tinta-2);
+}
+.punto-sano,
+.punto-caido {
+  grid-area: punto;
+  width: 12px;
+  height: 12px;
+  border: 1.5px solid var(--tinta);
+  border-radius: 50%;
+}
+.punto-sano {
+  background: var(--azul);
+}
+.punto-caido {
+  background: var(--error);
+}
+.sello {
+  display: grid;
+  gap: 4px;
+  margin: 12px 0;
+  padding: 10px 12px;
+  border: 2px solid var(--tinta);
+  box-shadow: var(--sombra);
+}
+.sello strong {
+  font-family: var(--serif);
+  font-size: 28px;
+  font-weight: 400;
+}
+.sello-ok {
+  background: var(--amarillo);
+}
+.sello-mal {
+  background: var(--rosa-suave);
+}
+.bitacora {
+  list-style: none;
+  margin: 0;
+  padding: 8px 10px;
+  max-height: 320px;
+  overflow-y: auto;
+  border: 1.5px solid var(--tinta);
+  background: #fff;
+  font-family: var(--mono);
+  font-size: 12px;
+  display: grid;
+  gap: 2px;
+  align-content: start;
+}
+.bitacora li {
+  overflow-wrap: anywhere;
+}
+.bitacora time {
+  color: var(--tinta-2);
+}
+.bitacora-aviso {
+  background: rgba(245, 213, 71, 0.45);
+}
+.bitacora-alerta {
+  background: var(--rosa-suave);
+  font-weight: 700;
+}
+.vista-admin code {
+  font-family: var(--mono);
+  font-size: 0.95em;
+  overflow-wrap: anywhere;
+}
+.nodo-reincorporado {
+  fill: none;
+  stroke: var(--rosa);
+  stroke-width: 3;
+  stroke-dasharray: 5 3;
+}
+.vista-admin .topo-caidas {
+  font-family: var(--mono);
+  font-size: 10px;
+  fill: var(--error);
+  font-weight: 700;
+}
+
+/* Mapa en vivo del panel admin (#69): colores por clase, sin estilos inline (CSP). */
+.vista-admin .depto-vivo {
+  stroke: var(--tinta);
+  stroke-width: 0.6;
+}
+.vista-admin [data-grafico='mapa-vivo'] {
+  max-width: 340px;
+  margin: 0 auto;
+}
+.leyenda-baja {
+  background: var(--azul);
+}
+.leyenda-neutra {
+  background: var(--papel);
+}
+.leyenda-sube {
+  background: var(--rosa);
+}
