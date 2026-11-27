@@ -23,14 +23,20 @@ export function esDocumentoEvaluacionCompleto(v: unknown, version: number): v is
     todosFinitos(m, ['Exactitud', 'F1']) &&
     lista(d.fuentes, (f) => typeof f.archivo === 'string') &&
     lista(d.roc, (p) => todosFinitos(p, ['fpr', 'tpr'])) &&
-    lista(d.calibracion, (t) => Number.isInteger(t.casos) && todosFinitos(t, ['riesgo_calibrado_medio', 'tasa_observada', 'ic95_inf', 'ic95_sup'])) &&
+    lista(d.calibracion, (t) => Number.isInteger(t.casos) && (t.casos as number) >= 0 && todosFinitos(t, ['riesgo_calibrado_medio', 'tasa_observada', 'ic95_inf', 'ic95_sup'])) &&
     objeto(esc) &&
     objeto(esc.maquina) &&
+    // Todo campo de texto que se pinta como hijo de JSX se valida como string: un
+    // objeto ahí tumbaría React y dejaría la SPA en blanco (revisión previa H1).
     typeof esc.maquina.cpu === 'string' &&
+    typeof esc.maquina.so === 'string' &&
+    (esc.maquina.arquitectura === undefined || typeof esc.maquina.arquitectura === 'string') &&
+    (esc.maquina.num_cpu === undefined || finito(esc.maquina.num_cpu)) &&
     lista(
       esc.mediciones,
       (x) =>
         Number.isInteger(x.nodos) &&
+        (x.nodos as number) > 0 &&
         todosFinitos(x, ['speedup', 'eficiencia']) &&
         objeto(x.seg_por_epoca) &&
         todosFinitos(x.seg_por_epoca, ['media_recortada', 'ic95_inf', 'ic95_sup']) &&
@@ -38,6 +44,7 @@ export function esDocumentoEvaluacionCompleto(v: unknown, version: number): v is
         finito(x.desglose_por_epoca.fraccion_red_y_espera),
     ) &&
     objeto(lat) &&
+    typeof lat.maquina === 'string' &&
     finito(lat.limite_p95_ms) &&
     lista(lat.corridas, (c) => typeof c.nombre === 'string' && typeof c.cumple_limite === 'boolean' && todosFinitos(c, ['peticiones', 'errores', 'p50_ms', 'p95_ms', 'p99_ms', 'rps']))
   )

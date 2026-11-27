@@ -38,7 +38,8 @@ function Ejes({ x, y, tx, ty, fx, fy, ticksX }: { x: Escala; y: Escala; tx: stri
         <g key={`y${t}`}>
           <line className="eje-guia" x1={x0} x2={x1} y1={r1(y(t))} y2={r1(y(t))} />
           <text x={x0 - 6} y={r1(y(t)) + 4} textAnchor="end">
-            {fy(t)}
+            {/* Si los dos ejes parten de 0, el «0» del eje x basta: los dos rozaban en la esquina. */}
+            {t === 0 && x.domain()[0] === 0 ? '' : fy(t)}
           </text>
         </g>
       ))}
@@ -79,7 +80,9 @@ export function GraficoROC({ roc, auc, metricas }: { roc: PuntoROC[]; auc: numbe
 
 export function GraficoCalibracion({ tramos }: { tramos: TramoCalibracion[] }) {
   // Misma escala en los dos ejes: la diagonal es la calibración perfecta.
-  const max = Math.max(...tramos.flatMap((t) => [t.riesgo_calibrado_medio, t.ic95_sup]))
+  // El tope cubre predicho, observado e IC; el piso de 1 % evita un dominio [0, 0]
+  // que colapsaría todo al centro (revisión previa H3).
+  const max = Math.max(0.01, ...tramos.flatMap((t) => [t.riesgo_calibrado_medio, t.tasa_observada, t.ic95_sup]))
   const dom = scaleLinear().domain([0, max]).nice().domain() as [number, number]
   const x = ejeX(dom)
   const y = ejeY(dom)
@@ -109,7 +112,7 @@ export function GraficoNodos({ mediciones, serie }: { mediciones: MedicionNodos[
   const nMax = Math.max(...nodos)
   const valores = mediciones.map((m) => m[serie])
   const x = ejeX(nMin === nMax ? [nMin - 1, nMax + 1] : [nMin, nMax])
-  const tope = serie === 'speedup' ? Math.max(nMax, ...valores) : Math.max(1.1, ...valores)
+  const tope = serie === 'speedup' ? Math.max(x.domain()[1]!, ...valores) : Math.max(1.1, ...valores)
   const y = ejeY(scaleLinear().domain([0, tope]).nice().domain() as [number, number])
   const fmt = serie === 'speedup' ? formato.numero : pctEje
   const ultima = mediciones.at(-1)!
@@ -121,7 +124,8 @@ export function GraficoNodos({ mediciones, serie }: { mediciones: MedicionNodos[
     <svg viewBox={`0 0 ${A} ${H}`} width="100%" role="img" aria-label={etiqueta}>
       <Ejes x={x} y={y} tx="Nodos" ty={serie === 'speedup' ? 'Speedup' : 'Eficiencia'} fx={String} fy={fmt} ticksX={nodos} />
       {serie === 'speedup' ? (
-        <line className="referencia" data-serie="ideal" x1={x(nMin)} y1={y(nMin)} x2={x(nMax)} y2={y(nMax)} />
+        // Ideal y = x sobre todo el eje x (con una sola medición, el eje se abre a ±1 nodo).
+        <line className="referencia" data-serie="ideal" x1={x(x.domain()[0]!)} y1={y(Math.max(0, x.domain()[0]!))} x2={x(x.domain()[1]!)} y2={y(x.domain()[1]!)} />
       ) : (
         <line className="referencia" data-serie="ideal-eficiencia" x1={x.range()[0]} y1={y(1)} x2={x.range()[1]} y2={y(1)} />
       )}

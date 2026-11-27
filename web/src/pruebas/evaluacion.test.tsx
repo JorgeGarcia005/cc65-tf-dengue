@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from 'vitest'
 import App from '../App'
 import type { DocumentoEvaluacionCompleto, Metricas } from '../api/tipos'
 import { esDocumentoEvaluacionCompleto, filasConfusion, fuente, lecturaAuc, puntoUmbral, tramosDentroIC } from '../evaluacion/datos'
+import { GraficoCalibracion, GraficoNodos } from '../evaluacion/Graficos'
 import { formato } from '../mapa/datos'
 import { ProveedorSesion } from '../sesion/Sesion'
 
@@ -178,6 +179,11 @@ describe('evaluación: vista', () => {
       expect(pie, n).not.toBeNull()
       expect(pie!.textContent, n).toMatch(/reports\/\S+\.json/)
     }
+    // Todos los pies de gráfico, no solo el primero de cada sección (revisión previa H3).
+    const pies = document.querySelectorAll('figcaption')
+    expect(pies.length).toBe(document.querySelectorAll('figure svg').length)
+    for (const p of pies) expect(p.textContent).toMatch(/reports\/\S+\.json/)
+    expect(seccion('escalabilidad').querySelectorAll('[data-fuente]')).toHaveLength(2)
     expect(seccion('escalabilidad').querySelector('[data-fuente]')).toHaveTextContent(fuente(REAL, /bench_cluster_/)!)
     expect(seccion('latencia').querySelector('[data-fuente]')).toHaveTextContent(fuente(REAL, /bench_api_/)!)
 
@@ -206,6 +212,13 @@ describe('evaluación: vista', () => {
     ['sin escalabilidad', JSON.stringify({ ...REAL, escalabilidad: {} })],
     ['sin latencia', JSON.stringify({ ...REAL, latencia_api: { corridas: 'x' } })],
     ['sin fuentes', JSON.stringify({ ...REAL, fuentes: undefined })],
+    // Revisión previa H1: un objeto donde va texto tumbaría React («Objects are not valid as a React child»).
+    ['latencia_api.maquina como objeto', JSON.stringify({ ...REAL, latencia_api: { ...REAL.latencia_api, maquina: { nombre: 'deez' } } })],
+    ['escalabilidad.maquina.so ausente', JSON.stringify({ ...REAL, escalabilidad: { ...REAL.escalabilidad, maquina: { cpu: 'x' } } })],
+    ['escalabilidad.maquina.so como objeto', JSON.stringify({ ...REAL, escalabilidad: { ...REAL.escalabilidad, maquina: { cpu: 'x', so: {} } } })],
+    ['nodos = 0', JSON.stringify({ ...REAL, escalabilidad: { ...REAL.escalabilidad, mediciones: [{ ...REAL.escalabilidad.mediciones[0], nodos: 0 }] } })],
+    ['casos negativos', JSON.stringify({ ...REAL, calibracion: [{ ...REAL.calibracion[0], casos: -1 }] })],
+    ['nombre de corrida no texto', JSON.stringify({ ...REAL, latencia_api: { ...REAL.latencia_api, corridas: [{ ...REAL.latencia_api.corridas[0], nombre: 1 }] } })],
     ['otra versión de esquema', JSON.stringify({ ...REAL, version_esquema: 2 })],
   ])('%s → aviso de formato, sin pantalla en blanco', async (_, cuerpo) => {
     montar(new Response(cuerpo))
@@ -260,5 +273,38 @@ describe('evaluación: lógica pura', () => {
   it('rechaza métricas de la matriz que no son enteros', () => {
     expect(esDocumentoEvaluacionCompleto({ ...REAL, metricas_test: { ...REAL.metricas_test, VP: 1.5 } }, 1)).toBe(false)
     expect(esDocumentoEvaluacionCompleto({ ...REAL, roc: [{ fpr: 'a', tpr: 0 }] }, 1)).toBe(false)
+  })
+})
+
+describe('evaluación: orden y bordes de los gráficos (revisión previa H2 y H3)', () => {
+  it('las secciones siguen el orden de §4.2: ROC, calibración, matriz, escalabilidad, latencia', async () => {
+    montar()
+    await cargada()
+    expect([...document.querySelectorAll('[data-seccion]')].map((s) => s.getAttribute('data-seccion'))).toEqual(['roc', 'calibracion', 'confusion', 'escalabilidad', 'latencia'])
+  })
+
+  it('calibración con todo en cero: los puntos caen en el origen, no al centro', () => {
+    const cero = { casos: 1, riesgo_calibrado_medio: 0, tasa_observada: 0, ic95_inf: 0, ic95_sup: 0 }
+    const { container } = render(<GraficoCalibracion tramos={[cero, cero]} />)
+    const diag = container.querySelector('line[data-serie="perfecta"]')!
+    const p = container.querySelector('circle[data-serie="tramo"]')!
+    // La diagonal tiene largo: con un dominio [0, 0] colapsaba en un punto al centro.
+    expect(Number(diag.getAttribute('x2'))).toBeGreaterThan(Number(diag.getAttribute('x1')))
+    expect(p.getAttribute('cx')).toBe(diag.getAttribute('x1'))
+    expect(p.getAttribute('cy')).toBe(diag.getAttribute('y1'))
+  })
+
+  it('calibración: el eje cubre también la tasa observada', () => {
+    const t = { casos: 1, riesgo_calibrado_medio: 0.1, tasa_observada: 0.4, ic95_inf: 0.05, ic95_sup: 0.15 }
+    const { container } = render(<GraficoCalibracion tramos={[t]} />)
+    const diag = container.querySelector('line[data-serie="perfecta"]')!
+    // El punto observado (0,4) queda dentro del área: no por encima del extremo de la diagonal.
+    expect(Number(container.querySelector('circle[data-serie="tramo"]')!.getAttribute('cy'))).toBeGreaterThanOrEqual(Number(diag.getAttribute('y2')))
+  })
+
+  it('escalabilidad con una sola medición: la línea ideal cubre el eje', () => {
+    const { container } = render(<GraficoNodos mediciones={[REAL.escalabilidad.mediciones[0]!]} serie="speedup" />)
+    const ideal = container.querySelector('line[data-serie="ideal"]')!
+    expect(Number(ideal.getAttribute('x2'))).toBeGreaterThan(Number(ideal.getAttribute('x1')))
   })
 })

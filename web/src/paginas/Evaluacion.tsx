@@ -170,11 +170,11 @@ export default function Evaluacion() {
         </section>
       </div>
 
-      <div className="evaluacion-columnas">
-        <section className="tarjeta" data-seccion="confusion" aria-labelledby="titulo-confusion">
-          <h2 id="titulo-confusion" className="titulo-panel">
-            Matriz de confusión
-          </h2>
+      <section className="tarjeta" data-seccion="confusion" aria-labelledby="titulo-confusion">
+        <h2 id="titulo-confusion" className="titulo-panel">
+          Matriz de confusión
+        </h2>
+        <div className="evaluacion-columnas">
           <div className="tabla-envoltura">
             <table className="tabla confusion">
               <caption className="visualmente-oculto">Casos de prueba por clase real y clase predicha con el umbral {formato.decimal(m.Umbral)}</caption>
@@ -229,60 +229,11 @@ export default function Evaluacion() {
               <dd data-kpi="f1">{formato.decimal(m.F1)}</dd>
             </div>
           </dl>
-          <p className="nota">
-            Fuente: {ORIGEN} · <code>metricas_test</code> ({formato.entero(vp + fn + fp + vn)} casos)
-          </p>
-        </section>
-
-        <section className="tarjeta" data-seccion="latencia" aria-labelledby="titulo-latencia">
-          <h2 id="titulo-latencia" className="titulo-panel">
-            Latencia de la API
-          </h2>
-          <p className="bajada">
-            POST /api/v1/predicciones: p95 de {formato.uno(peorP95)} ms en la peor corrida, frente al límite de {formato.entero(lat.limite_p95_ms)} ms.
-          </p>
-          <div className="tabla-envoltura">
-            <table className="tabla">
-              <caption className="visualmente-oculto">Percentiles de latencia por corrida, en milisegundos</caption>
-              <thead>
-                <tr>
-                  <th scope="col">Corrida</th>
-                  <th scope="col">p50 (ms)</th>
-                  <th scope="col">p95 (ms)</th>
-                  <th scope="col">p99 (ms)</th>
-                  <th scope="col">Pet./s</th>
-                  <th scope="col">Errores</th>
-                  <th scope="col">Límite p95</th>
-                </tr>
-              </thead>
-              <tbody>
-                {lat.corridas.map((c) => (
-                  <tr key={c.nombre} data-corrida={c.nombre}>
-                    <td>
-                      {nombreCorrida(c.nombre)} · {formato.entero(c.peticiones)} pet.
-                    </td>
-                    <td>{formato.uno(c.p50_ms)}</td>
-                    <td>
-                      <strong>{formato.uno(c.p95_ms)}</strong>
-                    </td>
-                    <td>{formato.uno(c.p99_ms)}</td>
-                    <td>{formato.entero(c.rps)}</td>
-                    <td>{formato.entero(c.errores)}</td>
-                    <td>
-                      <span className={c.cumple_limite ? 'cuadra' : 'no-cuadra'}>
-                        {c.cumple_limite ? '✓ cumple' : '✗ no cumple'} &lt; {formato.entero(lat.limite_p95_ms)} ms
-                      </span>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          <p className="nota">
-            Fuente: <Fuente archivo={benchApi} /> (vía {ORIGEN} · <code>latencia_api</code>) · máquina {lat.maquina}
-          </p>
-        </section>
-      </div>
+        </div>
+        <p className="nota">
+          Fuente: {ORIGEN} · <code>metricas_test</code> ({formato.entero(vp + fn + fp + vn)} casos)
+        </p>
+      </section>
 
       <section className="tarjeta" data-seccion="escalabilidad" aria-labelledby="titulo-escalabilidad">
         <h2 id="titulo-escalabilidad" className="titulo-panel">
@@ -304,7 +255,7 @@ export default function Evaluacion() {
           <figure className="grafico">
             <GraficoNodos mediciones={med} serie="eficiencia" />
             <figcaption>
-              Eficiencia frente al 100 % (línea punteada). Fuente: {benchCluster ?? ORIGEN} (vía {ORIGEN} · <code>escalabilidad</code>)
+              Eficiencia frente al 100 % (línea punteada). Fuente: <Fuente archivo={benchCluster} /> (vía {ORIGEN} · <code>escalabilidad</code>)
             </figcaption>
           </figure>
         </div>
@@ -341,6 +292,55 @@ export default function Evaluacion() {
           Máquina: {maq.cpu} · {maq.so}
           {maq.arquitectura ? `/${maq.arquitectura}` : ''}
           {maq.num_cpu ? ` · ${maq.num_cpu} CPU lógicas` : ''}
+        </p>
+      </section>
+
+      <section className="tarjeta" data-seccion="latencia" aria-labelledby="titulo-latencia">
+        <h2 id="titulo-latencia" className="titulo-panel">
+          Latencia de la API
+        </h2>
+        <p className="bajada">
+          POST /api/v1/predicciones: p95 de {formato.uno(peorP95)} ms en la peor corrida, frente al límite de {formato.entero(lat.limite_p95_ms)} ms.
+        </p>
+        <div className="tabla-envoltura">
+          <table className="tabla">
+            <caption className="visualmente-oculto">Percentiles de latencia por corrida, en milisegundos</caption>
+            <thead>
+              <tr>
+                <th scope="col">Corrida</th>
+                <th scope="col">p50 (ms)</th>
+                <th scope="col">p95 (ms)</th>
+                <th scope="col">p99 (ms)</th>
+                <th scope="col">Pet./s</th>
+                <th scope="col">Errores</th>
+                <th scope="col">Límite p95</th>
+              </tr>
+            </thead>
+            <tbody>
+              {lat.corridas.map((c) => (
+                <tr key={c.nombre} data-corrida={c.nombre}>
+                  <td>
+                    {nombreCorrida(c.nombre)} · {formato.entero(c.peticiones)} pet.
+                  </td>
+                  <td>{formato.uno(c.p50_ms)}</td>
+                  <td>
+                    <strong>{formato.uno(c.p95_ms)}</strong>
+                  </td>
+                  <td>{formato.uno(c.p99_ms)}</td>
+                  <td>{formato.entero(c.rps)}</td>
+                  <td>{formato.entero(c.errores)}</td>
+                  <td>
+                    <span className={c.cumple_limite ? 'cuadra' : 'no-cuadra'}>
+                      {c.cumple_limite ? '✓ cumple' : '✗ no cumple'} &lt; {formato.entero(lat.limite_p95_ms)} ms
+                    </span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <p className="nota">
+          Fuente: <Fuente archivo={benchApi} /> (vía {ORIGEN} · <code>latencia_api</code>) · máquina {lat.maquina}
         </p>
       </section>
     </div>
