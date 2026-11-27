@@ -771,3 +771,128 @@ a {
   max-width: 60ch;
   margin: 0 0 16px;
 }
+
+/* ---------- Evaluación (#68) ---------- */
+.vista-evaluacion {
+  display: grid;
+  gap: 24px;
+}
+.evaluacion-columnas {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(420px, 100%), 1fr));
+  gap: 24px;
+  align-items: start;
+}
+/* Mismo criterio que el inicio (PR-85 H2): los hijos del grid se encogen y las
+   tablas anchas se desplazan dentro de su tarjeta, no en la página. */
+.vista-evaluacion > *,
+.evaluacion-columnas > * {
+  min-width: 0;
+}
+.visualmente-oculto {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+.grafico {
+  margin: 0;
+}
+.grafico svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-width: 560px;
+}
+.grafico figcaption {
+  font-size: 12px;
+  margin-top: 6px;
+  overflow-wrap: anywhere;
+}
+.eje line {
+  stroke: var(--tinta);
+  stroke-width: 1.5;
+}
+.eje .eje-guia {
+  stroke: rgba(17, 17, 17, 0.12);
+  stroke-width: 1;
+}
+.eje text {
+  font-family: var(--mono);
+  font-size: 10px;
+  fill: var(--tinta-2);
+}
+.eje .eje-titulo {
+  font-size: 11px;
+  fill: var(--tinta);
+}
+.referencia {
+  stroke: var(--tinta-2);
+  stroke-width: 1.5;
+  stroke-dasharray: 5 4;
+}
+.serie {
+  fill: none;
+  stroke-width: 2.5;
+  stroke-linejoin: round;
+}
+.serie-rosa {
+  stroke: var(--rosa);
+}
+.serie-azul {
+  stroke: var(--azul);
+}
+.punto-azul {
+  fill: var(--azul);
+  stroke: var(--tinta);
+  stroke-width: 1;
+}
+.ic {
+  stroke: var(--azul);
+  stroke-width: 2;
+}
+.marca-umbral {
+  fill: var(--amarillo);
+  stroke: var(--tinta);
+  stroke-width: 2;
+}
+.grafico-leyenda {
+  font-family: var(--serif);
+  font-size: 22px;
+  fill: var(--tinta);
+}
+.confusion td {
+  font-size: 16px;
+  font-weight: 700;
+}
+.confusion abbr {
+  font-size: 11px;
+  font-weight: 400;
+  text-decoration: none;
+  margin-right: 4px;
+}
+.confusion .acierto {
+  background: #d6def9;
+}
+.confusion .fallo {
+  background: var(--rosa-suave);
+}
+.vista-evaluacion code {
+  font-family: var(--mono);
+  font-size: 0.95em;
+}
+.vista-evaluacion .nota {
+  overflow-wrap: anywhere;
+}
+.confusion {
+  margin-bottom: 16px;
+}
+.vista-evaluacion .cuadra,
+.vista-evaluacion .no-cuadra {
+  white-space: nowrap;
+}
