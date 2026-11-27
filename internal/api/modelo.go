@@ -30,8 +30,10 @@ type Modelo struct {
 	Umbral      float64           `json:"umbral"`
 	AjustePrior float64           `json:"ajuste_prior"`
 	Generado    string            `json:"generado"`
-	// Version identifica los pesos: los primeros 12 hex del sha256 del JSON.
-	// La caché de predicciones la usa en la clave (#29).
+	// Version identifica el modelo: los primeros 12 hex del sha256 del JSON de
+	// pesos, esquema, umbral y ajuste, sin Generado (auditoría TB2 B2): reentrenar
+	// con los mismos pesos da la misma versión. La caché de predicciones la usa
+	// en la clave (#29).
 	Version string `json:"-"`
 }
 
@@ -57,7 +59,11 @@ func CargarModelo(b []byte) (*Modelo, error) {
 	if m.Umbral <= 0 || m.Umbral >= 1 {
 		return nil, fmt.Errorf("modelo: umbral %v fuera de (0, 1)", m.Umbral)
 	}
-	m.Version = version(b)
+	v, err := versionDe(&m)
+	if err != nil {
+		return nil, err
+	}
+	m.Version = v
 	return &m, nil
 }
 
@@ -67,11 +73,11 @@ func (m *Modelo) conPesos(w []float64, generado string) (*Modelo, error) {
 	if len(w) != m.Esquema.D()+1 {
 		return nil, fmt.Errorf("el entrenamiento devolvió %d pesos, se esperaban %d", len(w), m.Esquema.D()+1)
 	}
-	b, err := json.Marshal(n)
+	v, err := versionDe(n)
 	if err != nil {
 		return nil, err
 	}
-	n.Version = version(b)
+	n.Version = v
 	return n, nil
 }
 
@@ -101,9 +107,20 @@ func validarNumeros(m *Modelo) error {
 	return nil
 }
 
-func version(b []byte) string {
+// versionDe calcula la versión sobre lo que define las predicciones. Generado
+// queda fuera: es un metadato de cuándo se escribió, no de qué predice.
+func versionDe(m *Modelo) (string, error) {
+	b, err := json.Marshal(struct {
+		Pesos       []float64         `json:"pesos"`
+		Esquema     *features.Esquema `json:"esquema"`
+		Umbral      float64           `json:"umbral"`
+		AjustePrior float64           `json:"ajuste_prior"`
+	}{m.Pesos, m.Esquema, m.Umbral, m.AjustePrior})
+	if err != nil {
+		return "", fmt.Errorf("modelo: %w", err)
+	}
 	h := sha256.Sum256(b)
-	return hex.EncodeToString(h[:6])
+	return hex.EncodeToString(h[:6]), nil
 }
 
 // Consulta es el cuerpo de POST /api/v1/predicciones. Usa los mismos campos y

@@ -346,7 +346,9 @@
             "exec": [
               "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
               "pm.test(\"responde en menos de 100 ms\", function () { pm.expect(pm.response.responseTime).to.be.below(100); });",
-              "pm.test(\"nodos es un arreglo\", function () { pm.expect(pm.response.json().nodos).to.be.an(\"array\"); });"
+              "pm.test(\"nodos es un arreglo\", function () { pm.expect(pm.response.json().nodos).to.be.an(\"array\"); });",
+              "// Auditoría TB2 B3: en Compose los nodos se llaman como su contenedor (os.Hostname); se toma el primero sano para «Cortar un nodo».",
+              "const sano = (pm.response.json().nodos || []).find(function (n) { return n.sano; }); if (sano) { pm.collectionVariables.set(\"nodo\", sano.nombre); }"
             ]
           }
         }
