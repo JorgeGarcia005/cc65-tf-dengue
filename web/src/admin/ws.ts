@@ -103,13 +103,23 @@ export function conectar(op: OpcionesConexion): { cerrar(): void } {
       return
     }
     if (terminado) return
-    const s = crearWS(urlWS(op.apiUrl, ticket))
+    let s: WSLike
+    try {
+      s = crearWS(urlWS(op.apiUrl, ticket))
+    } catch (e) {
+      // URL mala o ws:// desde https:// (SecurityError): reintentar no lo arregla (PR-87 H3).
+      terminado = true
+      avisar({ estado: 'cerrado', motivo: e instanceof Error ? e.message : String(e) })
+      return
+    }
     socket = s
     s.onopen = () => {
+      if (terminado) return
       intentos = 0
       avisar({ estado: 'abierto' })
     }
     s.onmessage = (m) => {
+      if (terminado) return // un mensaje en vuelo tras cerrar() ya no se entrega
       let v: unknown
       try {
         v = typeof m.data === 'string' ? JSON.parse(m.data) : undefined

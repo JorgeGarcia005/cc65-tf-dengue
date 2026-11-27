@@ -11,7 +11,7 @@ const registros = [
   ev({ tipo: 'registro', nodo: 'nodo-1', nodos: [nodo('nodo-0', true, 0), nodo('nodo-1', true, 0)] }),
   ev({ tipo: 'registro', nodo: 'nodo-2', nodos: [nodo('nodo-0', true, 0), nodo('nodo-1', true, 0), nodo('nodo-2', true, 0)] }),
 ]
-const aplicar = (evs: EventoCluster[], inicial: EstadoPanel = ESTADO_INICIAL) => evs.reduce(reducir, inicial)
+const aplicar = (evs: EventoCluster[], inicial: EstadoPanel = ESTADO_INICIAL) => evs.reduce((e, x) => reducir(e, x), inicial)
 
 describe('esEvento', () => {
   it('acepta un evento del coordinador y rechaza lo que no lo es', () => {
@@ -144,7 +144,7 @@ describe('conCluster', () => {
 describe('evento modelo y sello bit a bit', () => {
   it('guarda la versión y los pesos finales que anuncia la API', () => {
     const e = aplicar([...registros, ev({ tipo: 'epoca', epoca: 1, perdida: 0.69, pesos: [0, 0] }), ev({ tipo: 'fin', epoca: 1 }), ev({ tipo: 'modelo', epoca: 1, detalle: 'abc123', pesos: [0.1, -0.2] })])
-    expect(e.modelo).toEqual({ version: 'abc123', pesos: [0.1, -0.2] })
+    expect(e.modelo).toEqual({ version: 'abc123', pesos: [0.1, -0.2], origen: 'vivo' })
     expect(e.bitacora.at(-1)!.texto).toContain('abc123')
     // Los de la época siguen siendo los de la época: el modelo final no los pisa.
     expect(e.pesos).toEqual([0, 0])
@@ -201,5 +201,39 @@ describe('caídas por nodo', () => {
     expect(n2.sano).toBe(true)
     expect(n2.caidas).toBe(1)
     expect(nodosOrdenados(e).find((n) => n.nombre === 'nodo-0')!.caidas ?? 0).toBe(0)
+  })
+})
+
+// PR-87 H1: el evento «modelo» de una réplica no es el modelo publicado ahora.
+describe('origen del modelo anunciado (PR-87 H1)', () => {
+  it('reducir marca si el modelo vino en vivo (por defecto) o de una réplica', () => {
+    const m = ev({ tipo: 'modelo', epoca: 1, detalle: 'v', pesos: [1] })
+    expect(reducir(ESTADO_INICIAL, m).modelo).toEqual({ version: 'v', pesos: [1], origen: 'vivo' })
+    expect(reducir(ESTADO_INICIAL, m, 'replica').modelo).toEqual({ version: 'v', pesos: [1], origen: 'replica' })
+  })
+})
+
+// PR-87 H2: Go serializa con el huso del servidor y la SPA con UTC.
+describe('horaBitacora (PR-87 H2)', () => {
+  it('el mismo instante en UTC y en -05:00 se muestra igual', async () => {
+    const { horaBitacora } = await import('../admin/estado')
+    expect(horaBitacora('2026-11-27T03:51:17.000Z')).toBe(horaBitacora('2026-11-26T22:51:17.000-05:00'))
+    expect(horaBitacora('2026-11-27T03:51:17.000Z')).toMatch(/^\d{2}:\d{2}:\d{2}$/)
+  })
+
+  it('una marca que no es fecha cae al recorte en crudo', async () => {
+    const { horaBitacora } = await import('../admin/estado')
+    expect(horaBitacora('no-es-fecha-12:34:56')).toBe('no-es-fecha-12:34:56'.slice(11, 19))
+  })
+})
+
+// PR-87 H3.4: la vista interpola carga y workers; el coordinador siempre los manda.
+describe('validación de los nodos (PR-87 H3)', () => {
+  it('un nodo sin carga o sin workers no es un evento válido', () => {
+    const { carga: _c, ...sinCarga } = nodo('nodo-0')
+    const { workers: _w, ...sinWorkers } = nodo('nodo-0')
+    expect(esEvento(ev({ tipo: 'registro', nodo: 'nodo-0', nodos: [nodo('nodo-0')] }))).toBe(true)
+    expect(esEvento({ ...ev({ tipo: 'registro' }), nodos: [sinCarga] })).toBe(false)
+    expect(esEvento({ ...ev({ tipo: 'registro' }), nodos: [sinWorkers] })).toBe(false)
   })
 })

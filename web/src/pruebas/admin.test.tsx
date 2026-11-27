@@ -36,7 +36,7 @@ interface Llamada {
   cuerpo?: unknown
 }
 
-function montar(opciones: { modelo?: object; rechazarRitmo?: boolean } = {}) {
+function montar(opciones: { modelo?: object; rechazarRitmo?: boolean; ticket?: string } = {}) {
   WSFalso.instancias = []
   sessionStorage.setItem('vigia.sesion', JSON.stringify({ token: 't', correo: 'admin@vigia.pe', rol: 'admin', expira: AHORA + 3600 }))
   const llamadas: Llamada[] = []
@@ -48,7 +48,7 @@ function montar(opciones: { modelo?: object; rechazarRitmo?: boolean } = {}) {
     llamadas.push({ url, metodo, cuerpo })
     if (url.endsWith('/api/v1/cluster')) return json(CLUSTER)
     if (url.endsWith('/api/v1/modelo')) return json(opciones.modelo ?? MODELO)
-    if (url.endsWith('/api/v1/ws/ticket')) return json({ ticket: `tk-${llamadas.length}`, expira: AHORA + 30 })
+    if (url.endsWith('/api/v1/ws/ticket')) return json({ ticket: opciones.ticket ?? `tk-${llamadas.length}`, expira: AHORA + 30 })
     if (url.endsWith('/api/v1/entrenamientos') && metodo === 'POST') {
       if (opciones.rechazarRitmo && (cuerpo as { ritmo_ms?: number }).ritmo_ms) return json({ error: 'ritmo_ms solo existe en modo demo (coordinador con -demo)' }, 400)
       entrenamiento = { ...entrenamiento, epocas: (cuerpo as { epocas: number }).epocas }
@@ -67,7 +67,13 @@ function montar(opciones: { modelo?: object; rechazarRitmo?: boolean } = {}) {
       </MemoryRouter>
     </ProveedorSesion>,
   )
-  return { llamadas }
+  return {
+    llamadas,
+    /** El próximo GET /entrenamientos/{id} lo devuelve terminado. */
+    terminar: () => {
+      entrenamiento = { ...entrenamiento, estado: 'terminado', epoca: entrenamiento.epocas }
+    },
+  }
 }
 
 async function conectado() {
@@ -202,5 +208,66 @@ describe('panel admin en vivo', () => {
     )
     expect(await screen.findByRole('heading', { name: 'Esta vista no es para tu rol' })).toBeInTheDocument()
     expect(WSFalso.instancias).toHaveLength(0)
+  })
+})
+
+describe('panel admin: revisión PR-87', () => {
+  // H1: la réplica no toca la API ni arrastra el entrenamiento en vivo.
+  it('una réplica terminada en «modelo» no pide GET /modelo, no pinta sello ni arrastra «/ N»', async () => {
+    const { llamadas, terminar } = montar()
+    await conectado()
+    fireEvent.change(screen.getByLabelText('Épocas'), { target: { value: '15' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Lanzar entrenamiento' }))
+    await screen.findByRole('button', { name: 'Entrenando…' })
+    expect(document.querySelector('[data-kpi="epoca"]')).toHaveTextContent('/ 15')
+
+    const lineas = [
+      { v: 1, tipo: 'epoca', t: T, epoca: 1, perdida: 0.7, pesos: [0, 0, 0] },
+      { v: 1, tipo: 'modelo', t: T, epoca: 1, detalle: 'v-historica', pesos: [0.1, -0.2, 0] },
+    ]
+    fireEvent.change(screen.getByLabelText('Archivo .jsonl'), { target: { files: [new File([lineas.map((l) => JSON.stringify(l)).join('\n')], 'ev.jsonl')] } })
+    await screen.findByText('ev.jsonl: 2 eventos válidos')
+    const modelosAntes = llamadas.filter((l) => l.url.endsWith('/api/v1/modelo')).length
+    // El botón de réplica está deshabilitado mientras hay un entrenamiento en curso: se libera al terminar.
+    WSFalso.instancias[0]!.emitir({ tipo: 'modelo', epoca: 15, detalle: 'v-final', pesos: PESOS_FINALES })
+    await waitFor(() => expect(document.querySelector('[data-sello]')).toHaveAttribute('data-sello', 'ok'))
+    terminar()
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Reproducir' })).toBeEnabled(), { timeout: 4000 })
+    const modelosTrasVivo = llamadas.filter((l) => l.url.endsWith('/api/v1/modelo')).length
+    expect(modelosTrasVivo).toBeGreaterThan(modelosAntes)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Reproducir' }))
+    await waitFor(() => expect(seccion('bitacora')).toHaveTextContent('fin de la réplica'))
+    await new Promise((r) => setTimeout(r, 50))
+    expect(llamadas.filter((l) => l.url.endsWith('/api/v1/modelo')).length).toBe(modelosTrasVivo)
+    expect(document.querySelector('[data-sello]')).toBeNull()
+    expect(document.querySelector('[data-kpi="epoca"]')).toHaveTextContent(/^1$/)
+    expect(document.querySelector('[data-kpi="estado"]')).not.toHaveTextContent('terminado')
+  }, 10_000)
+
+  // H3.3.
+  it('un ticket vacío no abre el WebSocket', async () => {
+    montar({ ticket: '' })
+    await new Promise((r) => setTimeout(r, 50))
+    expect(WSFalso.instancias).toHaveLength(0)
+    await waitFor(() => expect(seccion('bitacora')).toHaveTextContent('no devolvió un ticket'))
+  })
+
+  it('una tasa infinita no se envía', async () => {
+    const { llamadas } = montar()
+    await conectado()
+    fireEvent.change(screen.getByLabelText('Tasa'), { target: { value: 'Infinity' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Lanzar entrenamiento' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent('Revisa los parámetros')
+    expect(llamadas.some((l) => l.metodo === 'POST' && l.url.endsWith('/api/v1/entrenamientos'))).toBe(false)
+  })
+
+  // H3.2: con 2 o 4 nodos, el nodo de abajo quedaba con «cayó N×» fuera del viewBox.
+  it.each([2, 4])('topología con %i nodos caídos y vueltos: ningún texto sale del viewBox', async (n) => {
+    const { Topologia } = await import('../admin/Graficos')
+    const nodos = Array.from({ length: n }, (_, i) => ({ ...nodo(`nodo-${i}`), caidas: 1 }))
+    const { container } = render(<Topologia nodos={nodos} />)
+    const alto = Number(container.querySelector('svg')!.getAttribute('viewBox')!.split(' ')[3])
+    for (const t of container.querySelectorAll('text')) expect(Number(t.getAttribute('y'))).toBeLessThanOrEqual(alto - 4)
   })
 })

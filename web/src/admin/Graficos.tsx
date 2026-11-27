@@ -91,7 +91,8 @@ export function BarrasPesos({ pesos, nombres }: { pesos: number[] | null; nombre
 /** Estrella: el coordinador al centro y los nodos alrededor; en rojo si se cayeron. */
 export function Topologia({ nodos }: { nodos: NodoVista[] }) {
   const A = 360
-  const H = 300
+  // 320 de alto: con 2 o 4 nodos, el de abajo y su «cayó N×» quedan dentro (PR-87 H3).
+  const H = 320
   const cx = A / 2
   const cy = H / 2
   const radio = 105

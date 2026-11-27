@@ -191,3 +191,35 @@ describe('conectar', () => {
     expect(p.sockets).toHaveLength(0)
   })
 })
+
+// PR-87 H3.1.
+describe('conectar: casos borde (PR-87 H3)', () => {
+  it('si new WebSocket lanza (URL mala, ws:// desde https://), queda cerrado con motivo y sin rechazo suelto', async () => {
+    const estados: { estado: string; motivo?: string }[] = []
+    const r = relojManual()
+    conectar({
+      apiUrl: 'http://x',
+      pedirTicket: () => Promise.resolve('t'),
+      crearWS: () => {
+        throw new DOMException('insecure', 'SecurityError')
+      },
+      alEvento: () => undefined,
+      alEstado: (e) => estados.push(e as { estado: string; motivo?: string }),
+      reloj: r.reloj,
+    })
+    await tick()
+    expect(estados.at(-1)).toMatchObject({ estado: 'cerrado', motivo: expect.stringContaining('insecure') })
+    expect(r.pendientes()).toEqual([])
+  })
+
+  it('tras cerrar(), un mensaje o un open en vuelo del socket viejo no se entregan', async () => {
+    const m = montar()
+    await tick()
+    const s = m.sockets[0]!
+    m.c.cerrar()
+    s.abrir()
+    s.recibir(JSON.stringify(EVENTO))
+    expect(m.eventos).toEqual([])
+    expect(m.estados).not.toContain('abierto')
+  })
+})

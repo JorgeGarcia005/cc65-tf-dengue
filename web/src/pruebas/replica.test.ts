@@ -94,7 +94,7 @@ describe('reproducir', () => {
     reproducir(EVENTOS, 16, (e) => (estado = reducir(estado, e)), { reloj: r.reloj, alTerminar: () => (terminado = true) })
     r.avanzar(10 * MAX_PAUSA_MS)
     expect(terminado).toBe(true)
-    expect(estado).toEqual(EVENTOS.reduce(reducir, ESTADO_INICIAL))
+    expect(estado).toEqual(EVENTOS.reduce((e, x) => reducir(e, x), ESTADO_INICIAL))
   })
 
   it('detener() corta la reproducción', () => {

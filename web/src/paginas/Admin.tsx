@@ -8,6 +8,7 @@ import {
   ESTADO_INICIAL,
   esEstadoCluster,
   esModeloParaSello,
+  horaBitacora,
   nodosOrdenados,
   reducir,
   reiniciarEntrenamiento,
@@ -16,6 +17,7 @@ import {
   type EventoCluster,
   type ModeloParaSello,
   type Nivel,
+  type Origen,
   type Sello,
 } from '../admin/estado'
 import { conectar, type EstadoConexion } from '../admin/ws'
@@ -28,7 +30,7 @@ import { useSesion } from '../sesion/Sesion'
 // sirve la API. Sin clúster, reproduce un eventos_*.jsonl con el mismo reducer.
 
 type Accion =
-  | { tipo: 'evento'; evento: EventoCluster }
+  | { tipo: 'evento'; evento: EventoCluster; origen?: Origen }
   | { tipo: 'anotar'; texto: string; nivel: Nivel }
   | { tipo: 'cluster'; cluster: Parameters<typeof conCluster>[1] }
   | { tipo: 'reiniciar' }
@@ -37,7 +39,7 @@ type Accion =
 function reductor(e: EstadoPanel, a: Accion): EstadoPanel {
   switch (a.tipo) {
     case 'evento':
-      return reducir(e, a.evento)
+      return reducir(e, a.evento, a.origen)
     case 'anotar':
       return anotar(e, a.texto, a.nivel)
     case 'cluster':
@@ -118,7 +120,7 @@ export default function Admin() {
       apiUrl,
       pedirTicket: async () => {
         const r = await api.post<{ ticket?: unknown }>('/api/v1/ws/ticket')
-        if (typeof r?.ticket !== 'string') throw new Error('la API no devolvió un ticket')
+        if (typeof r?.ticket !== 'string' || r.ticket === '') throw new Error('la API no devolvió un ticket')
         return r.ticket
       },
       alEvento: (e) => {
@@ -134,13 +136,18 @@ export default function Admin() {
   }, [api, apiUrl])
 
   // Mientras hay un entrenamiento en curso: su estado y el de los nodos (la carga cambia al reasignar).
+  // Depende del id y del estado, no del objeto: cada sondeo trae uno nuevo y
+  // recrear el intervalo cada 2 s lo desfasaba (PR-87 H3).
+  const idEntrenamiento = entrenamiento?.id
+  const enCursoApi = entrenamiento?.estado === 'en_curso'
   useEffect(() => {
-    if (!entrenamiento || entrenamiento.estado !== 'en_curso') return
+    if (!idEntrenamiento || !enCursoApi) return
+    let vivo = true
     const id = window.setInterval(() => {
       api
-        .get<unknown>(`/api/v1/entrenamientos/${encodeURIComponent(entrenamiento.id)}`)
+        .get<unknown>(`/api/v1/entrenamientos/${encodeURIComponent(idEntrenamiento)}`)
         .then((t) => {
-          if (!esEntrenamiento(t)) return
+          if (!vivo || !esEntrenamiento(t)) return
           setEntrenamiento(t)
           if (t.estado === 'fallido') despachar({ tipo: 'anotar', nivel: 'alerta', texto: `el entrenamiento falló: ${t.error ?? 'sin detalle'}` })
           if (t.estado === 'terminado') despachar({ tipo: 'anotar', nivel: 'info', texto: `entrenamiento terminado: modelo ${t.version_modelo ?? '¿?'}` })
@@ -148,19 +155,28 @@ export default function Admin() {
         .catch(() => undefined)
       api
         .get<unknown>('/api/v1/cluster')
-        .then((c) => esEstadoCluster(c) && despachar({ tipo: 'cluster', cluster: c }))
+        .then((c) => vivo && esEstadoCluster(c) && despachar({ tipo: 'cluster', cluster: c }))
         .catch(() => undefined)
     }, SONDEO_MS)
-    return () => window.clearInterval(id)
-  }, [api, entrenamiento])
+    return () => {
+      vivo = false
+      window.clearInterval(id)
+    }
+  }, [api, idEntrenamiento, enCursoApi])
 
   // Al anunciarse el modelo por el WebSocket: sello bit a bit contra GET /api/v1/modelo.
+  // Solo el modelo anunciado en vivo: el de una réplica es de otra corrida y no
+  // se compara con el publicado ahora (PR-87 H1).
   useEffect(() => {
-    if (!estado.modelo || enReplica.current) return
+    if (!estado.modelo || estado.modelo.origen !== 'vivo') return
     const anunciado = estado.modelo
+    let vivo = true
     cargarModelo()
-      .then((m) => setSello(selloBitABit(anunciado, m)))
-      .catch((e: unknown) => setSello({ ok: false, motivo: e instanceof Error ? e.message : String(e) }))
+      .then((m) => vivo && setSello(selloBitABit(anunciado, m)))
+      .catch((e: unknown) => vivo && setSello({ ok: false, motivo: e instanceof Error ? e.message : String(e) }))
+    return () => {
+      vivo = false
+    }
   }, [estado.modelo, cargarModelo])
 
   async function lanzar(ev: FormEvent) {
@@ -170,7 +186,7 @@ export default function Admin() {
     const epocas = Number(form.epocas)
     const tasa = Number(form.tasa)
     const ritmo = Number(form.ritmo)
-    if (!Number.isInteger(epocas) || epocas < 1 || !(tasa > 0) || !Number.isInteger(ritmo) || ritmo < 0) {
+    if (!Number.isInteger(epocas) || epocas < 1 || !Number.isFinite(tasa) || !(tasa > 0) || !Number.isInteger(ritmo) || ritmo < 0) {
       setError('Revisa los parámetros: épocas entero ≥ 1, tasa > 0 y ritmo entero ≥ 0.')
       return
     }
@@ -233,9 +249,10 @@ export default function Admin() {
     enReplica.current = true
     setReproduciendo(true)
     setSello(null)
+    setEntrenamiento(null) // sus «/ N» y su estado son de la corrida en vivo (PR-87 H1)
     despachar({ tipo: 'vaciar' })
     despachar({ tipo: 'anotar', nivel: 'info', texto: `réplica de ${replica.nombre} a ×${velocidad} (${replica.eventos.length} eventos); los eventos en vivo se ignoran` })
-    detenerReplica.current = reproducir(replica.eventos, velocidad, (e) => despachar({ tipo: 'evento', evento: e }), {
+    detenerReplica.current = reproducir(replica.eventos, velocidad, (e) => despachar({ tipo: 'evento', evento: e, origen: 'replica' }), {
       alTerminar: () => {
         enReplica.current = false
         setReproduciendo(false)
@@ -319,7 +336,17 @@ export default function Admin() {
             </div>
             <div>
               <dt>Estado</dt>
-              <dd data-kpi="estado">{entrenamiento?.estado.replace('_', ' ') ?? 'sin lanzar'}</dd>
+              <dd data-kpi="estado">
+                {entrenamiento
+                  ? entrenamiento.estado.replace('_', ' ')
+                  : reproduciendo
+                    ? 'réplica'
+                    : estado.abortado
+                      ? 'abortado'
+                      : estado.terminado
+                        ? 'terminado'
+                        : 'sin lanzar'}
+              </dd>
             </div>
           </dl>
           {sello && (
@@ -395,7 +422,7 @@ export default function Admin() {
           <ol ref={bitacora} className="bitacora" role="log" aria-labelledby="titulo-bitacora" tabIndex={0}>
             {estado.bitacora.map((l) => (
               <li key={l.id} className={`bitacora-${l.nivel}`} data-tipo={l.tipo}>
-                <time dateTime={l.t}>{l.t.slice(11, 19)}</time> {l.texto}
+                <time dateTime={l.t}>{horaBitacora(l.t)}</time> {l.texto}
               </li>
             ))}
           </ol>

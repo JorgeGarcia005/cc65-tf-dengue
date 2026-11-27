@@ -44,6 +44,9 @@ export interface NodoVista extends EstadoNodo {
 
 export type Nivel = 'info' | 'aviso' | 'alerta'
 
+/** De dónde vino un evento: el WebSocket en vivo o un .jsonl reproducido. */
+export type Origen = 'vivo' | 'replica'
+
 export interface LineaBitacora {
   id: number
   t: string
@@ -68,8 +71,12 @@ export interface EstadoPanel {
   reasignaciones: number
   terminado: boolean
   abortado: string | null
-  /** El modelo que la API anunció al publicarlo (evento «modelo»). */
-  modelo: { version: string; pesos: number[] } | null
+  /**
+   * El modelo que la API anunció al publicarlo (evento «modelo»). `origen` dice si
+   * llegó por el WebSocket en vivo o de una réplica: solo el vivo se compara con
+   * GET /api/v1/modelo (PR-87 H1).
+   */
+  modelo: { version: string; pesos: number[]; origen: Origen } | null
   /** Contador para el id de cada línea de la bitácora (clave estable en React). */
   siguienteLinea: number
 }
@@ -100,7 +107,7 @@ const entero = (v: unknown) => Number.isInteger(v)
 
 function esEstadoNodo(v: unknown): v is EstadoNodo {
   const n = v as Record<string, unknown> | null
-  return !!n && typeof n === 'object' && texto(n.nombre) && typeof n.sano === 'boolean' && opcional(n.carga, entero) && opcional(n.workers, entero) && opcional(n.motivo, texto)
+  return !!n && typeof n === 'object' && texto(n.nombre) && typeof n.sano === 'boolean' && entero(n.carga) && entero(n.workers) && opcional(n.motivo, texto)
 }
 
 /** Valida un evento antes de reducirlo: un mensaje raro no rompe el panel. */
@@ -157,7 +164,7 @@ const relativa = (e: EstadoPanel, epoca: number) => (e.baseEpoca === null ? epoc
 
 const shardDe = (ev: EventoCluster) => (ev.shard === undefined ? '' : ` el shard ${ev.shard}`)
 
-export function reducir(e: EstadoPanel, ev: EventoCluster): EstadoPanel {
+export function reducir(e: EstadoPanel, ev: EventoCluster, origen: Origen = 'vivo'): EstadoPanel {
   switch (ev.tipo) {
     case 'registro': {
       const s = conInstantanea(tocarNodo(e, ev.nodo, { sano: true }), ev.nodos)
@@ -190,7 +197,7 @@ export function reducir(e: EstadoPanel, ev: EventoCluster): EstadoPanel {
     case 'abortado':
       return conLinea({ ...e, abortado: ev.detalle ?? 'el entrenamiento falló' }, ev.t, ev.tipo, 'alerta', `entrenamiento abortado: ${ev.detalle ?? 'sin detalle'}`)
     case 'modelo': {
-      const s = { ...e, modelo: { version: ev.detalle ?? '', pesos: ev.pesos ?? [] } }
+      const s = { ...e, modelo: { version: ev.detalle ?? '', pesos: ev.pesos ?? [], origen } }
       return conLinea(s, ev.t, ev.tipo, 'info', `la API publicó el modelo ${ev.detalle ?? '¿?'} (${ev.pesos?.length ?? 0} pesos)`)
     }
     case 'fin':
@@ -259,4 +266,16 @@ export function esModeloParaSello(v: unknown): v is ModeloParaSello {
     Array.isArray(m.variables) &&
     m.variables.every((x) => !!x && typeof x === 'object' && texto((x as Record<string, unknown>).nombre) && finito((x as Record<string, unknown>).peso))
   )
+}
+
+const hora = new Intl.DateTimeFormat('es-PE', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })
+
+/**
+ * Hora de una línea de la bitácora en la zona del navegador (PR-87 H2). Go
+ * serializa con el huso del servidor (-05:00 en Windows, Z en Docker) y la SPA
+ * anota en UTC: recortar la cadena mezclaba horas con 5 h de diferencia.
+ */
+export function horaBitacora(t: string): string {
+  const ms = Date.parse(t)
+  return Number.isFinite(ms) ? hora.format(ms) : t.slice(11, 19)
 }
