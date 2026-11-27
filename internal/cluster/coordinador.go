@@ -45,6 +45,24 @@ type EstadoNodo struct {
 	Sano    bool   `json:"sano"`
 	Carga   int    `json:"carga"`            // shards asignados
 	Motivo  string `json:"motivo,omitempty"` // por qué se descartó
+	// Metricas son las de la última época que calculó el nodo (#91, panel
+	// admin: «uso CPU, latencia, número de nodos, logs»). nil hasta su primera época.
+	Metricas *MetricasNodo `json:"metricas,omitempty"`
+}
+
+// MetricasNodo resume la última época en que un nodo calculó al menos un shard.
+// LatenciaMs va de que el coordinador termina de enviar la primera tarea de la
+// época al nodo hasta que recibe su último gradiente; CalculoMs es lo que el
+// nodo dice que tardó en calcular; RedMs, la diferencia (red, JSON y cola).
+// UsoCPU es la CPU del proceso del nodo durante el cálculo sobre la capacidad
+// de sus workers (0..1); nil si el nodo no la informa (p. ej. fuera de Linux).
+type MetricasNodo struct {
+	Epoca      int      `json:"epoca"`
+	Shards     int      `json:"shards"`
+	CalculoMs  float64  `json:"calculo_ms"`
+	LatenciaMs float64  `json:"latencia_ms"`
+	RedMs      float64  `json:"red_ms"`
+	UsoCPU     *float64 `json:"uso_cpu,omitempty"`
 }
 
 // Estado es una copia del estado del entrenamiento para la API.
@@ -63,7 +81,8 @@ type nodo struct {
 	conn    *protocolo.Conexion
 	sano    bool
 	motivo  string
-	cargado map[int]bool // shards que el nodo confirmó con `listo`
+	cargado map[int]bool  // shards que el nodo confirmó con `listo`
+	met     *MetricasNodo // última época que calculó (#91)
 }
 
 // evento es lo que una goroutine lectora le entrega al bucle de épocas.
@@ -118,6 +137,13 @@ type Coordinador struct {
 
 	calcNodo map[int]int64 // µs de cómputo de la época en curso, por nodo
 	calcSuma int64         // y la suma de todos los shards
+	// Métricas del panel admin (#91), por nodo y época: cuándo se le envió la
+	// primera tarea, cuándo llegó su último gradiente, cuántos shards hizo y
+	// cuánta CPU informó (cpuNodo < 0: algún shard sin dato).
+	envioNodo  map[int]time.Time
+	ultimoNodo map[int]time.Time
+	shardsNodo map[int]int
+	cpuNodo    map[int]int64
 
 	muEstado sync.RWMutex
 	estado   Estado
@@ -161,21 +187,25 @@ func Nuevo(ln net.Listener, op Opciones) (*Coordinador, error) {
 		op.Log = func(string, ...any) {}
 	}
 	c := &Coordinador{
-		op:        op,
-		ln:        ln,
-		bloques:   bloques,
-		eventos:   make(chan evento),
-		hecho:     make(chan struct{}),
-		porID:     map[int]int{},
-		calcNodo:  map[int]int64{},
-		duenio:    make([]int, len(op.Shards)),
-		asignado:  make([]bool, len(op.Shards)),
-		listo:     make([]bool, len(op.Shards)),
-		enviado:   make([]bool, len(op.Shards)),
-		vence:     make([]time.Time, len(op.Shards)),
-		parciales: make([]ml.Parcial, bloques),
-		conns:     map[int]*protocolo.Conexion{},
-		nombres:   map[int]string{},
+		op:         op,
+		ln:         ln,
+		bloques:    bloques,
+		eventos:    make(chan evento),
+		hecho:      make(chan struct{}),
+		porID:      map[int]int{},
+		calcNodo:   map[int]int64{},
+		envioNodo:  map[int]time.Time{},
+		ultimoNodo: map[int]time.Time{},
+		shardsNodo: map[int]int{},
+		cpuNodo:    map[int]int64{},
+		duenio:     make([]int, len(op.Shards)),
+		asignado:   make([]bool, len(op.Shards)),
+		listo:      make([]bool, len(op.Shards)),
+		enviado:    make([]bool, len(op.Shards)),
+		vence:      make([]time.Time, len(op.Shards)),
+		parciales:  make([]ml.Parcial, bloques),
+		conns:      map[int]*protocolo.Conexion{},
+		nombres:    map[int]string{},
 	}
 	for s := range c.duenio {
 		c.duenio[s] = -1
@@ -332,6 +362,10 @@ func (c *Coordinador) GradienteErr(w []float64) (ml.Gradiente, error) {
 	}
 	ini := time.Now()
 	clear(c.calcNodo)
+	clear(c.envioNodo)
+	clear(c.ultimoNodo)
+	clear(c.shardsNodo)
+	clear(c.cpuNodo)
 	c.calcSuma = 0
 	c.w = w
 	for s := range c.listo {
@@ -378,6 +412,7 @@ func (c *Coordinador) GradienteErr(w []float64) (ml.Gradiente, error) {
 	c.tiempos.SegCalculoMax += float64(calcMax) / 1e6
 	c.tiempos.SegCalculoSuma += float64(c.calcSuma) / 1e6
 	c.muEstado.Unlock()
+	c.cerrarMetricas()
 	c.publicar(g.Perdida)
 	if c.op.Observador != nil {
 		c.emitir(Evento{Tipo: EvEpoca, Epoca: c.epoca, Perdida: g.Perdida, Pesos: append([]float64(nil), w...)})
@@ -426,7 +461,11 @@ func (c *Coordinador) despachar(s int) error {
 			continue
 		}
 		c.enviado[s] = true
-		c.vence[s] = time.Now().Add(c.op.TimeoutEpoca) // plazo propio del shard
+		ahora := time.Now()
+		c.vence[s] = ahora.Add(c.op.TimeoutEpoca) // plazo propio del shard
+		if _, ok := c.envioNodo[j]; !ok {
+			c.envioNodo[j] = ahora // la latencia del nodo cuenta desde su primera tarea
+		}
 		c.emitir(Evento{Tipo: EvTarea, Epoca: c.epoca, Nodo: c.nodos[j].nombre, Shard: shard(s)})
 		return nil
 	}
@@ -589,7 +628,20 @@ func (c *Coordinador) atender(ev evento) bool {
 		c.listo[m.Shard] = true
 		c.calcNodo[j] += m.MicrosCalculo // un nodo con varios shards los calcula en serie
 		c.calcSuma += m.MicrosCalculo
-		c.emitir(Evento{Tipo: EvGradiente, Epoca: c.epoca, Nodo: n.nombre, Shard: shard(m.Shard), Micros: m.MicrosCalculo})
+		ahora := time.Now()
+		c.ultimoNodo[j] = ahora
+		c.shardsNodo[j]++
+		if m.MicrosCPU > 0 && c.cpuNodo[j] >= 0 {
+			c.cpuNodo[j] += m.MicrosCPU
+		} else {
+			c.cpuNodo[j] = -1 // un shard sin dato: el uso de CPU de la época no se informa
+		}
+		var idaVuelta int64
+		if t, ok := c.envioNodo[j]; ok {
+			idaVuelta = ahora.Sub(t).Microseconds()
+		}
+		c.emitir(Evento{Tipo: EvGradiente, Epoca: c.epoca, Nodo: n.nombre, Shard: shard(m.Shard), Micros: m.MicrosCalculo,
+			MicrosCPU: m.MicrosCPU, MicrosIdaVuelta: idaVuelta})
 		return true
 	case protocolo.Error:
 		c.descartar(j, "el nodo informó: "+m.Detalle)
@@ -705,11 +757,33 @@ func (c *Coordinador) publicarNodos() {
 	c.muEstado.Unlock()
 }
 
+// cerrarMetricas guarda en cada nodo que calculó en esta época sus métricas
+// (#91). Solo mide: no toca pesos, parciales ni el orden de la reducción. Cada
+// época crea un *MetricasNodo nuevo, así las copias publicadas no cambian.
+func (c *Coordinador) cerrarMetricas() {
+	for j, calc := range c.calcNodo {
+		n := c.nodos[j]
+		ini, ok1 := c.envioNodo[j]
+		fin, ok2 := c.ultimoNodo[j]
+		if !ok1 || !ok2 {
+			continue
+		}
+		lat := fin.Sub(ini).Microseconds()
+		m := &MetricasNodo{Epoca: c.epoca, Shards: c.shardsNodo[j], CalculoMs: float64(calc) / 1e3,
+			LatenciaMs: float64(lat) / 1e3, RedMs: float64(max(lat-calc, 0)) / 1e3}
+		if cpu := c.cpuNodo[j]; cpu > 0 && calc > 0 && n.workers > 0 {
+			u := min(float64(cpu)/(float64(calc)*float64(n.workers)), 1)
+			m.UsoCPU = &u
+		}
+		n.met = m
+	}
+}
+
 func (c *Coordinador) vistaNodos() []EstadoNodo {
 	vista := make([]EstadoNodo, len(c.nodos))
 	for j, n := range c.nodos {
 		vista[j] = EstadoNodo{Nombre: n.nombre, Remoto: n.conn.Remoto(), Workers: n.workers,
-			Sano: n.sano, Carga: c.carga(j), Motivo: n.motivo}
+			Sano: n.sano, Carga: c.carga(j), Motivo: n.motivo, Metricas: n.met}
 	}
 	return vista
 }

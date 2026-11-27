@@ -9,6 +9,7 @@ import {
   conCluster,
   ESTADO_INICIAL,
   esEstadoCluster,
+  type MetricasAPI,
   esModeloParaSello,
   horaBitacora,
   nodosOrdenados,
@@ -23,6 +24,7 @@ import {
   type Sello,
 } from '../admin/estado'
 import { conectar, type EstadoConexion } from '../admin/ws'
+import { formato } from '../mapa/datos'
 import { etiquetaVariable } from '../prediccion/datos'
 import { useSesion } from '../sesion/Sesion'
 
@@ -86,6 +88,7 @@ export default function Admin() {
   const [error, setError] = useState<string | null>(null)
   const [sello, setSello] = useState<Sello | null>(null)
   const [cortando, setCortando] = useState<string | null>(null)
+  const [metricasApi, setMetricasApi] = useState<MetricasAPI | null>(null)
   const [replica, setReplica] = useState<{ nombre: string; eventos: EventoCluster[] } | null>(null)
   const [velocidad, setVelocidad] = useState<number>(VELOCIDADES[1])
   const [reproduciendo, setReproduciendo] = useState(false)
@@ -107,7 +110,9 @@ export default function Admin() {
     api
       .get<unknown>('/api/v1/cluster')
       .then((c) => {
-        if (vivo && esEstadoCluster(c)) despachar({ tipo: 'cluster', cluster: c })
+        if (!vivo || !esEstadoCluster(c)) return
+        despachar({ tipo: 'cluster', cluster: c })
+        setMetricasApi(c.api ?? null)
       })
       .catch((e: unknown) => vivo && despachar({ tipo: 'anotar', nivel: 'aviso', texto: `no se pudo leer el clúster: ${e instanceof Error ? e.message : e}` }))
     cargarModelo().catch(() => undefined)
@@ -155,16 +160,34 @@ export default function Admin() {
           if (t.estado === 'terminado') despachar({ tipo: 'anotar', nivel: 'info', texto: `entrenamiento terminado: modelo ${t.version_modelo ?? '¿?'}` })
         })
         .catch(() => undefined)
-      api
-        .get<unknown>('/api/v1/cluster')
-        .then((c) => vivo && esEstadoCluster(c) && despachar({ tipo: 'cluster', cluster: c }))
-        .catch(() => undefined)
     }, SONDEO_MS)
     return () => {
       vivo = false
       window.clearInterval(id)
     }
   }, [api, idEntrenamiento, enCursoApi])
+
+  // Métricas del clúster y de la API (#91, enunciado TB2 §6: «uso CPU, latencia,
+  // número de nodos, logs»): GET /api/v1/cluster cada SONDEO_MS mientras el panel
+  // está abierto, entrene o no. En réplica no se mezcla el clúster en vivo.
+  useEffect(() => {
+    if (reproduciendo) return
+    let vivo = true
+    const id = window.setInterval(() => {
+      api
+        .get<unknown>('/api/v1/cluster')
+        .then((c) => {
+          if (!vivo || !esEstadoCluster(c)) return
+          despachar({ tipo: 'cluster', cluster: c })
+          setMetricasApi(c.api ?? null)
+        })
+        .catch(() => undefined)
+    }, SONDEO_MS)
+    return () => {
+      vivo = false
+      window.clearInterval(id)
+    }
+  }, [api, reproduciendo])
 
   // Al anunciarse el modelo por el WebSocket: sello bit a bit contra GET /api/v1/modelo.
   // Solo el modelo anunciado en vivo: el de una réplica es de otra corrida y no
@@ -337,6 +360,27 @@ export default function Admin() {
               <dd data-kpi="reasignaciones">{estado.reasignaciones}</dd>
             </div>
             <div>
+              <dt>Nodos sanos</dt>
+              <dd data-kpi="nodos">
+                {nodos.filter((n) => n.sano).length} / {nodos.length}
+              </dd>
+            </div>
+            <div>
+              <dt title="Latencia de las predicciones dentro del servidor, últimas 1024">p95 API</dt>
+              <dd data-kpi="p95-api">
+                {metricasApi && metricasApi.ventana > 0 ? (
+                  <>
+                    {formato.uno(metricasApi.p95_ms)} ms{' '}
+                    <span className={metricasApi.cumple_limite_p95 ? 'cuadra' : 'no-cuadra'}>
+                      {metricasApi.cumple_limite_p95 ? '✓' : '✗'} &lt; {formato.entero(metricasApi.limite_p95_ms)} ms
+                    </span>
+                  </>
+                ) : (
+                  '—'
+                )}
+              </dd>
+            </div>
+            <div>
               <dt>Estado</dt>
               <dd data-kpi="estado">
                 {entrenamiento
@@ -375,6 +419,11 @@ export default function Admin() {
             <Topologia nodos={nodos} />
             <figcaption>Estrella: el coordinador agrega; cada nodo calcula el gradiente de sus shards. Rojo = fuera del clúster; anillo rosa = se cayó y volvió a registrarse.</figcaption>
           </figure>
+          <p className="nota-clase" data-prueba="nota-metricas">
+            Por nodo, de su última época: <strong>CPU</strong> del proceso mientras calcula (sobre sus workers) y <strong>latencia</strong> desde que
+            el coordinador le envía la tarea hasta que recibe su gradiente, separada en cálculo y red. El p95 de la API se mide dentro del
+            servidor; el de cliente, con red, lo mide <code>cmd/benchapi</code>.
+          </p>
           {nodos.length === 0 ? (
             <p className="nota">Todavía no hay nodos registrados.</p>
           ) : (
@@ -385,6 +434,19 @@ export default function Admin() {
                   <span className="lista-nodos-nombre">{n.nombre}</span>
                   <span className="lista-nodos-info">{n.sano ? `${n.carga} shard${n.carga === 1 ? '' : 's'} · ${n.workers} workers` : (n.motivo ?? 'caído')}
                     {(n.caidas ?? 0) > 0 ? ` · cayó ${n.caidas}×` : ''}</span>
+                  {n.vista && (
+                    <span className="lista-nodos-metricas" data-metricas={n.nombre}>
+                      <span data-metrica="cpu" title="CPU del proceso del nodo durante el cálculo, sobre la capacidad de sus workers">
+                        CPU {n.vista.usoCpu === null ? '—' : formato.porcentaje(n.vista.usoCpu)}
+                      </span>
+                      <span data-metrica="latencia" title="De su primera tarea de la época a su último gradiente, medido en el coordinador">
+                        latencia {formato.uno(n.vista.latenciaMs)} ms
+                      </span>
+                      <span data-metrica="desglose">
+                        (cálculo {formato.uno(n.vista.calculoMs)} · red {formato.uno(n.vista.redMs)})
+                      </span>
+                    </span>
+                  )}
                   <button type="button" className="boton boton-fantasma" disabled={!n.sano || cortando !== null || reproduciendo} onClick={() => void tumbar(n.nombre)} aria-label={`Tumbar ${n.nombre}`}>
                     {cortando === n.nombre ? 'Cortando…' : 'Tumbar'}
                   </button>

@@ -135,6 +135,7 @@ type Servidor struct {
 	evaluacion, riesgo *documento // reports/evaluacion.json precomprimido; nil si no hay
 	limite             *limitador // intentos fallidos de login por IP
 	tickets            *tickets   // tickets de un solo uso del WebSocket
+	latencias          latencias  // de las predicciones, para el panel admin (#91)
 }
 
 // Nuevo crea el servidor: elige el modelo inicial (el vigente del almacén o,
@@ -433,6 +434,7 @@ func (s *Servidor) predecir(w http.ResponseWriter, r *http.Request) {
 		if ok && json.Unmarshal(b, &p) == nil && len(p.Contribuciones) > 0 {
 			w.Header().Set("X-Cache", "HIT")
 			responderBytes(w, http.StatusOK, b)
+			s.latencias.anotar(time.Since(inicio), true)
 			s.registrar(registroDe(cn, p, true, inicio))
 			return
 		}
@@ -454,6 +456,7 @@ func (s *Servidor) predecir(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("X-Cache", "MISS")
 	}
 	responderBytes(w, http.StatusOK, b)
+	s.latencias.anotar(time.Since(inicio), false)
 	s.registrar(registroDe(cn, p, false, inicio))
 }
 
@@ -471,7 +474,14 @@ func (s *Servidor) verCluster(w http.ResponseWriter, _ *http.Request) {
 	if est.Nodos == nil {
 		est.Nodos = []cluster.EstadoNodo{} // el contrato declara un arreglo, también antes del primer registro
 	}
-	responder(w, http.StatusOK, est)
+	// Panel admin (enunciado TB2 §6): número de nodos, CPU y latencia de cada
+	// uno (en est) y la latencia de las predicciones de la API.
+	api := s.latencias.resumen()
+	api.NoRegistradas = s.RegistrosDescartados()
+	responder(w, http.StatusOK, struct {
+		cluster.Estado
+		API MetricasAPI `json:"api"`
+	}{est, api})
 }
 
 func (s *Servidor) crearEntrenamiento(w http.ResponseWriter, r *http.Request) {

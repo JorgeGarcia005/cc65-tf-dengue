@@ -103,8 +103,12 @@ type Mensaje struct {
 	// MicrosCalculo es lo que tardó el nodo en calcular los parciales de un
 	// gradiente (solo cómputo, sin red ni JSON). Lo usa el benchmark del
 	// clúster (#32) para separar cómputo de red y espera.
-	MicrosCalculo int64  `json:"us_calculo,omitempty"`
-	Motivo        string `json:"motivo,omitempty"`
+	MicrosCalculo int64 `json:"us_calculo,omitempty"`
+	// MicrosCPU es la CPU (usuario + sistema) que gastó el proceso del nodo
+	// durante ese cálculo; 0 si el sistema no la informa. Con MicrosCalculo y
+	// los workers da el uso de CPU que ve el panel admin (#91).
+	MicrosCPU int64  `json:"us_cpu,omitempty"`
+	Motivo    string `json:"motivo,omitempty"`
 }
 
 // Validar comprueba que el mensaje tenga un tipo conocido y los campos que su
@@ -115,7 +119,7 @@ func (m *Mensaje) Validar() error {
 		return fmt.Errorf("%w: %s: %s", ErrInvalido, m.Tipo, fmt.Sprintf(formato, args...))
 	}
 	if m.Epoca < 0 || m.Shard < 0 || m.BloqueInicial < 0 || m.NumBloques < 0 ||
-		m.TamBloque < 0 || m.N < 0 || m.D < 0 || m.Workers < 0 {
+		m.TamBloque < 0 || m.N < 0 || m.D < 0 || m.Workers < 0 || m.MicrosCalculo < 0 || m.MicrosCPU < 0 {
 		return mal("campo entero negativo")
 	}
 	switch m.Tipo {

@@ -175,7 +175,7 @@ paths:
   /api/v1/cluster:
     get:
       tags: [cluster]
-      summary: Estado del clúster (nodos, carga, época y pérdida)
+      summary: Estado del clúster y métricas del panel admin (nodos, carga, CPU, latencia, época y pérdida)
       operationId: verCluster
       security: [{bearerAuth: []}]
       responses:
@@ -474,6 +474,30 @@ components:
         nodos:
           type: array
           items: {$ref: "#/components/schemas/EstadoNodo"}
+        api: {$ref: "#/components/schemas/MetricasAPI"}
+    MetricasAPI:
+      type: object
+      description: "Latencia de POST /api/v1/predicciones medida dentro del servidor en las últimas 1024 peticiones (#91). No incluye la red: el p95 como cliente lo mide cmd/benchapi."
+      properties:
+        predicciones: {type: integer, description: "Desde que arrancó el servidor."}
+        ventana: {type: integer, description: "Predicciones que entran en los percentiles."}
+        p50_ms: {type: number, format: double}
+        p95_ms: {type: number, format: double}
+        max_ms: {type: number, format: double}
+        aciertos_cache: {type: number, format: double, description: "Fracción servida desde Redis en la ventana."}
+        no_registradas: {type: integer, description: "Predicciones que el búfer hacia MongoDB descartó (ADR-0006)."}
+        limite_p95_ms: {type: number, format: double, example: 100}
+        cumple_limite_p95: {type: boolean}
+    MetricasNodo:
+      type: object
+      description: "Última época en que el nodo calculó (#91)."
+      properties:
+        epoca: {type: integer}
+        shards: {type: integer, description: "Shards que calculó en esa época."}
+        calculo_ms: {type: number, format: double, description: "Cómputo informado por el nodo."}
+        latencia_ms: {type: number, format: double, description: "De su primera tarea a su último gradiente, medido en el coordinador."}
+        red_ms: {type: number, format: double, description: "latencia_ms − calculo_ms: red, JSON y cola."}
+        uso_cpu: {type: number, format: double, minimum: 0, maximum: 1, description: "CPU del proceso del nodo durante el cálculo sobre la capacidad de sus workers. Ausente si el nodo no la informa."}
     EstadoNodo:
       type: object
       properties:
@@ -483,6 +507,7 @@ components:
         sano: {type: boolean}
         carga: {type: integer, description: "Shards asignados."}
         motivo: {type: string}
+        metricas: {$ref: "#/components/schemas/MetricasNodo"}
     ParametrosEntrenamiento:
       type: object
       additionalProperties: false

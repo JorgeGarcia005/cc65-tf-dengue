@@ -1034,7 +1034,8 @@ a {
   grid-template-columns: 12px minmax(0, 1fr) auto;
   grid-template-areas:
     'punto nombre boton'
-    'punto info boton';
+    'punto info boton'
+    'punto metricas boton';
   column-gap: 10px;
   align-items: center;
   font-size: 14px;
@@ -1148,4 +1149,21 @@ a {
 }
 .leyenda-sube {
   background: var(--rosa);
+}
+
+/* Métricas por nodo del panel admin (#91): CPU, latencia y su desglose. */
+.lista-nodos-metricas {
+  grid-area: metricas;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 10px;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.lista-nodos-metricas [data-metrica='cpu'],
+.lista-nodos-metricas [data-metrica='latencia'] {
+  font-weight: 700;
+}
+.lista-nodos-metricas [data-metrica='desglose'] {
+  color: var(--tinta-2);
 }
