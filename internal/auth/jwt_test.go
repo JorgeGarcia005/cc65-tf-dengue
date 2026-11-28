@@ -150,3 +150,11 @@ func TestJWTFirmarRolInvalido(t *testing.T) {
 		t.Fatalf("error = %v, quería ErrReclamos", err)
 	}
 }
+
+// TestFirmadorConRelojNil (PR-102 H4): sin reloj, error en vez de un pánico
+// al firmar.
+func TestFirmadorConRelojNil(t *testing.T) {
+	if _, err := NuevoFirmadorConReloj(make([]byte, MinBytesSecreto), time.Hour, nil); err == nil {
+		t.Fatal("se esperaba un error con reloj nil")
+	}
+}

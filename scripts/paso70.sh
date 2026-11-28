@@ -84,18 +84,10 @@ evidencia 10 evaluacion    "Evaluación del modelo servido"             "$S eval
 evidencia 11 spin          "Spin"                                      "$S spin     (en WSL, con: sudo apt-get install -y spin gcc)"
 evidencia 12 pruebas       "Pruebas de Go y de la SPA"                 "$S pruebas  (en WSL: go test -race necesita gcc)"
 
-# --- Pasos 13 y 14: herramientas que llegan en un PR aparte -------------------
-if ! grep -q '^  seguridad)' scripts/evidencias-tb2.sh; then
-  alto 13 "Seguridad (reports/seguridad.json)" "todavía no está el paso «seguridad» en integracion/tb2" \
-    "Espera el aviso de Jorge y luego: git merge origin/integracion/tb2" "Las evidencias de los pasos 2–12 siguen valiendo: no las repitas."
-fi
+# --- Pasos 13 y 14: seguridad y Playwright (con el sistema arriba) -----------
 evidencia 13 seguridad     "Seguridad (reports/seguridad.json)"        "$S seguridad"
 grep -q '"todos_ok": *true' reports/seguridad.json 2>/dev/null ||
   alto 13 "Seguridad" "reports/seguridad.json no tiene todos_ok: true" "Avísale a Jorge con el archivo: es un hallazgo, no se corrige a mano."
-if ! grep -q '^  e2e)' scripts/evidencias-tb2.sh; then
-  alto 14 "Pruebas de punta a punta y capturas (Playwright)" "todavía no está el paso «e2e» en integracion/tb2" \
-    "Espera el aviso de Jorge y luego: git merge origin/integracion/tb2"
-fi
 evidencia 14 e2e           "Playwright: flujos por rol y capturas"     "$S e2e"
 
 # --- Paso 15: capturas manuales -------------------------------------------------

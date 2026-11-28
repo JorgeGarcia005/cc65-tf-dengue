@@ -13,7 +13,7 @@
 # Uso (desde la raíz del repo, en WSL o Git Bash, con Docker Desktop):
 #   bash scripts/evidencias-tb2.sh <paso>
 # Pasos, en orden: entorno parte-a cluster caida servicio entrenamiento
-#                  benchapi bd evaluacion spin pruebas … informe; y apagar
+#                  benchapi bd evaluacion spin pruebas seguridad e2e informe; y apagar
 #
 # Variables: PUERTO_API (8080), PUERTO_WEB (8081), NODOS (3), QUITAR (texto de
 # la carátula que cmd/word borra, p. ej. el nombre de un exintegrante).
@@ -205,6 +205,29 @@ p_pruebas() {
   ( cd web && npm ci --no-audit --no-fund >/dev/null && npx tsc -b && npx vitest run )
 }
 
+p_seguridad() {
+  echo "-- go run ./cmd/seguridad (secreto y cuentas de deploy/.env; escribe reports/seguridad.json)"
+  JWT_SECRETO=$(env_de JWT_SECRETO) \
+    VIGIA_ADMIN_CORREO=$(env_de VIGIA_ADMIN_CORREO) VIGIA_ADMIN_CLAVE=$(env_de VIGIA_ADMIN_CLAVE) \
+    VIGIA_ANALISTA_CORREO=$(env_de VIGIA_ANALISTA_CORREO) VIGIA_ANALISTA_CLAVE=$(env_de VIGIA_ANALISTA_CLAVE) \
+    go run ./cmd/seguridad -url "$URL" -origen "http://localhost:$PUERTO_WEB" -salida reports/seguridad.json
+}
+
+p_e2e() {
+  echo "-- Playwright contra la SPA en http://localhost:$PUERTO_WEB (capturas en docs/informe/tb2/capturas/)"
+  (
+    cd web
+    npm ci --no-audit --no-fund >/dev/null
+    [[ -n "${CHROME:-}" ]] || npx playwright install chromium >/dev/null
+    VIGIA_URL="http://localhost:$PUERTO_WEB" VIGIA_API="$URL" E2E_EXIGIR_VERSION=1 \
+      VIGIA_ADMIN_CORREO=$(cd .. && env_de VIGIA_ADMIN_CORREO) VIGIA_ADMIN_CLAVE=$(cd .. && env_de VIGIA_ADMIN_CLAVE) \
+      VIGIA_ANALISTA_CORREO=$(cd .. && env_de VIGIA_ANALISTA_CORREO) VIGIA_ANALISTA_CLAVE=$(cd .. && env_de VIGIA_ANALISTA_CLAVE) \
+      npx playwright test --reporter=list
+  )
+  echo "-- capturas"
+  ls -l docs/informe/tb2/capturas/e2e-*.png
+}
+
 p_informe() {
   echo "-- go run ./cmd/informe (cifras, figuras y fragmentos desde reports/)"
   go run ./cmd/informe 2>&1 | grep -v "^.* escrito "
@@ -232,7 +255,9 @@ case "$paso" in
   evaluacion)    registrar evaluacion "Evaluación del modelo en el conjunto de prueba" p_evaluacion ;;
   spin)          registrar spin "Verificación del protocolo con Spin" p_spin ;;
   pruebas)       registrar pruebas "Pruebas de Go (-race) y de la SPA" p_pruebas ;;
+  seguridad)     registrar seguridad "Controles de seguridad desde fuera (cmd/seguridad)" p_seguridad ;;
+  e2e)           registrar e2e "Pruebas de punta a punta con Playwright y capturas" p_e2e ;;
   informe)       registrar informe "Informe final: cmd/informe y cmd/word -final" p_informe ;;
   apagar)        p_apagar ;;
-  *) echo "uso: bash scripts/evidencias-tb2.sh <entorno|parte-a|cluster|caida|servicio|entrenamiento|benchapi|bd|evaluacion|spin|pruebas|informe|apagar>" >&2; exit 2 ;;
+  *) echo "uso: bash scripts/evidencias-tb2.sh <entorno|parte-a|cluster|caida|servicio|entrenamiento|benchapi|bd|evaluacion|spin|pruebas|seguridad|e2e|informe|apagar>" >&2; exit 2 ;;
 esac
