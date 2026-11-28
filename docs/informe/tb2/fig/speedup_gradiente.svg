@@ -1,0 +1,57 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="760" height="420" viewBox="0 0 760 420" font-family="Times New Roman, Times, serif">
+<title>Speedup del cálculo del gradiente</title>
+<rect width="760" height="420" fill="#ffffff"/>
+<line x1="78.0" y1="360.0" x2="83.0" y2="360.0" stroke="#000000" stroke-width="1"/>
+<line x1="740.0" y1="360.0" x2="735.0" y2="360.0" stroke="#000000" stroke-width="1"/>
+<text x="72.0" y="364.5" font-size="13" fill="#000000" text-anchor="end">0</text>
+<line x1="78.0" y1="290.8" x2="83.0" y2="290.8" stroke="#000000" stroke-width="1"/>
+<line x1="740.0" y1="290.8" x2="735.0" y2="290.8" stroke="#000000" stroke-width="1"/>
+<text x="72.0" y="295.3" font-size="13" fill="#000000" text-anchor="end">2,5</text>
+<line x1="78.0" y1="221.6" x2="83.0" y2="221.6" stroke="#000000" stroke-width="1"/>
+<line x1="740.0" y1="221.6" x2="735.0" y2="221.6" stroke="#000000" stroke-width="1"/>
+<text x="72.0" y="226.1" font-size="13" fill="#000000" text-anchor="end">5</text>
+<line x1="78.0" y1="152.4" x2="83.0" y2="152.4" stroke="#000000" stroke-width="1"/>
+<line x1="740.0" y1="152.4" x2="735.0" y2="152.4" stroke="#000000" stroke-width="1"/>
+<text x="72.0" y="156.9" font-size="13" fill="#000000" text-anchor="end">7,5</text>
+<line x1="78.0" y1="83.2" x2="83.0" y2="83.2" stroke="#000000" stroke-width="1"/>
+<line x1="740.0" y1="83.2" x2="735.0" y2="83.2" stroke="#000000" stroke-width="1"/>
+<text x="72.0" y="87.7" font-size="13" fill="#000000" text-anchor="end">10</text>
+<line x1="78.0" y1="14.0" x2="83.0" y2="14.0" stroke="#000000" stroke-width="1"/>
+<line x1="740.0" y1="14.0" x2="735.0" y2="14.0" stroke="#000000" stroke-width="1"/>
+<text x="72.0" y="18.5" font-size="13" fill="#000000" text-anchor="end">12,5</text>
+<line x1="102.5" y1="360.0" x2="102.5" y2="355.0" stroke="#000000" stroke-width="1"/>
+<line x1="102.5" y1="14.0" x2="102.5" y2="19.0" stroke="#000000" stroke-width="1"/>
+<text x="102.5" y="377.0" font-size="13" fill="#000000" text-anchor="middle">1</text>
+<line x1="225.1" y1="360.0" x2="225.1" y2="355.0" stroke="#000000" stroke-width="1"/>
+<line x1="225.1" y1="14.0" x2="225.1" y2="19.0" stroke="#000000" stroke-width="1"/>
+<text x="225.1" y="377.0" font-size="13" fill="#000000" text-anchor="middle">2</text>
+<line x1="347.7" y1="360.0" x2="347.7" y2="355.0" stroke="#000000" stroke-width="1"/>
+<line x1="347.7" y1="14.0" x2="347.7" y2="19.0" stroke="#000000" stroke-width="1"/>
+<text x="347.7" y="377.0" font-size="13" fill="#000000" text-anchor="middle">4</text>
+<line x1="470.3" y1="360.0" x2="470.3" y2="355.0" stroke="#000000" stroke-width="1"/>
+<line x1="470.3" y1="14.0" x2="470.3" y2="19.0" stroke="#000000" stroke-width="1"/>
+<text x="470.3" y="377.0" font-size="13" fill="#000000" text-anchor="middle">8</text>
+<line x1="592.9" y1="360.0" x2="592.9" y2="355.0" stroke="#000000" stroke-width="1"/>
+<line x1="592.9" y1="14.0" x2="592.9" y2="19.0" stroke="#000000" stroke-width="1"/>
+<text x="592.9" y="377.0" font-size="13" fill="#000000" text-anchor="middle">16</text>
+<line x1="715.5" y1="360.0" x2="715.5" y2="355.0" stroke="#000000" stroke-width="1"/>
+<line x1="715.5" y1="14.0" x2="715.5" y2="19.0" stroke="#000000" stroke-width="1"/>
+<text x="715.5" y="377.0" font-size="13" fill="#000000" text-anchor="middle">32</text>
+<text x="409.0" y="400.0" font-size="14" fill="#000000" text-anchor="middle">Workers (goroutines)</text>
+<text x="26.0" y="187.0" font-size="14" fill="#000000" text-anchor="middle" transform="rotate(-90 26.0 187.0)">Speedup (×)</text>
+<polyline points="102.5,332.3 225.1,304.6 347.7,249.3 470.3,138.6 549.2,14.0" fill="none" stroke="#000000" stroke-width="1" stroke-linejoin="round" stroke-dasharray="1.5 3"/>
+<polyline points="102.5,332.9 225.1,306.7 347.7,256.6 470.3,175.6 592.9,80.4 715.5,56.6" fill="none" stroke="#000000" stroke-width="1.4" stroke-linejoin="round"/>
+<circle cx="102.5" cy="332.9" r="4" fill="#000000" stroke="#000000" stroke-width="1.2"/>
+<circle cx="225.1" cy="306.7" r="4" fill="#000000" stroke="#000000" stroke-width="1.2"/>
+<circle cx="347.7" cy="256.6" r="4" fill="#000000" stroke="#000000" stroke-width="1.2"/>
+<circle cx="470.3" cy="175.6" r="4" fill="#000000" stroke="#000000" stroke-width="1.2"/>
+<circle cx="592.9" cy="80.4" r="4" fill="#000000" stroke="#000000" stroke-width="1.2"/>
+<circle cx="715.5" cy="56.6" r="4" fill="#000000" stroke="#000000" stroke-width="1.2"/>
+<rect x="78.0" y="14.0" width="662.0" height="346.0" fill="none" stroke="#000000" stroke-width="1"/>
+<rect x="92.0" y="26.0" width="349.0" height="48.0" fill="#ffffff" stroke="#000000" stroke-width="0.8"/>
+<line x1="100.0" y1="40.0" x2="128.0" y2="40.0" stroke="#000000" stroke-width="1" stroke-dasharray="1.5 3"/>
+<text x="136.0" y="44.5" font-size="13" fill="#000000" text-anchor="start">Ideal (speedup = workers)</text>
+<line x1="100.0" y1="60.0" x2="128.0" y2="60.0" stroke="#000000" stroke-width="1.4"/>
+<circle cx="114.0" cy="60.0" r="4" fill="#000000" stroke="#000000" stroke-width="1.2"/>
+<text x="136.0" y="64.5" font-size="13" fill="#000000" text-anchor="start">AMD Ryzen 7 5800X, 16 hilos, Linux, gold real</text>
+</svg>

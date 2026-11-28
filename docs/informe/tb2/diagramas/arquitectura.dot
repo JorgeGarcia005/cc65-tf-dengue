@@ -1,0 +1,68 @@
+// Vista de despliegue (UML 2.5, diagrama de despliegue) de la solución.
+// Fuente de docs/informe/tb2/fig/arquitectura.svg: make figuras.
+// Los nombres de imágenes, servicios, puertos y redes son los de
+// deploy/docker-compose.yml y deploy/docker-compose.api.yml.
+digraph arquitectura {
+  graph [rankdir=TB, fontname="Times New Roman", fontsize=11, nodesep=0.4, ranksep=0.55,
+         splines=polyline, pad=0.1, compound=true, newrank=true]
+  node  [shape=box, fontname="Times New Roman", fontsize=11, penwidth=0.9, height=0.42, margin="0.14,0.06"]
+  edge  [fontname="Times New Roman", fontsize=9.5, penwidth=0.8, arrowsize=0.6, arrowhead=vee]
+
+  subgraph cluster_navegador {
+    label=<«dispositivo» Navegador del usuario>; labeljust=l; fontsize=9.5; penwidth=0.7
+    spa [label=<«artefacto»<br/>SPA Vigía (React + Vite)>]
+  }
+
+  subgraph cluster_anfitrion {
+    label=<«entorno de ejecución» Docker Compose (anfitrión)>; labeljust=l; fontsize=9.5; penwidth=0.7
+
+    subgraph cluster_web {
+      label=<«contenedor» web (imagen cc65-tf-web)>; labeljust=l; fontsize=9.5; penwidth=0.7
+      web [label=<cmd/web<br/>archivos de la SPA y API_URL>]
+    }
+
+    subgraph cluster_red {
+      label=<«red» cluster>; labeljust=l; fontsize=9.5; penwidth=0.7; style=dashed
+      subgraph cluster_coord {
+        label=<«contenedor» coordinator (imagen cc65-tf)>; labeljust=l; fontsize=9.5; style=solid
+        coord [label=<cmd/coordinator<br/>API REST y WebSocket,<br/>parameter server>]
+      }
+      subgraph cluster_nodos {
+        label=<«contenedor» node, N réplicas (imagen cc65-tf)>; labeljust=l; fontsize=9.5; style=solid
+        nodo [shape=box3d, label=<cmd/node<br/>worker pool del gradiente>]
+      }
+      subgraph cluster_mongo {
+        label=<«contenedor» mongo>; labeljust=l; fontsize=9.5; style=solid
+        mongo [shape=cylinder, label=<MongoDB<br/>modelos, entrenamientos,<br/>predicciones, usuarios>]
+      }
+      subgraph cluster_redis {
+        label=<«contenedor» redis>; labeljust=l; fontsize=9.5; style=solid
+        redis [shape=cylinder, label=<Redis<br/>caché de predicciones>]
+      }
+    }
+
+    subgraph cluster_datos {
+      label=<«contenedor» loader, gold, entrenar (imagen cc65-tf-datos, perfil datos, sin red)>; labeljust=l; fontsize=9.5; penwidth=0.7
+      loader   [label=<cmd/loader>]
+      gold     [label=<cmd/gold>]
+      entrenar [label=<cmd/entrenar>]
+      loader -> gold [label=" silver"]
+      gold -> entrenar [label=" gold"]
+    }
+
+    bronze [shape=note, label=<«artefacto»<br/>data/bronze/*.csv<br/>(MINSA)>]
+    vol    [shape=folder, label=<«volumen» data/gold<br/>shards y modelo.json>]
+  }
+
+  {rank=same; spa; bronze}
+  spa -> web   [label=" HTTP :8081\n descarga de la SPA"]
+  spa -> coord [label=" HTTP :8080\n REST + WebSocket\n (JWT, CORS)"]
+  coord -> nodo [dir=both, arrowtail=vee, label=" TCP :9000\n JSON por línea"]
+  coord -> mongo [label=" :27017"]
+  coord -> redis [label=" :6379"]
+  bronze -> loader
+  gold -> vol
+  entrenar -> vol
+  vol -> nodo  [style=dashed, label=" lectura\n (solo lectura)"]
+  vol -> coord [style=dashed]
+}
