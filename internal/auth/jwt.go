@@ -82,6 +82,18 @@ func NuevoFirmador(secreto []byte, duracion time.Duration) (*Firmador, error) {
 	return &Firmador{secreto: bytes.Clone(secreto), duracion: duracion, ahora: time.Now}, nil
 }
 
+// NuevoFirmadorConReloj es NuevoFirmador con otro reloj para iat, nbf y exp.
+// Lo usa cmd/seguridad para firmar un token ya vencido con el secreto de la
+// corrida y comprobar desde fuera que la API lo rechaza.
+func NuevoFirmadorConReloj(secreto []byte, duracion time.Duration, ahora func() time.Time) (*Firmador, error) {
+	f, err := NuevoFirmador(secreto, duracion)
+	if err != nil {
+		return nil, err
+	}
+	f.ahora = ahora
+	return f, nil
+}
+
 // Firmar emite un token para sub con el rol dado.
 func (f *Firmador) Firmar(sub string, rol Rol) (string, Reclamos, error) {
 	if sub == "" || !rol.Valido() {
