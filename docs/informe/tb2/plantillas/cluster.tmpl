@@ -1,0 +1,9 @@
+Tabla: Tiempo por época del entrenamiento distribuido según el número de nodos {#tab:cluster}
+
+| Nodos | ms por época | IC 95 % (ms) | Speedup | Eficiencia | Karp-Flatt | Cómputo del nodo más lento (ms) | Red y espera (ms) | Red y espera (%) | KB por época | Igual bit a bit |
+|---:|---:|---|---:|---:|---:|---:|---:|---:|---:|:---:|
+{{- range .Cluster.Mediciones}}
+| {{.Nodos}} | {{dos (mil .SegPorEpoca.Media)}} | [{{dos (mil .SegPorEpoca.Inf)}}; {{dos (mil .SegPorEpoca.Sup)}}] | {{dos .Speedup}} | {{dos .Eficiencia}} | {{if .KarpFlatt}}{{tres (derefF .KarpFlatt)}}{{else}}—{{end}} | {{dos (mil .Desglose.CalculoMax)}} | {{dos (mil .Desglose.Red)}} | {{pct .Desglose.Fraccion}} | {{uno (kb .Bytes)}} | {{if .Equivalente}}sí{{else}}no{{end}} |
+{{- end}}
+
+Nota: {{.Cluster.Maquina.CPU}}, {{.Cluster.Maquina.NumCPU}} hilos, {{.Cluster.Maquina.Go}}; {{.Cluster.Protocolo.Reps}} repeticiones de {{.Cluster.Protocolo.Epocas}} épocas por número de nodos, {{.Cluster.Protocolo.Workers}} worker por nodo, nodos y coordinador en la misma máquina comunicados por TCP. Media recortada al 20 % e IC 95 % por *bootstrap*. Fuente: `reports/bench_cluster_deez_gold.json`, generado por `cmd/benchmark -cluster`.

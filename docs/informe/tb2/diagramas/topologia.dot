@@ -1,0 +1,26 @@
+// Topología del clúster (UML 2.5, diagrama de despliegue): estrella con el
+// coordinador al centro en la red interna «cluster» de Docker.
+// Fuente de docs/informe/tb2/fig/topologia.svg: make figuras.
+digraph topologia {
+  graph [rankdir=TB, fontname="Liberation Serif", fontsize=11, nodesep=0.5, ranksep=0.7, splines=line, pad=0.1]
+  node  [fontname="Liberation Serif", fontsize=11, penwidth=0.9, margin="0.14,0.06"]
+  edge  [fontname="Liberation Serif", fontsize=9.5, penwidth=0.8, arrowsize=0.6, dir=both, arrowhead=vee, arrowtail=vee]
+
+  subgraph cluster_red {
+    label=<«red» cluster (puente de Docker; el puerto 9000 no se publica)>; labeljust=l; fontsize=9.5; style=dashed; penwidth=0.7
+    coord [shape=box3d, label=<«contenedor» coordinator<br/>parameter server<br/>escucha TCP :9000>]
+    n1 [shape=box3d, label=<«contenedor» node<br/>réplica 1>]
+    n2 [shape=box3d, label=<«contenedor» node<br/>réplica 2>]
+    nk [shape=box3d, label=<«contenedor» node<br/>réplica N>]
+    puntos [shape=plaintext, label="…"]
+    {rank=same; n1; n2; puntos; nk}
+    coord -> n1 [label=" TCP"]
+    coord -> n2 [label=" TCP"]
+    coord -> nk [label=" TCP"]
+    coord -> puntos [style=invis]
+  }
+  vol [shape=folder, label=<«volumen» data/gold<br/>(solo lectura)>]
+  n1 -> vol [style=dashed, dir=forward, arrowtail=none]
+  n2 -> vol [style=dashed, dir=forward, arrowtail=none]
+  nk -> vol [style=dashed, dir=forward, arrowtail=none]
+}

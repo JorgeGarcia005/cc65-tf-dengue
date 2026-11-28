@@ -1,0 +1,10 @@
+Tabla: Filas en cada capa de datos {#tab:capas}
+
+| Capa | Contenido | Filas |
+|---|---|---:|
+| Bronze | CSV original del MINSA, sin tocar | {{miles .S.L.L.Entradas}} |
+| Silver | Filas válidas y normalizadas (`data/silver/dengue.csv`) | {{miles .S.L.L.Salidas}} |
+| Gold: entrenamiento | Matriz numérica desde {{.S.M.S.AnoMin}}, partida en {{len .S.M.S.Shards}} shards | {{miles .S.M.S.Train.Filas}} |
+| Gold: prueba | Matriz numérica para la evaluación (sección 17) | {{miles .S.M.S.Test.Filas}} |
+
+Nota: Entre silver y gold quedan fuera {{miles .S.M.S.FilasExcluidas}} filas anteriores a {{.S.M.S.AnoMin}} (sección 2.4). Fuente: `reports/limpieza.json` y `reports/split.json`.

@@ -1,0 +1,52 @@
+// Algoritmo del entrenamiento distribuido (UML 2.5, diagrama de actividades):
+// bucle de épocas y una época en el coordinador, con la reasignación de
+// shards cuando un nodo cae o vence un plazo. Código: ml.EntrenarFalible y
+// (*Coordinador).GradienteErr.
+// Fuente de docs/informe/tb2/fig/flujo.svg: make figuras.
+digraph flujo {
+  graph [rankdir=TB, fontname="Liberation Serif", fontsize=11, nodesep=0.4, ranksep=0.32, splines=polyline, pad=0.1, newrank=true]
+  node  [shape=box, style=rounded, fontname="Liberation Serif", fontsize=10.5, penwidth=0.9, margin="0.12,0.05", height=0.36]
+  edge  [fontname="Liberation Serif", fontsize=9, penwidth=0.8, arrowsize=0.6, arrowhead=vee]
+
+  inicio [shape=circle, style=filled, fillcolor=black, label="", width=0.16, height=0.16, fixedsize=true]
+  fin    [shape=doublecircle, style=filled, fillcolor=black, label="", width=0.12, height=0.12, fixedsize=true]
+  abort  [shape=doublecircle, style=filled, fillcolor=black, label="", width=0.12, height=0.12, fixedsize=true]
+
+  subgraph cluster_bucle {
+    label="Bucle de entrenamiento (ml.EntrenarFalible)"; labeljust=l; fontsize=10; penwidth=0.7
+    w0    [label="w ← 0"]
+    e1    [shape=diamond, label="", width=0.3, height=0.3, fixedsize=true]
+    pedir [label="Pedir el gradiente de la época\nal coordinador"]
+    act   [label="w ← w − η · g"]
+  }
+  subgraph cluster_epoca {
+    label="Una época en el coordinador ((*Coordinador).GradienteErr)"; labeljust=l; fontsize=10; penwidth=0.7
+    pend   [label="Marcar los shards como pendientes"]
+    cubrir [label="Cubrir: a cada shard pendiente sin dueño, elegir el nodo\nsano de menor carga y enviarle «asignacion» y «epoca»"]
+    d1     [shape=diamond, label="", width=0.3, height=0.3, fixedsize=true]
+    esperar [label="Esperar el próximo evento\no el plazo más cercano"]
+    d2     [shape=diamond, label="", width=0.3, height=0.3, fixedsize=true]
+    grad   [label="Guardar los parciales\nen sus slots"]
+    caer   [label="Descartar al nodo:\nsus shards quedan sin dueño"]
+    vencer [label="Descartar solo a los dueños de\nlos shards cuyo plazo venció"]
+    d3     [shape=diamond, label="", width=0.3, height=0.3, fixedsize=true]
+    red    [label="Reducir en orden de bloque\ny finalizar g"]
+  }
+
+  inicio -> w0 -> e1
+  e1 -> pedir [label=" [quedan épocas]"]
+  e1 -> fin [label=" [última época]"]
+  pedir -> pend -> cubrir -> d1
+  d1 -> abort [label=" [no queda ningún\n nodo sano]"]
+  d1 -> esperar [label=" [cubiertos]"]
+  esperar -> d2
+  d2 -> grad [label=" «gradiente» del\n dueño actual"]
+  d2 -> caer [label=" error o EOF"]
+  d2 -> vencer [label=" plazo vencido"]
+  grad -> d3
+  caer -> cubrir
+  vencer -> cubrir
+  d3 -> esperar [label=" [faltan shards]"]
+  d3 -> red [label=" [todos los shards]"]
+  red -> act -> e1
+}

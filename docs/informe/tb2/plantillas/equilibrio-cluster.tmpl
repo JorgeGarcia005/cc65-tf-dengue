@@ -1,0 +1,9 @@
+Tabla: Estimación del punto de equilibrio del clúster según el número de nodos {#tab:equilibrio-cluster}
+
+| Nodos | Cómputo ahorrado por época (ms) | Red y espera por época (ms) | Conviene distribuir desde (filas) |
+|---:|---:|---:|---:|
+{{- range .EquilibrioCluster}}
+| {{.Nodos}} | {{dos .AhorroMs}} | {{dos .ComunicaMs}} | {{miles .FilasMinimas}} |
+{{- end}}
+
+Nota: Estimación con un modelo lineal a partir de la @tab:cluster: el cómputo de una época con un nodo es proporcional a las filas, repartirlo en *p* nodos ahorra la fracción 1 − 1/*p* de ese cómputo y conviene cuando el ahorro supera la red y espera medida con *p* nodos. La red y espera se midió con el conjunto completo; con menos filas viajan menos bloques, así que el equilibrio real está en las filas indicadas o en menos. Calculado por `cmd/informe` (`EquilibrioCluster`) desde `reports/bench_cluster_deez_gold.json`.

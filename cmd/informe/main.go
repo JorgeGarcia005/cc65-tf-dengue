@@ -530,10 +530,28 @@ type datosTB2 struct {
 	// máquina de referencia (maquinaPC4) si existe, si no la primera.
 	APIJWT        reporteAPI
 	APIJWTArchivo string
+	// Benchmarks de la Parte A y de la Parte B en la máquina de referencia.
+	LoaderRef benchLoader
+	GradRef   benchGrad
+	// GradGold es el benchmark del gradiente sobre el gold real (data/gold/train.bin)
+	// en la máquina de referencia; GradRef es el sintético de 1 millón de filas.
+	GradGold benchGrad
 }
 
 func nuevoDatosTB2(s sintesis) datosTB2 {
-	d := datosTB2{sintesisPC4: cargarPC4(s), R: map[string]any{}}
+	d := datosTB2{sintesisPC4: cargarPC4(s), R: map[string]any{},
+		LoaderRef: deMaquina(s.L.Bench, func(b benchLoader) string { return b.Archivo })[0],
+		GradRef:   deMaquina(s.M.Bench, func(b benchGrad) string { return b.Archivo })[0]}
+	for _, b := range deMaquina(s.M.Bench, func(b benchGrad) string { return b.Archivo }) {
+		if strings.HasSuffix(b.Archivo, "_gold.json") {
+			d.GradGold = b
+		} else {
+			d.GradRef = b
+		}
+	}
+	if d.GradGold.Archivo == "" {
+		log.Fatalf("no hay benchmark del gradiente sobre el gold de %s", maquinaPC4)
+	}
 	archivos, _ := filepath.Glob("reports/*.json")
 	for _, a := range archivos {
 		var v any

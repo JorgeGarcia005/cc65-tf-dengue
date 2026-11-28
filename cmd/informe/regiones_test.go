@@ -98,7 +98,7 @@ func TestInformeTB2AlDia(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		nuevo, err := expandirRegiones(b)
+		nuevo, err := expandirRegionesCon(b, datos)
 		if err == nil {
 			nuevo, err = expandirValores(nuevo, datos)
 		}

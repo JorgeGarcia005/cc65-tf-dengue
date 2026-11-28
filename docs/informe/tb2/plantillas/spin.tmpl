@@ -1,0 +1,9 @@
+Tabla: Verificaciones de Spin sobre el modelo del protocolo y sus mutantes {#tab:spin}
+
+| Corrida | Opciones | Chequeo | Estados | Errores | Esperado | Cumple |
+|---|---|---|---:|---:|---|:---:|
+{{- range .R.spin.corridas}}
+| {{.corrida}} | {{if .defines}}`{{.defines}}`{{else}}—{{end}} | {{.chequeo}} | {{miles (entero .estados)}} | {{entero .errores}} | {{if eq .esperado "0"}}0{{else}}> 0 (contraejemplo){{end}} | {{if .ok}}sí{{else}}no{{end}} |
+{{- end}}
+
+Nota: «seguridad» busca violaciones de aserciones e interbloqueos (estados finales inválidos); «termina» verifica la propiedad LTL de terminación. {{.R.spin.spin}}, gcc {{.R.spin.gcc}}. Fuente: `reports/spin.json`, generado por `bash spin/verificar.sh`.
