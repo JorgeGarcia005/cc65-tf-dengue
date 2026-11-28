@@ -32,8 +32,8 @@ type sintesisPC4 struct {
 
 func (s sintesisPC4) Ultimo() int { return len(s.Cluster.Mediciones) - 1 }
 
-func generarPC4(s sintesis) {
-	dir := "docs/informe/pc4"
+// cargarPC4 lee los reportes del clúster, de la API y de Spin.
+func cargarPC4(s sintesis) sintesisPC4 {
 	p4 := sintesisPC4{S: s, Pregunta: PreguntaQueResuelve}
 	var err error
 	if p4.Cluster, _, err = clusterGold(); err != nil {
@@ -63,12 +63,18 @@ func generarPC4(s sintesis) {
 			p4.SpinMutantes++
 		}
 	}
+	return p4
+}
+
+func generarPC4(s sintesis) {
+	dir := "docs/informe/pc4"
+	p4 := cargarPC4(s)
 	// En la PC4 el clúster ya no es un diseño: la sección 7.4 apunta a la 8.
 	reemplazarEn(filepath.Join(dir, "07-modelo.md"), "## 7.4 Distribución en el clúster (diseño para PC4)",
 		"## 7.4 Distribución en el clúster (implementada en la sección 8)")
 	escribir(filepath.Join(dir, "01-resumen.md"), plantillaResumenPC4, p4)
 	escribir(filepath.Join(dir, "13-conclusiones.md"), plantillaConclusionesPC4, p4)
-	cambiados, err := regenerarRegiones(dir)
+	cambiados, err := regenerarRegiones(dir, nil)
 	if err != nil {
 		log.Fatal(err)
 	}

@@ -1,5 +1,5 @@
 ﻿# Deja listos para entregar los .docx que genera cmd/word: abre cada uno con
-# Microsoft Word, actualiza el índice (números de página reales), lo guarda y
+# Microsoft Word, actualiza los índices (números de página reales), lo guarda y
 # quita el ajuste "actualizar campos al abrir", para que el profesor no vea
 # ese aviso. Con -Pdf exporta además un PDF para revisarlo.
 #
@@ -30,6 +30,11 @@ $word.DisplayAlerts = 0
 try {
     foreach ($a in $archivos) {
         $doc = $word.Documents.Open($a.FullName, $false, $false)
+        foreach ($toc in $doc.TablesOfContents) { $toc.Update() }
+        # Los índices de figuras y de tablas son campos PAGEREF (cmd/word):
+        # se actualizan todos los campos y luego otra vez el índice general,
+        # por si los números de página se movieron.
+        $doc.Fields.Update() | Out-Null
         foreach ($toc in $doc.TablesOfContents) { $toc.Update() }
         $paginas = $doc.ComputeStatistics(2)
         $doc.Save()

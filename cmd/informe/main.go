@@ -4,12 +4,18 @@
 //
 // Uso:
 //
-//	go run ./cmd/informe            # regenera todas las secciones disponibles
+//	go run ./cmd/informe                  # informe final (docs/informe/tb2)
+//	go run ./cmd/informe -entregable PC4  # secciones de la PC3 y la PC4
+//
+// Las carpetas pc3 y pc4 son los informes ya entregados: sin -entregable PC4
+// solo se regeneran sus fragmentos de código (para que sigan iguales al
+// fuente), no sus cifras ni sus figuras.
 package main
 
 import (
 	"bytes"
 	"encoding/json"
+	"flag"
 	"fmt"
 	"log"
 	"os"
@@ -471,6 +477,91 @@ Punto de equilibrio con {{.WorkersEq}} workers{{if .FilasEq}}: la concurrencia c
 `
 
 func main() {
+	entregable := flag.String("entregable", "TB2", "TB2 (informe final) o PC4 (secciones de la PC3 y la PC4)")
+	flag.Parse()
+	switch *entregable {
+	case "TB2":
+		generarTB2()
+	case "PC4":
+		generarPC3yPC4()
+	default:
+		log.Fatalf("entregable desconocido %q (TB2 o PC4)", *entregable)
+	}
+}
+
+// cargar lee el perfil, la limpieza y el modelo con sus benchmarks.
+func cargar() (perfil, limpieza, modelo) {
+	var p perfil
+	leer("reports/perfil_bronze.json", &p)
+	slices.Sort(p.Anos)
+	var l limpieza
+	leer("reports/limpieza.json", &l)
+	archivos, _ := filepath.Glob("reports/bench_loader_*.json")
+	slices.Sort(archivos)
+	for _, a := range archivos {
+		var b benchLoader
+		leer(a, &b)
+		b.Archivo = filepath.Base(a)
+		l.Bench = append(l.Bench, b)
+	}
+	var m modelo
+	leer("reports/split.json", &m.S)
+	leer("reports/entrenamiento.json", &m.E)
+	archivos, _ = filepath.Glob("reports/bench_gradiente_*.json")
+	slices.Sort(archivos)
+	for _, a := range archivos {
+		var b benchGrad
+		leer(a, &b)
+		b.Archivo = filepath.Base(a)
+		m.Bench = append(m.Bench, b)
+	}
+	return p, l, m
+}
+
+// datosTB2 son los datos de los valores en línea del informe final
+// (<!--v:EXPR-->…<!--/v-->): .S es la síntesis de la PC3, .Cluster, .API y
+// .Spin* los de la PC4.
+type datosTB2 struct {
+	sintesisPC4
+}
+
+// generarTB2 regenera las figuras, las regiones y los valores en línea del
+// informe final. Los benchmarks son los de la máquina de referencia
+// (maquinaPC4), como en la PC4.
+func generarTB2() {
+	const dir = "docs/informe/tb2"
+	p, l, m := cargar()
+	s := calcularSintesis(p, l, m)
+	lb := deMaquina(l.Bench, func(b benchLoader) string { return b.Archivo })
+	mb := deMaquina(m.Bench, func(b benchGrad) string { return b.Archivo })
+	escribirFigura(dir+"/fig/casos_por_ano.svg", figuraCasosPorAno(p))
+	escribirFigura(dir+"/fig/riesgo_departamento.svg", figuraRiesgoDepto(m.E))
+	escribirFigura(dir+"/fig/riesgo_semana.svg", figuraRiesgoSemana(m.E))
+	escribirFigura(dir+"/fig/speedup_gradiente.svg",
+		figuraSpeedup("Speedup del cálculo del gradiente", curvasGradiente(mb)))
+	escribirFigura(dir+"/fig/speedup_loader.svg",
+		figuraSpeedup("Speedup de la limpieza concurrente", curvasLoader(lb)))
+	if cs := curvasCluster(); len(cs) > 0 {
+		escribirFigura(dir+"/fig/speedup_cluster.svg",
+			figuraSpeedupEjes("Speedup del entrenamiento distribuido por número de nodos", cs,
+				"Nodos (1 worker cada uno, TCP)", "Ideal (speedup = nodos)", true))
+	}
+	for _, c := range []struct {
+		dir   string
+		datos any
+	}{{dir, datosTB2{cargarPC4(s)}}, {"docs/informe/pc4", nil}} {
+		cambiados, err := regenerarRegiones(c.dir, c.datos)
+		if err != nil {
+			log.Fatal(err)
+		}
+		for _, a := range cambiados {
+			log.Printf("regiones regeneradas en %s", a)
+		}
+	}
+}
+
+// generarPC3yPC4 regenera las secciones con cifras de la PC3 y de la PC4.
+func generarPC3yPC4() {
 	var p perfil
 	leer("reports/perfil_bronze.json", &p)
 	slices.Sort(p.Anos)
@@ -578,7 +669,7 @@ func curvasCluster() []curvaSpeedup {
 		if strings.HasPrefix(b.Fuente, "gold") {
 			datos = "gold real"
 		}
-		c := curvaSpeedup{Nombre: nombreMaquina(b.Maquina.CPU, b.Maquina.NumCPU, b.Maquina.SO) + " · " + datos}
+		c := curvaSpeedup{Nombre: nombreMaquina(b.Maquina.CPU, b.Maquina.NumCPU, b.Maquina.SO) + ", " + datos}
 		for _, m := range b.Mediciones {
 			c.Workers = append(c.Workers, m.Nodos)
 			c.Speedup = append(c.Speedup, m.Speedup)
@@ -610,7 +701,7 @@ func curvasGradiente(bs []benchGrad) []curvaSpeedup {
 		if strings.HasPrefix(b.Fuente, "gold") {
 			datos = "gold real"
 		}
-		c := curvaSpeedup{Nombre: nombreMaquina(b.Maquina.CPU, b.Maquina.NumCPU, b.Maquina.SO) + " · " + datos}
+		c := curvaSpeedup{Nombre: nombreMaquina(b.Maquina.CPU, b.Maquina.NumCPU, b.Maquina.SO) + ", " + datos}
 		for _, x := range b.Mediciones {
 			if x.Config == "secuencial" {
 				continue

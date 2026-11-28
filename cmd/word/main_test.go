@@ -152,8 +152,9 @@ func TestMarkdownCompletoEsXMLValido(t *testing.T) {
 	if !strings.Contains(d.b.String(), ">x|y<") {
 		t.Error("una barra dentro de `código` no debe partir la celda")
 	}
-	// La captura se numera después de la figura: Figura 2.
-	if !strings.Contains(d.b.String(), "Figura 2. Ejecución del loader") || !strings.Contains(d.b.String(), "[Pegar aquí la captura]") {
+	// La captura se numera después de la figura: Figura 2, con el título APA
+	// en la línea siguiente.
+	if !strings.Contains(textoDe(d.b.String()), "Figura 2\nEjecución del loader") || !strings.Contains(d.b.String(), "[Pegar aquí la captura]") {
 		t.Error("falta el espacio para la captura con su pie numerado")
 	}
 }

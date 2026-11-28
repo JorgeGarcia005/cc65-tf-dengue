@@ -3,7 +3,7 @@ SHELL := /bin/bash
 
 GO_FILES := $(shell find . -name '*.go' -not -path './web/*' -not -path './.git/*' 2>/dev/null)
 
-.PHONY: check fmt vet test skills data datos-docker servicio bench bench-api evaluacion informe imagen cluster prueba-caida
+.PHONY: check fmt vet test skills data datos-docker servicio bench bench-api evaluacion informe informe-pc4 figuras imagen cluster prueba-caida
 
 ## check: todo lo que el CI exige antes de abrir un PR
 check: skills fmt vet test
@@ -62,11 +62,20 @@ cluster:
 prueba-caida:
 	@USUARIO="$$(id -u):$$(id -g)" bash scripts/prueba-caida.sh
 
-## informe: secciones con cifras, figuras y el Word (requiere entregables/plantilla.docx)
+## informe: cifras, figuras y código del informe final (TB2) y el Word (requiere entregables/plantilla.docx)
+##   QUITAR="Nombre Apellido" borra de la carátula los párrafos con ese texto (p. ej. un integrante que se retiró)
 informe:
 	@go run ./cmd/informe
-	@go run ./cmd/word
+	@go run ./cmd/word $(if $(QUITAR),-quitar "$(QUITAR)")
 	@echo "Con Word instalado: powershell -ExecutionPolicy Bypass -File scripts/word-final.ps1"
+
+## informe-pc4: regenera las secciones con cifras de los informes ya entregados (PC3 y PC4)
+informe-pc4:
+	@go run ./cmd/informe -entregable PC4
+
+## figuras: diagramas UML del informe TB2 (Graphviz: diagramas/*.dot → fig/*.svg)
+figuras:
+	@bash scripts/figuras.sh
 
 ## web: tipos, tests y build de la SPA (lo mismo que el job «web» del CI)
 .PHONY: web

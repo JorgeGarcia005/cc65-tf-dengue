@@ -1,0 +1,56 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="760" height="420" viewBox="0 0 760 420" font-family="Times New Roman, Times, serif">
+<title>Speedup del entrenamiento distribuido por número de nodos</title>
+<rect width="760" height="420" fill="#ffffff"/>
+<line x1="78.0" y1="360.0" x2="83.0" y2="360.0" stroke="#000000" stroke-width="1"/>
+<line x1="740.0" y1="360.0" x2="735.0" y2="360.0" stroke="#000000" stroke-width="1"/>
+<text x="72.0" y="364.5" font-size="13" fill="#000000" text-anchor="end">0</text>
+<line x1="78.0" y1="302.3" x2="83.0" y2="302.3" stroke="#000000" stroke-width="1"/>
+<line x1="740.0" y1="302.3" x2="735.0" y2="302.3" stroke="#000000" stroke-width="1"/>
+<text x="72.0" y="306.8" font-size="13" fill="#000000" text-anchor="end">1</text>
+<line x1="78.0" y1="244.7" x2="83.0" y2="244.7" stroke="#000000" stroke-width="1"/>
+<line x1="740.0" y1="244.7" x2="735.0" y2="244.7" stroke="#000000" stroke-width="1"/>
+<text x="72.0" y="249.2" font-size="13" fill="#000000" text-anchor="end">2</text>
+<line x1="78.0" y1="187.0" x2="83.0" y2="187.0" stroke="#000000" stroke-width="1"/>
+<line x1="740.0" y1="187.0" x2="735.0" y2="187.0" stroke="#000000" stroke-width="1"/>
+<text x="72.0" y="191.5" font-size="13" fill="#000000" text-anchor="end">3</text>
+<line x1="78.0" y1="129.3" x2="83.0" y2="129.3" stroke="#000000" stroke-width="1"/>
+<line x1="740.0" y1="129.3" x2="735.0" y2="129.3" stroke="#000000" stroke-width="1"/>
+<text x="72.0" y="133.8" font-size="13" fill="#000000" text-anchor="end">4</text>
+<line x1="78.0" y1="71.7" x2="83.0" y2="71.7" stroke="#000000" stroke-width="1"/>
+<line x1="740.0" y1="71.7" x2="735.0" y2="71.7" stroke="#000000" stroke-width="1"/>
+<text x="72.0" y="76.2" font-size="13" fill="#000000" text-anchor="end">5</text>
+<line x1="78.0" y1="14.0" x2="83.0" y2="14.0" stroke="#000000" stroke-width="1"/>
+<line x1="740.0" y1="14.0" x2="735.0" y2="14.0" stroke="#000000" stroke-width="1"/>
+<text x="72.0" y="18.5" font-size="13" fill="#000000" text-anchor="end">6</text>
+<line x1="102.5" y1="360.0" x2="102.5" y2="355.0" stroke="#000000" stroke-width="1"/>
+<line x1="102.5" y1="14.0" x2="102.5" y2="19.0" stroke="#000000" stroke-width="1"/>
+<text x="102.5" y="377.0" font-size="13" fill="#000000" text-anchor="middle">1</text>
+<line x1="255.8" y1="360.0" x2="255.8" y2="355.0" stroke="#000000" stroke-width="1"/>
+<line x1="255.8" y1="14.0" x2="255.8" y2="19.0" stroke="#000000" stroke-width="1"/>
+<text x="255.8" y="377.0" font-size="13" fill="#000000" text-anchor="middle">2</text>
+<line x1="409.0" y1="360.0" x2="409.0" y2="355.0" stroke="#000000" stroke-width="1"/>
+<line x1="409.0" y1="14.0" x2="409.0" y2="19.0" stroke="#000000" stroke-width="1"/>
+<text x="409.0" y="377.0" font-size="13" fill="#000000" text-anchor="middle">3</text>
+<line x1="562.2" y1="360.0" x2="562.2" y2="355.0" stroke="#000000" stroke-width="1"/>
+<line x1="562.2" y1="14.0" x2="562.2" y2="19.0" stroke="#000000" stroke-width="1"/>
+<text x="562.2" y="377.0" font-size="13" fill="#000000" text-anchor="middle">4</text>
+<line x1="715.5" y1="360.0" x2="715.5" y2="355.0" stroke="#000000" stroke-width="1"/>
+<line x1="715.5" y1="14.0" x2="715.5" y2="19.0" stroke="#000000" stroke-width="1"/>
+<text x="715.5" y="377.0" font-size="13" fill="#000000" text-anchor="middle">5</text>
+<text x="409.0" y="400.0" font-size="14" fill="#000000" text-anchor="middle">Nodos (1 worker cada uno, TCP)</text>
+<text x="26.0" y="187.0" font-size="14" fill="#000000" text-anchor="middle" transform="rotate(-90 26.0 187.0)">Speedup (×)</text>
+<polyline points="102.5,302.3 255.8,244.7 409.0,187.0 562.2,129.3 715.5,71.7" fill="none" stroke="#000000" stroke-width="1" stroke-linejoin="round" stroke-dasharray="1.5 3"/>
+<polyline points="102.5,302.3 255.8,257.7 409.0,197.5 562.2,134.3 715.5,83.0" fill="none" stroke="#000000" stroke-width="1.4" stroke-linejoin="round"/>
+<circle cx="102.5" cy="302.3" r="4" fill="#000000" stroke="#000000" stroke-width="1.2"/>
+<circle cx="255.8" cy="257.7" r="4" fill="#000000" stroke="#000000" stroke-width="1.2"/>
+<circle cx="409.0" cy="197.5" r="4" fill="#000000" stroke="#000000" stroke-width="1.2"/>
+<circle cx="562.2" cy="134.3" r="4" fill="#000000" stroke="#000000" stroke-width="1.2"/>
+<circle cx="715.5" cy="83.0" r="4" fill="#000000" stroke="#000000" stroke-width="1.2"/>
+<rect x="78.0" y="14.0" width="662.0" height="346.0" fill="none" stroke="#000000" stroke-width="1"/>
+<rect x="92.0" y="26.0" width="362.2" height="48.0" fill="#ffffff" stroke="#000000" stroke-width="0.8"/>
+<line x1="100.0" y1="40.0" x2="128.0" y2="40.0" stroke="#000000" stroke-width="1" stroke-dasharray="1.5 3"/>
+<text x="136.0" y="44.5" font-size="13" fill="#000000" text-anchor="start">Ideal (speedup = nodos)</text>
+<line x1="100.0" y1="60.0" x2="128.0" y2="60.0" stroke="#000000" stroke-width="1.4"/>
+<circle cx="114.0" cy="60.0" r="4" fill="#000000" stroke="#000000" stroke-width="1.2"/>
+<text x="136.0" y="64.5" font-size="13" fill="#000000" text-anchor="start">AMD Ryzen 7 5800X, 16 hilos, Windows, gold real</text>
+</svg>
