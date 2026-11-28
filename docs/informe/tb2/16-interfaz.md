@@ -77,7 +77,7 @@ El panel de administración recibe los eventos del clúster por WebSocket (secci
 - la **topología** del clúster, con el estado, la carga, el uso de CPU y la latencia de cada nodo (@fig:admin-metricas, sección 9.6);
 - la **curva de pérdida** en vivo y las **barras de los pesos** del modelo, que cambian época a época;
 - un **mapa que se repinta** cada cierto número de épocas con el modelo en entrenamiento;
-- la **bitácora** del protocolo, donde se ve la caída de un nodo y la reasignación de su *shard* (@fig:admin-caida, sección 9.4). En modo demostración, un botón «Tumbar» corta la conexión de un nodo para comprobarlo en vivo.
+- la **bitácora** del protocolo, donde se ve la caída de un nodo y su recuperación (@fig:admin-caida, sección 9.4). En modo demostración, un botón «Tumbar» corta la conexión de un nodo para comprobarlo en vivo.
 
 **Un solo reductor para todo.** El estado del panel se calcula con una función pura, `reducir(estado, evento)`, que usan igual el WebSocket en vivo y el **modo réplica**: un entrenamiento grabado como archivo `.jsonl` se puede reproducir en el panel sin clúster, a la velocidad que se elija. Tests de Vitest comprueban el reductor con secuencias de eventos conocidas.
 

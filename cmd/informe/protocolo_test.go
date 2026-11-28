@@ -75,3 +75,13 @@ func TestContratosCubrenLasRutas(t *testing.T) {
 		t.Errorf("predicciones: %+v", op)
 	}
 }
+
+func TestRevisionesCuentaVeredictos(t *testing.T) {
+	r, err := leerRevisiones("../../docs/agentes/revisiones")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r.PRs == 0 || r.Rondas < r.PRs || r.Aprobados > r.PRs || r.Hallazgos["BLOQUEANTE"] == 0 {
+		t.Fatalf("%+v", r)
+	}
+}

@@ -191,6 +191,10 @@ func generarRegion(nombre string) (string, error) {
 		return regionContratos()
 	case nombre == "postman":
 		return regionPostman()
+	case nombre == "revisiones":
+		return regionRevisiones()
+	case nombre == "pruebas":
+		return regionPruebas()
 	}
 	return "", fmt.Errorf("región desconocida")
 }

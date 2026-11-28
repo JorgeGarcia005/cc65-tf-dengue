@@ -376,9 +376,9 @@ Un nodo que se registra tarde, o que se reconecta tras una caída, queda **de re
 
 <!-- evidencia: evidencias/caida.txt -->
 
-El mismo comportamiento se ve en el panel de administración de la SPA, que recibe los eventos del clúster por WebSocket: la @fig:admin-caida muestra la bitácora después de tumbar un nodo desde el panel, con su caída y la reasignación de su *shard*.
+El mismo comportamiento se ve en el panel de administración de la SPA, que recibe los eventos del clúster por WebSocket: la @fig:admin-caida muestra la bitácora después de tumbar un nodo desde el panel, con su caída y su recuperación: la reasignación de su *shard* si el corte ocurre durante una época, o su reconexión como nodo de reserva si ocurre en la pausa entre dos épocas.
 
-<!-- captura: Bitácora del panel de administración tras tumbar un nodo: caída y reasignación de su shard {#fig:admin-caida} [capturas/e2e-09-admin-nodo-caido.png] -->
+<!-- captura: Bitácora del panel de administración tras tumbar un nodo: caída y recuperación (reasignación de su shard o reconexión) {#fig:admin-caida} [capturas/e2e-09-admin-nodo-caido.png] -->
 
 ## 9.5 Distribuido igual a secuencial
 

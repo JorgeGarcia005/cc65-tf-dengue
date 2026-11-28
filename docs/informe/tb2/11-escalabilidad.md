@@ -43,7 +43,7 @@ Tabla: Tiempo por época del entrenamiento distribuido según el número de nodo
 | 4 | 18,49 | [18,22; 18,79] | 3,91 | 0,98 | 0,007 | 17,84 | 0,64 | 3,46 | 114,8 | sí |
 | 5 | 15,06 | [14,89; 15,70] | 4,80 | 0,96 | 0,010 | 14,69 | 0,51 | 3,37 | 115,6 | sí |
 
-Nota: AMD Ryzen 7 5800X 8-Core Processor, 16 hilos, go1.26.10; 5 repeticiones de 30 épocas por número de nodos, 1 worker por nodo, nodos y coordinador en la misma máquina comunicados por TCP. Media recortada al 20 % e IC 95 % por *bootstrap*. Fuente: `reports/bench_cluster_deez_gold.json`, generado por `cmd/benchmark -cluster`.
+Nota: AMD Ryzen 7 5800X 8-Core Processor, 16 hilos, go1.26.10; 5 repeticiones de 30 épocas por número de nodos, 1 worker por nodo, nodos y coordinador en la misma máquina comunicados por TCP. «ms por época»: media recortada al 20 % e IC 95 % por *bootstrap*; las columnas de cómputo, red y espera y KB son medias aritméticas de las repeticiones, por eso su suma no coincide exactamente con la media recortada. Fuente: `reports/bench_cluster_deez_gold.json`, generado por `cmd/benchmark -cluster`.
 <!-- /generado -->
 
 ![Speedup del entrenamiento distribuido según el número de nodos](fig/speedup_cluster.svg){#fig:speedup-cluster}

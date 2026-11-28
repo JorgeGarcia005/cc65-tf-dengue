@@ -207,7 +207,7 @@ Los campos que sustentan esta sección son `limpieza.descartadas_por_regla` (@ta
 
 ## 7.6 Rendimiento secuencial y concurrente, y punto de equilibrio
 
-`cmd/loader -bench` mide la limpieza completa del archivo en memoria, sin la lectura del disco, con 1, 2, 4, 8 y 16 workers, en orden barajado y con varias repeticiones por configuración (@tab:bench-loader y @fig:speedup-loader). En cada repetición comprueba que el silver sea igual al secuencial.
+`cmd/loader -bench` mide la limpieza completa del archivo en memoria, sin la lectura del disco, con 1 a <!--v:(index .LoaderRef.Mediciones 5).Workers-->32<!--/v--> workers (el doble de las CPU lógicas), en orden barajado y con varias repeticiones por configuración (@tab:bench-loader y @fig:speedup-loader). En cada repetición comprueba que el silver sea igual al secuencial.
 
 <!-- generado:plantilla:bench-loader -->
 Tabla: Tiempo de la limpieza del archivo completo según el número de workers {#tab:bench-loader}

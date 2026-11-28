@@ -1,0 +1,23 @@
+{{- with .Eval -}}
+Tabla: Métricas del modelo en el conjunto de prueba {#tab:metricas}
+
+| Métrica | Valor | Qué mide |
+|---|---:|---|
+| AUC-ROC | {{cuatro .Metricas.AUC}} | Probabilidad de que un caso con signos de alarma reciba más riesgo que uno sin ellos (0,5 = azar; 1 = perfecto) |
+| Sensibilidad (*recall*) | {{pct .Metricas.Recall}} % | De los casos con signos de alarma, cuántos marca el modelo |
+| Precisión | {{pct .Metricas.Precision}} % | De los casos que marca, cuántos tienen signos de alarma |
+| F1 | {{tres .Metricas.F1}} | Media armónica de precisión y sensibilidad |
+| Exactitud | {{pct .Metricas.Exactitud}} % | Casos clasificados correctamente, de ambas clases |
+| Brier (riesgo calibrado) | {{cuatro .Brier}} | Error cuadrático medio entre el riesgo y lo ocurrido (menor es mejor) |
+
+Nota: {{miles .FilasTest}} casos de prueba, de los cuales {{miles .PositivosTest}} tienen signos de alarma o son graves; umbral de clasificación {{num .Metricas.Umbral}} sobre la probabilidad ponderada. Modelo `{{.VersionModelo}}`. Fuente: `reports/evaluacion.json`, generado por `cmd/evaluacion`.
+
+Tabla: Matriz de confusión en el conjunto de prueba {#tab:confusion}
+
+| | Predicho: con signos de alarma | Predicho: sin signos de alarma |
+|---|---:|---:|
+| Real: con signos de alarma o grave | {{miles .Metricas.VP}} (verdaderos positivos) | {{miles .Metricas.FN}} (falsos negativos) |
+| Real: sin signos de alarma | {{miles .Metricas.FP}} (falsos positivos) | {{miles .Metricas.VN}} (verdaderos negativos) |
+
+Nota: Umbral {{num .Metricas.Umbral}}. Fuente: `reports/evaluacion.json`.
+{{- end}}

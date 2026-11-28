@@ -1,0 +1,9 @@
+Tabla: Departamentos con más casos esperados con signos de alarma {#tab:impacto-deptos}
+
+| # | Departamento | Casos de prueba | Riesgo calibrado medio (%) | Casos esperados con signos de alarma | Del total del país (%) | Acumulado (%) |
+|---:|---|---:|---:|---:|---:|---:|
+{{- range $i, $c := .ImpactoDeptos}}{{if lt $i 10}}
+| {{inc $i}} | {{depto $c.Departamento}} | {{miles $c.Casos}} | {{pct $c.Riesgo}} | {{miles (entero $c.Esperados)}} | {{pct $c.Fraccion}} | {{pct $c.Acumulada}} |
+{{- end}}{{end}}
+
+Nota: Todas las semanas y edades. Casos esperados = suma del riesgo calibrado de los casos de prueba del departamento. Riesgo medio del país: {{pct .Nacional.Riesgo}} %. Fuente: `reports/evaluacion.json` (`riesgo.celdas`), ordenado por `cmd/informe`.
