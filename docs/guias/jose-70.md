@@ -75,24 +75,23 @@ Errores comunes:
 
 ## Paso 13. Seguridad
 
-Llega en un PR aparte. Si el control dice que todavía no está el paso «seguridad», espera el aviso de Jorge y luego:
+Si creaste tu rama antes del PR de seguridad y Playwright (el control te lo dirá en el paso 1), primero `git merge origin/integracion/tb2` (sin rebase). Con el sistema arriba:
 
 ```bash
-git merge origin/integracion/tb2     # sin rebase
 bash scripts/evidencias-tb2.sh seguridad
 ```
 
-Prueba CORS permitido y denegado, sin token, token vencido, rol ajeno, WebSocket sin ticket y de un origen ajeno, límite de intentos (429) y cuerpo grande (413), y escribe `reports/seguridad.json` con lo esperado y lo obtenido. Si algún caso no da lo esperado, **no lo arregles**: es un hallazgo; avísale a Jorge.
+`cmd/seguridad` prueba 24 casos desde fuera: login, token ausente, mal formado, con la firma alterada, vencido o de otro secreto, roles, CORS permitido y denegado, cabeceras de seguridad, CSP de la SPA, WebSocket sin ticket, con ticket reutilizado y de un origen ajeno, cuerpo grande (413) y límite de intentos (429). Al final **espera un minuto** a que el límite se libere y comprueba que el login vuelve a funcionar, para no bloquear el paso 14. Escribe `reports/seguridad.json` con lo esperado y lo obtenido. Si algún caso no da lo esperado, **no lo arregles**: es un hallazgo; avísale a Jorge.
 
 ## Paso 14. Pruebas de punta a punta y capturas automáticas (Playwright)
 
-También llega en un PR aparte (mismo procedimiento: `git merge origin/integracion/tb2`). Con el sistema arriba:
+Con el sistema arriba y conexión a internet (la primera vez descarga el Chromium de Playwright, y Swagger UI se carga desde `cdn.jsdelivr.net`):
 
 ```bash
 bash scripts/evidencias-tb2.sh e2e
 ```
 
-Recorre la SPA como analista y como administrador y guarda estas capturas en `docs/informe/tb2/capturas/`. **No las tomes a mano ni les cambies el nombre**: el informe las busca por nombre.
+Recorre la SPA como analista y como administrador (9 pruebas) y guarda estas capturas en `docs/informe/tb2/capturas/`. **No las tomes a mano ni les cambies el nombre**: el informe las busca por nombre. La prueba de Inicio falla a propósito si la evaluación no es del modelo que sirve la API: en ese caso repite desde el paso 6.
 
 | Archivo | Qué muestra |
 |---|---|
@@ -103,9 +102,9 @@ Recorre la SPA como analista y como administrador y guarda estas capturas en `do
 | `e2e-05-mapa-departamento.png` | Mapa con el panel de un departamento |
 | `e2e-06-prediccion.png` | Predicción de un caso con sus contribuciones |
 | `e2e-07-evaluacion.png` | Evaluación: ROC, calibración y matriz |
-| `e2e-08-admin-entrenando.png` | Panel de administración durante un entrenamiento |
-| `e2e-09-admin-nodo-caido.png` | Panel tras tumbar un nodo: reasignación en la bitácora |
-| `e2e-10-admin-metricas.png` | Uso de CPU y latencia por nodo, y p95 de la API |
+| `e2e-08-admin-entrenando.png` | Panel de administración durante un entrenamiento (época, pérdida, nodos sanos, p95 de la API) |
+| `e2e-09-admin-nodo-caido.png` | Bitácora tras tumbar un nodo: la caída y el reingreso (o la reasignación de su shard) |
+| `e2e-10-admin-metricas.png` | Topología con el uso de CPU y la latencia de cada nodo al terminar |
 | `e2e-11-swagger.png` | Swagger con el candado de autorización |
 | `e2e-12-responsive-375.png` | La SPA a 375 px de ancho |
 
