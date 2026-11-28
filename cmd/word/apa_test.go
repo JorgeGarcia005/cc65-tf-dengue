@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -187,5 +188,49 @@ func TestQuitarParrafos(t *testing.T) {
 	}
 	if len(faltan) != 1 || faltan[0] != "Nadie" {
 		t.Errorf("faltan: %v", faltan)
+	}
+}
+
+// TestTextoPlanoEnCeldasEIndices (PR-96 H1): las celdas y los títulos se miden
+// e indexan por lo que se ve en Word, no por el Markdown con valores en línea,
+// enlaces o referencias; una barra dentro de <!--v:…--> no parte la celda.
+func TestTextoPlanoEnCeldasEIndices(t *testing.T) {
+	md := "Tabla: Resultados con <!--v:(index .C .U).Nodos-->5<!--/v--> nodos (ver @fig:f) {#tab:r}\n\n" +
+		"| Métrica | Valor | Detalle |\n|---|---:|---|\n" +
+		"| AUC | <!--v:.S.M.E.Test.AUC | cuatro-->0,6221<!--/v--> | [repositorio](https://github.com/JorgeGarcia005/cc65-tf-dengue/blob/main/reports/evaluacion.json) |\n\n" +
+		"Nota: Fuente: `reports/evaluacion.json`.\n\n" +
+		"![Speedup con <!--v:.N-->5<!--/v--> nodos](f.svg){#fig:f}\n"
+	d := convertirPrueba(t, map[string]string{"01-a.md": md, "f.svg": svgPrueba}, "01-a.md")
+	if len(d.avisos) > 0 {
+		t.Fatalf("avisos: %v", d.avisos)
+	}
+	if got := d.entradas[0].Titulo; got != "Resultados con 5 nodos (ver Figura 1)" {
+		t.Errorf("título en el índice: %q", got)
+	}
+	if got := d.entradas[1].Titulo; got != "Speedup con 5 nodos" {
+		t.Errorf("título en el índice: %q", got)
+	}
+	x := d.b.String()
+	if strings.Contains(x, "<!--") || strings.Contains(x, "&lt;!--") {
+		t.Error("el marcado de los valores en línea llegó al documento")
+	}
+	if got := partirFila("| AUC | <!--v:.X | cuatro-->0,6<!--/v--> | b |"); len(got) != 3 {
+		t.Errorf("celdas: %q", got)
+	}
+	// El valor (4 caracteres) y el enlace (su texto) no se llevan el ancho.
+	tabla := x[strings.Index(x, "<w:tblGrid>"):strings.Index(x, "</w:tblGrid>")]
+	var anchos []int
+	for _, m := range regexp.MustCompile(`w:w="(\d+)"`).FindAllStringSubmatch(tabla, -1) {
+		var n int
+		fmt.Sscan(m[1], &n)
+		anchos = append(anchos, n)
+	}
+	want := anchosColumnas([][]string{{"Métrica", "Valor", "Detalle"}, {"AUC", "0,6221", "repositorio"}}, 3, 20)
+	if fmt.Sprint(anchos) != fmt.Sprint(want) {
+		t.Errorf("anchos %v; con el texto visible serían %v: se midió el Markdown", anchos, want)
+	}
+	// La nota va pegada a la regla inferior de la tabla.
+	if strings.Contains(x, `</w:tbl><w:p><w:pPr><w:spacing w:before="0" w:after="120"/>`) {
+		t.Error("párrafo vacío entre la tabla y su nota")
 	}
 }

@@ -222,7 +222,11 @@ func (d *documento) bloques(lineas []string, base string) {
 			for j < len(lineas) && strings.HasPrefix(strings.TrimSpace(lineas[j]), "|") {
 				j++
 			}
-			d.tabla(lineas[i:j])
+			k := j
+			for k < len(lineas) && strings.TrimSpace(lineas[k]) == "" {
+				k++
+			}
+			d.tabla(lineas[i:j], k < len(lineas) && strings.HasPrefix(strings.TrimSpace(lineas[k]), "Nota: "))
 			i = j
 		case strings.HasPrefix(t, ">"):
 			var partes []string
@@ -335,7 +339,7 @@ func (d *documento) pie(tipo, titulo, etiqueta string) {
 	}
 	d.marcas++
 	marcador := fmt.Sprintf("_%s%d", tipo, *n)
-	d.entradas = append(d.entradas, entrada{Tipo: tipo, N: *n, Titulo: textoVisible(d.resolver(titulo)), Marcador: marcador})
+	d.entradas = append(d.entradas, entrada{Tipo: tipo, N: *n, Titulo: d.textoPlano(titulo), Marcador: marcador})
 	num := estilo{Fuente: fuenteTexto, Negrita: true, SinCursiva: true, Tam: 24}
 	fmt.Fprintf(&d.b, `<w:p><w:pPr><w:keepNext/><w:spacing w:before="240" w:after="0"/><w:jc w:val="left"/></w:pPr>`+
 		`<w:bookmarkStart w:id="%d" w:name="%s"/><w:r><w:rPr>%s</w:rPr><w:t>%s %d</w:t></w:r><w:bookmarkEnd w:id="%[1]d"/></w:p>`,
@@ -419,7 +423,8 @@ func (d *documento) codigo(lineas []string) {
 }
 
 // tabla: primera fila de encabezado y segunda de alineación.
-func (d *documento) tabla(lineas []string) {
+// conNota: la sigue una nota, que va pegada a la regla inferior.
+func (d *documento) tabla(lineas []string, conNota bool) {
 	var filas [][]string
 	var alin []string
 	for k, l := range lineas {
@@ -453,7 +458,13 @@ func (d *documento) tabla(lineas []string) {
 	case nc >= 5:
 		tam = 18
 	}
-	anchos := anchosColumnas(filas, nc, tam)
+	visibles := make([][]string, len(filas))
+	for k, f := range filas {
+		for _, c := range f {
+			visibles[k] = append(visibles[k], d.textoPlano(c))
+		}
+	}
+	anchos := anchosColumnas(visibles, nc, tam)
 
 	fmt.Fprintf(&d.b, `<w:tbl><w:tblPr><w:tblW w:w="%d" w:type="dxa"/><w:jc w:val="center"/><w:tblLayout w:type="fixed"/>`, anchoTexto)
 	d.b.WriteString(`<w:tblCellMar><w:top w:w="40" w:type="dxa"/><w:left w:w="100" w:type="dxa"/><w:bottom w:w="40" w:type="dxa"/><w:right w:w="100" w:type="dxa"/></w:tblCellMar><w:tblLook w:val="0600"/></w:tblPr><w:tblGrid>`)
@@ -493,7 +504,10 @@ func (d *documento) tabla(lineas []string) {
 		}
 		d.b.WriteString(`</w:tr>`)
 	}
-	d.b.WriteString(`</w:tbl><w:p><w:pPr><w:spacing w:before="0" w:after="120"/></w:pPr></w:p>`)
+	d.b.WriteString(`</w:tbl>`)
+	if !conNota {
+		d.b.WriteString(`<w:p><w:pPr><w:spacing w:before="0" w:after="120"/></w:pPr></w:p>`)
+	}
 }
 
 // anchosColumnas reparte el ancho de la página: cada columna recibe primero lo
@@ -540,18 +554,27 @@ func partirFila(l string) []string {
 	l = strings.TrimSuffix(l, "|")
 	var celdas []string
 	var b strings.Builder
-	enCodigo := false
-	for _, r := range l {
+	enCodigo, enComentario := false, false
+	for i := 0; i < len(l); {
+		r, n := utf8.DecodeRuneInString(l[i:])
 		switch {
-		case r == '`':
+		case !enCodigo && !enComentario && strings.HasPrefix(l[i:], "<!--"):
+			enComentario = true
+		case enComentario && strings.HasPrefix(l[i:], "-->"):
+			enComentario = false
+			b.WriteString("-->")
+			i += 3
+			continue
+		case r == '`' && !enComentario:
 			enCodigo = !enCodigo
-			b.WriteRune(r)
-		case r == '|' && !enCodigo:
+		case r == '|' && !enCodigo && !enComentario:
 			celdas = append(celdas, strings.TrimSpace(b.String()))
 			b.Reset()
-		default:
-			b.WriteRune(r)
+			i += n
+			continue
 		}
+		b.WriteRune(r)
+		i += n
 	}
 	return append(celdas, strings.TrimSpace(b.String()))
 }
@@ -564,6 +587,21 @@ func esSeparador(celdas []string) bool {
 	}
 	return true
 }
+
+// textoPlano es el texto que se ve en Word: sin valores en línea
+// (<!--v:…-->), con las referencias resueltas, los enlaces reducidos a su
+// texto y sin marcas de formato. Mide las celdas y llena los índices.
+func (d *documento) textoPlano(s string) string {
+	s = d.resolverCon(reComentario.ReplaceAllString(s, ""), false)
+	s = reEnlaceGlobal.ReplaceAllString(s, "$1")
+	s = reURLGlobal.ReplaceAllString(s, "$1")
+	return textoVisible(s)
+}
+
+var (
+	reEnlaceGlobal = regexp.MustCompile(`\[([^\]]+)\]\([^)\s]+\)`)
+	reURLGlobal    = regexp.MustCompile(`<(https?://[^>\s]+)>`)
+)
 
 func textoVisible(s string) string {
 	return strings.NewReplacer("**", "", "`", "", "*", "").Replace(s)
@@ -589,7 +627,7 @@ func (d *documento) figura(alt, ruta, etiqueta string) {
 	cy := int64(float64(cx) * h / w)
 	d.docPr++
 	d.b.WriteString(`<w:p><w:pPr><w:spacing w:before="0" w:after="120"/><w:jc w:val="center"/></w:pPr><w:r><w:drawing>`)
-	fmt.Fprintf(&d.b, `<wp:inline distT="0" distB="0" distL="0" distR="0"><wp:extent cx="%d" cy="%d"/><wp:docPr id="%d" name="%s" descr="%s"/>`, cx, cy, d.docPr, img.Nombre, escapar(alt))
+	fmt.Fprintf(&d.b, `<wp:inline distT="0" distB="0" distL="0" distR="0"><wp:extent cx="%d" cy="%d"/><wp:docPr id="%d" name="%s" descr="%s"/>`, cx, cy, d.docPr, img.Nombre, escapar(d.textoPlano(alt)))
 	d.b.WriteString(`<a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:pic>`)
 	fmt.Fprintf(&d.b, `<pic:nvPicPr><pic:cNvPr id="0" name="%s.svg"/><pic:cNvPicPr/></pic:nvPicPr>`, img.Nombre)
 	fmt.Fprintf(&d.b, `<pic:blipFill><a:blip r:embed="%s"><a:extLst><a:ext uri="{96DAC541-7B7A-43D3-8B79-37D633B846F1}"><asvg:svgBlip xmlns:asvg="http://schemas.microsoft.com/office/drawing/2016/SVG/main" r:embed="%s"/></a:ext></a:extLst></a:blip><a:stretch><a:fillRect/></a:stretch></pic:blipFill>`, img.RelPNG, img.RelSVG)
@@ -683,12 +721,16 @@ func (d *documento) inline(s string, base estilo) string {
 
 // resolver cambia @fig:id y @tab:id por «Figura N» y «Tabla N». En la
 // primera pasada aún no se conocen todas las etiquetas: se dejan igual.
-func (d *documento) resolver(s string) string {
+func (d *documento) resolver(s string) string { return d.resolverCon(s, true) }
+
+// resolverCon: avisar es falso cuando el mismo texto se resuelve otra vez
+// solo para medirlo, para no repetir el aviso.
+func (d *documento) resolverCon(s string, avisar bool) string {
 	return reReferencia.ReplaceAllStringFunc(s, func(r string) string {
 		etiqueta := r[1:]
 		n, ok := d.etiquetas[etiqueta]
 		if !ok {
-			if d.fijas {
+			if d.fijas && avisar {
 				d.aviso("referencia a una etiqueta que no existe: %s", r)
 			}
 			return r
