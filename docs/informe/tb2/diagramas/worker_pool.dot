@@ -1,0 +1,30 @@
+// Cálculo del gradiente dentro de un nodo (UML 2.5, diagrama de actividades):
+// fan-out por canal a un worker pool persistente, acumuladores privados por
+// bloque, barrera y fan-in ordenado. Código: ml.Pool y ml.ReducirEnOrden.
+// Fuente de docs/informe/tb2/fig/worker_pool.svg: make figuras.
+digraph worker_pool {
+  graph [rankdir=TB, fontname="Liberation Serif", fontsize=11, nodesep=0.3, ranksep=0.38, splines=polyline, pad=0.1, newrank=true]
+  node  [shape=box, style=rounded, fontname="Liberation Serif", fontsize=10.5, penwidth=0.9, margin="0.12,0.05", height=0.36]
+  edge  [fontname="Liberation Serif", fontsize=9, penwidth=0.8, arrowsize=0.6, arrowhead=vee]
+
+  inicio [shape=circle, style=filled, fillcolor=black, label="", width=0.16, height=0.16, fixedsize=true]
+  fin    [shape=doublecircle, style=filled, fillcolor=black, label="", width=0.12, height=0.12, fixedsize=true]
+  fork   [shape=box, style=filled, fillcolor=black, label="", width=3.6, height=0.04, fixedsize=true]
+  join   [shape=box, style=filled, fillcolor=black, label="", width=3.6, height=0.04, fixedsize=true]
+
+  enviar [label="Enviar los índices de bloque k = 0, …, B − 1\nal canal «tareas chan int»"]
+  canal  [shape=box, style="", label="[tareas chan int]"]
+  w1 [label="Worker 1: toma k, calcula G_k\ncon su búfer propio y lo deja en parciales[k]"]
+  w2 [label="Worker 2: ídem\ncon otros bloques"]
+  wn [label="Worker W: ídem"]
+  puntos [shape=plaintext, label="…"]
+  {rank=same; w1; w2; puntos; wn}
+  slots [shape=box, style="", label="[parciales[0 … B − 1]]\n(un slot por bloque: nadie escribe donde escribe otro)"]
+  barrera [label="Barrera: sync.WaitGroup espera los B bloques"]
+  reducir [label="ml.ReducirEnOrden: una sola goroutine suma\n((G_0 + G_1) + G_2) + … en orden de bloque"]
+
+  inicio -> enviar -> canal -> fork
+  fork -> w1; fork -> w2; fork -> wn; fork -> puntos [style=invis]
+  w1 -> join; w2 -> join; wn -> join
+  join -> slots -> barrera -> reducir -> fin
+}

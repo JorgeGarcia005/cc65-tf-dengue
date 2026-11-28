@@ -1,0 +1,8 @@
+Tabla: Conjuntos de entrenamiento y de prueba {#tab:split}
+
+| Conjunto | Filas | Con signos o grave | Proporción (%) |
+|---|---:|---:|---:|
+| Entrenamiento | {{miles .S.M.S.Train.Filas}} | {{miles .S.M.S.Train.Positivos}} | {{pct .S.M.S.Train.Tasa}} |
+| Prueba | {{miles .S.M.S.Test.Filas}} | {{miles .S.M.S.Test.Positivos}} | {{pct .S.M.S.Test.Tasa}} |
+
+Nota: Cada fila va a prueba según un *hash* (splitmix64) de su posición en el silver, con probabilidad {{pct .S.M.S.FracTest}} %: el reparto no depende del número de workers ni de nodos. Fuente: `reports/split.json`, generado por `cmd/gold`.

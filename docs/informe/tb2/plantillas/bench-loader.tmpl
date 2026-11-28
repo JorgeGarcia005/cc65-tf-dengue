@@ -1,0 +1,9 @@
+Tabla: Tiempo de la limpieza del archivo completo según el número de workers {#tab:bench-loader}
+
+| Workers | Media recortada (ms) | IC 95 % (ms) | Speedup | Eficiencia (%) | Filas por segundo | Silver igual al secuencial |
+|---:|---:|---|---:|---:|---:|:---:|
+{{- range .LoaderRef.Mediciones}}
+| {{.Workers}} | {{ms .Segundos.Media}} | [{{ms .Segundos.Inf}}; {{ms .Segundos.Sup}}] | {{dos .Speedup}} | {{pct .Eficiencia}} | {{miles (entero .FilasPorS)}} | {{if .Equivale}}sí{{else}}no{{end}} |
+{{- end}}
+
+Nota: {{.LoaderRef.Maquina.CPU}}, {{.LoaderRef.Maquina.NumCPU}} CPU lógicas, {{.LoaderRef.Maquina.SO}}. Limpieza en memoria (sin la lectura del disco), un calentamiento, repeticiones en orden barajado, `runtime.GC()` antes de cada medición, media recortada al 10 % e intervalo de confianza por *bootstrap*. Fuente: `reports/{{.LoaderRef.Archivo}}`.

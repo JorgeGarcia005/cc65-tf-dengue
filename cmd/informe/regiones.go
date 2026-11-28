@@ -67,7 +67,7 @@ func regenerarRegiones(dir string, datos any) ([]string, error) {
 		if err != nil {
 			return nil, err
 		}
-		nuevo, err := expandirRegiones(viejo)
+		nuevo, err := expandirRegionesCon(viejo, datos)
 		if err == nil {
 			nuevo, err = expandirValores(nuevo, datos)
 		}
@@ -85,17 +85,51 @@ func regenerarRegiones(dir string, datos any) ([]string, error) {
 }
 
 // expandirRegiones devuelve el texto con cada región regenerada.
-func expandirRegiones(texto []byte) ([]byte, error) {
+func expandirRegiones(texto []byte) ([]byte, error) { return expandirRegionesCon(texto, nil) }
+
+// dirPlantillas: plantillas de las regiones plantilla:NOMBRE del informe TB2.
+var dirPlantillas = "docs/informe/tb2/plantillas"
+
+// expandirRegionesCon es expandirRegiones con los datos de las regiones
+// plantilla:NOMBRE, que ejecutan dirPlantillas/NOMBRE.tmpl (text/template con
+// las funciones del informe) sobre los datos del informe: así las tablas APA
+// del informe TB2 se escriben como Markdown y salen de los reportes.
+func expandirRegionesCon(texto []byte, datos any) ([]byte, error) {
 	var primerErr error
 	salida := reRegion.ReplaceAllFunc(texto, func(m []byte) []byte {
 		nombre := string(reRegion.FindSubmatch(m)[1])
-		cuerpo, err := generarRegion(nombre)
+		var cuerpo string
+		var err error
+		if p, ok := strings.CutPrefix(nombre, "plantilla:"); ok {
+			cuerpo, err = regionPlantilla(p, datos)
+		} else {
+			cuerpo, err = generarRegion(nombre)
+		}
 		if err != nil && primerErr == nil {
 			primerErr = fmt.Errorf("región %s: %w", nombre, err)
 		}
 		return []byte("<!-- generado:" + nombre + " -->\n" + cuerpo + "<!-- /generado -->")
 	})
 	return salida, primerErr
+}
+
+func regionPlantilla(nombre string, datos any) (string, error) {
+	if datos == nil {
+		return "", fmt.Errorf("esta carpeta no tiene datos para plantillas")
+	}
+	src, err := os.ReadFile(filepath.Join(dirPlantillas, nombre+".tmpl"))
+	if err != nil {
+		return "", err
+	}
+	t, err := template.New(nombre).Funcs(funciones).Option("missingkey=error").Parse(string(src))
+	if err != nil {
+		return "", err
+	}
+	var b strings.Builder
+	if err := t.Execute(&b, datos); err != nil {
+		return "", err
+	}
+	return strings.TrimLeft(b.String(), "\n"), nil
 }
 
 // expandirValores reescribe cada <!--v:EXPR-->…<!--/v--> con el valor de EXPR.
@@ -151,6 +185,12 @@ func generarRegion(nombre string) (string, error) {
 		return tablaCluster()
 	case nombre == "api":
 		return tablaAPI()
+	case nombre == "protocolo":
+		return regionProtocolo()
+	case nombre == "contratos":
+		return regionContratos()
+	case nombre == "postman":
+		return regionPostman()
 	}
 	return "", fmt.Errorf("región desconocida")
 }
@@ -378,9 +418,14 @@ type reporteCluster struct {
 	Mediciones []struct {
 		Nodos       int `json:"nodos"`
 		SegPorEpoca struct {
-			Media float64 `json:"media_recortada"`
-			Inf   float64 `json:"ic95_inf"`
-			Sup   float64 `json:"ic95_sup"`
+			Media   float64 `json:"media_recortada"`
+			Inf     float64 `json:"ic95_inf"`
+			Sup     float64 `json:"ic95_sup"`
+			N       int     `json:"n"`
+			Mediana float64 `json:"mediana"`
+			Desv    float64 `json:"desviacion"`
+			Min     float64 `json:"min"`
+			Max     float64 `json:"max"`
 		} `json:"seg_por_epoca"`
 		Speedup    float64  `json:"speedup"`
 		Eficiencia float64  `json:"eficiencia"`

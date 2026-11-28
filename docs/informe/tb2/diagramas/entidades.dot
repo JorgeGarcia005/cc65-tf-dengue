@@ -1,0 +1,48 @@
+// Entidades de MongoDB y Redis (UML 2.5, diagrama de clases): colecciones,
+// documentos embebidos y referencias por versión del modelo. Campos e índices
+// de internal/almacen (almacen.go, usuarios.go) y mongo.crearIndices.
+// Fuente de docs/informe/tb2/fig/entidades.svg: make figuras.
+digraph entidades {
+  graph [rankdir=LR, fontname="Liberation Serif", fontsize=11, nodesep=0.45, ranksep=0.75, pad=0.1]
+  node  [shape=plaintext, fontname="Liberation Serif", fontsize=10]
+  edge  [fontname="Liberation Serif", fontsize=9, penwidth=0.8, arrowsize=0.7]
+
+  ent [label=<<table border="1" cellborder="0" cellspacing="0" cellpadding="3">
+    <tr><td><b>«colección» entrenamientos</b></td></tr>
+    <tr><td align="left" balign="left" sides="t" border="1">_id: string (ent-&lt;fecha&gt;-&lt;aleatorio&gt;)<br/>estado: en_curso | terminado | fallido<br/>epocas, epoca: int<br/>tasa, lambda: float64<br/>perdida: float64<br/>historia: float64[ ]<br/>nodos: EstadoNodo[ ]<br/>reasignaciones: int<br/>inicio, fin: fecha<br/>version_modelo: string<br/>error: string</td></tr>
+    <tr><td align="left" balign="left" sides="t" border="1">índices: {inicio: −1}, {estado: 1}</td></tr></table>>]
+
+  mod [label=<<table border="1" cellborder="0" cellspacing="0" cellpadding="3">
+    <tr><td><b>«colección» modelos</b></td></tr>
+    <tr><td align="left" balign="left" sides="t" border="1">_id: string (versión: 12 hex del SHA-256)<br/>pesos: float64[ ]<br/>esquema: Esquema<br/>umbral, ajuste_prior: float64<br/>generado: string<br/>publicado: fecha</td></tr>
+    <tr><td align="left" balign="left" sides="t" border="1">índices: {publicado: −1}, {entrenamientos.id: 1}</td></tr></table>>]
+
+  res [label=<<table border="1" cellborder="0" cellspacing="0" cellpadding="3">
+    <tr><td><b>«embebido» ResumenEntrenamiento</b></td></tr>
+    <tr><td align="left" balign="left" sides="t" border="1">id: string<br/>epoca: int; perdida: float64<br/>historia: float64[ ]<br/>nodos: EstadoNodo[ ]<br/>reasignaciones: int; fin: fecha</td></tr></table>>]
+
+  pred [label=<<table border="1" cellborder="0" cellspacing="0" cellpadding="3">
+    <tr><td><b>«colección» predicciones</b></td></tr>
+    <tr><td align="left" balign="left" sides="t" border="1">_id: ObjectId<br/>fecha: fecha<br/>version_modelo: string<br/>consulta: ConsultaNormalizada<br/>riesgo: float64; clase: int<br/>desde_cache: bool<br/>microsegundos: int64</td></tr>
+    <tr><td align="left" balign="left" sides="t" border="1">índices: {fecha: −1} con TTL,<br/>{version_modelo: 1, consulta.departamento: 1}</td></tr></table>>]
+
+  cons [label=<<table border="1" cellborder="0" cellspacing="0" cellpadding="3">
+    <tr><td><b>«embebido» ConsultaNormalizada</b></td></tr>
+    <tr><td align="left" balign="left" sides="t" border="1">departamento: string<br/>ano, semana: int<br/>edad_anios: float64<br/>sexo: string</td></tr></table>>]
+
+  cache [label=<<table border="1" cellborder="0" cellspacing="0" cellpadding="3">
+    <tr><td><b>«Redis» predicción en caché</b></td></tr>
+    <tr><td align="left" balign="left" sides="t" border="1">clave: pred:&lt;versión&gt;:&lt;depto&gt;:&lt;año&gt;:<br/>&lt;semana&gt;:&lt;edad&gt;:&lt;sexo&gt;<br/>valor: JSON de la predicción<br/>vigencia: TTL</td></tr></table>>]
+
+  usr [label=<<table border="1" cellborder="0" cellspacing="0" cellpadding="3">
+    <tr><td><b>«colección» usuarios</b></td></tr>
+    <tr><td align="left" balign="left" sides="t" border="1">_id: string (correo)<br/>hash: pbkdf2-sha256$…<br/>rol: admin | analista<br/>creado: fecha</td></tr></table>>]
+
+  ent  -> mod  [label=" publica\n version_modelo → _id", arrowhead=vee, style=dashed]
+  mod  -> res  [label=" 1    0..*", arrowtail=diamond, dir=back, arrowhead=none]
+  res  -> ent  [label=" id → _id", arrowhead=vee, style=dashed, constraint=false]
+  pred -> mod  [label=" version_modelo → _id", arrowhead=vee, style=dashed]
+  pred -> cons [label=" 1    1", arrowtail=diamond, dir=back, arrowhead=none]
+  cache -> mod [label=" versión en la clave", arrowhead=vee, style=dashed]
+  {rank=same; pred; cache; usr}
+}

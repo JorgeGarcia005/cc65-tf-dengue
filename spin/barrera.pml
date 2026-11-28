@@ -63,6 +63,7 @@
 #define CAP N
 #endif
 
+/* informe:canales */
 mtype = { EPOCA, GRADIENTE, FIN, EOF };
 
 /* (tipo, época, shard, nodo) */
@@ -79,7 +80,9 @@ byte caidas = 0;
 bool terminado = false;
 bool abortado = false;
 byte epocasCompletas = 0;
+/* /informe:canales */
 
+/* informe:nodo */
 proctype Nodo(byte id) {
 	byte e, s, x;
 end:
@@ -97,6 +100,7 @@ end:
 muerto:
 	skip
 }
+/* /informe:nodo */
 
 proctype Coordinador() {
 	byte e = 0, s, x, ep, j, k, r, mejor, sospechas = 0;
@@ -105,6 +109,7 @@ proctype Coordinador() {
 	bool listo[N];
 	bool descartado[N];
 
+/* informe:descartar */
 /* descarta a j; si ya estaba descartado no hace nada (como descartar()) */
 #define DESCARTAR(jj) \
 	if \
@@ -112,6 +117,7 @@ proctype Coordinador() {
 	   assert(!vivo[jj] || sospechado[jj] || saturado[jj]) /* nunca a un nodo vivo sin motivo */ \
 	:: else -> skip \
 	fi
+/* /informe:descartar */
 
 	/* asignar(s): al nodo sano de menor carga (empate → menor índice); si el
 	 * envío falla porque su canal está lleno, lo descarta y prueba el
@@ -134,6 +140,7 @@ proctype Coordinador() {
 			if
 			:: descartado[j] -> skip  /* lo reasigna cubrir(), como en coordinador.go */
 			:: else ->
+/* informe:envio */
 #ifdef MUT_BLOQUEANTE
 				aNodo[j] ! EPOCA(e, s, j)
 #else
@@ -142,6 +149,7 @@ proctype Coordinador() {
 				:: nfull(aNodo[j]) -> assert(!descartado[j]); aNodo[j] ! EPOCA(e, s, j)
 				fi
 #endif
+/* /informe:envio */
 			fi
 		}
 		goto cubrir;
@@ -256,6 +264,7 @@ asignar:
 #endif
 		goto cubrir;
 
+/* informe:barrera */
 avanzar:
 		/* barrera: la época avanza solo con los N shards. (Una etiqueta pegada
 		 * a un for de Spin salta su inicialización: por eso el skip.) */
@@ -271,9 +280,11 @@ avanzar:
 		}
 		e++;
 		epocasCompletas = e
+/* /informe:barrera */
 	:: else -> break
 	od;
 
+/* informe:cierre */
 cierre:
 	skip;
 	for (k : 0 .. N-1) {
@@ -293,6 +304,7 @@ cierre:
 	:: else -> skip
 	fi;
 	terminado = true
+/* /informe:cierre */
 }
 
 init {
@@ -308,4 +320,6 @@ init {
 	}
 }
 
+/* informe:ltl */
 ltl termina { <> terminado }
+/* /informe:ltl */

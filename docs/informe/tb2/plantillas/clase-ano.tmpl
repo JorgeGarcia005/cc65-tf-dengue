@@ -1,0 +1,9 @@
+Tabla: Casos notificados por año y clasificación clínica {#tab:clase-ano}
+
+| Año | Sin signos (A97.0) | Con signos (A97.1) | Grave (A97.2) | Total | Con signos o grave (%) |
+|---|---:|---:|---:|---:|---:|
+{{- range $a := .S.P.Anos}}{{with index $.S.P.Perfil.PorAno $a}}
+| {{$a}} | {{miles (index . 0)}} | {{miles (index . 1)}} | {{miles (index . 2)}} | {{miles (total .)}} | {{tasaAno .}} |
+{{- end}}{{end}}
+
+Nota: Fuente: `reports/perfil_bronze.json` (`por_ano_y_clase`).

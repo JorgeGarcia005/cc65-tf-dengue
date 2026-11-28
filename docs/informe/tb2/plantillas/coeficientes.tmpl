@@ -1,0 +1,9 @@
+Tabla: Las diez variables con más peso en el modelo {#tab:coeficientes}
+
+| Variable | Peso | Razón de odds |
+|---|---:|---:|
+{{- range $i, $c := .S.M.E.Coef}}{{if lt $i 10}}
+| `{{$c.Variable}}` | {{signo $c.Peso}} | {{dos $c.RazonOdds}} |
+{{- end}}{{end}}
+
+Nota: Razón de odds = e^w; mayor que 1 aumenta el riesgo. Las variables continuas están estandarizadas y las categóricas se comparan con su categoría de referencia. Fuente: `reports/entrenamiento.json`.

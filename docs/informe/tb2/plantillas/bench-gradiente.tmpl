@@ -1,0 +1,19 @@
+Tabla: Tiempo del cálculo del gradiente de una época según el número de workers {#tab:bench-gradiente}
+
+| Configuración | Workers | Media recortada (ms) | IC 95 % (ms) | Speedup | Eficiencia (%) | Igual bit a bit |
+|---|---:|---:|---|---:|---:|:---:|
+{{- range .GradRef.Mediciones}}
+| {{.Config}} | {{.Workers}} | {{ms .Segundos.Media}} | [{{ms .Segundos.Inf}}; {{ms .Segundos.Sup}}] | {{dos .Speedup}} | {{pct .Eficiencia}} | {{if .Bits}}sí{{else}}no{{end}} |
+{{- end}}
+
+Nota: {{.GradRef.Maquina.CPU}}, {{.GradRef.Maquina.NumCPU}} CPU lógicas, {{.GradRef.Maquina.SO}}; datos: {{.GradRef.Fuente}}. «Igual bit a bit»: el gradiente del *worker pool* coincide bit a bit con el secuencial. Fuente: `reports/{{.GradRef.Archivo}}`.
+
+Tabla: Punto de equilibrio del cálculo del gradiente con {{.GradRef.WorkersEq}} workers {#tab:equilibrio-gradiente}
+
+| Filas | Bloques | Secuencial (ms) | Concurrente (ms) | Speedup |
+|---:|---:|---:|---:|---:|
+{{- range .GradRef.Equilibrio}}
+| {{miles .Filas}} | {{.Bloques}} | {{ms .Sec}} | {{ms .Conc}} | {{dos .Speedup}} |
+{{- end}}
+
+Nota: {{if .GradRef.FilasEq}}La versión concurrente es más rápida desde {{miles (deref .GradRef.FilasEq)}} filas.{{else}}En los tamaños medidos la versión concurrente no llegó a ser más rápida.{{end}} Fuente: `reports/{{.GradRef.Archivo}}` (`punto_equilibrio`).

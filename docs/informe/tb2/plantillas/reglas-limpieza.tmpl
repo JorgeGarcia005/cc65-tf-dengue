@@ -1,0 +1,10 @@
+Tabla: Reglas de validación en el orden en que se aplican y filas que descarta cada una {#tab:reglas}
+
+| # | Regla | Filas descartadas |
+|---:|---|---:|
+{{- range $i, $r := .S.L.L.Orden}}
+| {{inc $i}} | {{$r}} | {{miles (index $.S.L.L.PorRegla $r)}} |
+{{- end}}
+| | **Total** | **{{miles .S.L.L.Descartadas}}** |
+
+Nota: Cada fila se descarta por la primera regla que incumple, así que se cuenta una sola vez. Fuente: `reports/limpieza.json`, generado por `cmd/loader`.

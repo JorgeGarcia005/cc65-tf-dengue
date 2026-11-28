@@ -90,35 +90,50 @@ grep -q '"todos_ok": *true' reports/seguridad.json 2>/dev/null ||
   alto 13 "Seguridad" "reports/seguridad.json no tiene todos_ok: true" "Avísale a Jorge con el archivo: es un hallazgo, no se corrige a mano."
 evidencia 14 e2e           "Playwright: flujos por rol y capturas"     "$S e2e"
 
-# --- Paso 15: capturas manuales -------------------------------------------------
+# --- Paso 15: contratos de la API (peticiones y respuestas reales) -------------
+evidencia 15 contratos     "Peticiones y respuestas reales de la API"  "$S contratos"
+
+# --- Paso 16: capturas manuales -------------------------------------------------
 faltan=()
 while IFS= read -r c; do
   [[ -f "docs/informe/tb2/$c" ]] || faltan+=("$c")
 done < <(grep -ho '\[capturas/[^]]*\.png\]' docs/informe/tb2/[0-9][0-9]-*.md | tr -d '[]' | sort -u)
 if ((${#faltan[@]})); then
-  alto 15 "Capturas manuales" "${#faltan[@]} capturas que el informe pide y no están en $CAPT/" \
-    "Tómalas como dice la tabla del paso 15 de la guía, con el nombre exacto:" "${faltan[@]}"
+  alto 16 "Capturas manuales" "${#faltan[@]} capturas que el informe pide y no están en $CAPT/" \
+    "Tómalas como dice la tabla del paso 16 de la guía, con el nombre exacto:" "${faltan[@]}"
 fi
-total=$((total + 1)); ok "Paso 15: todas las capturas del informe están en $CAPT/"
+total=$((total + 1)); ok "Paso 16: todas las capturas del informe están en $CAPT/"
 
-# --- Paso 16: informe final -----------------------------------------------------
-evidencia 16 informe       "Informe final (cmd/informe y cmd/word -final)" "QUITAR=\"<texto que te indique Jorge>\" $S informe"
+# --- Paso 17: informe final -----------------------------------------------------
+# Candado: el paso 17 arma el Word final, así que no se puede correr mientras el
+# informe tenga secciones por escribir (las escribe Jorge por bloques, con PR y
+# juez). Se abre solo cuando integracion/tb2 trae todo el texto y tu rama lo
+# tiene (git merge origin/integracion/tb2; el paso 1 lo exige).
+pendientes=$(grep -l '<!-- pendiente:' docs/informe/tb2/*.md 2>/dev/null | xargs -r -n1 basename | sort | tr '\n' ' ')
+if [[ -n "$pendientes" ]]; then
+  total=$((total + 1))
+  alto 17 "Informe final" "el informe aún tiene secciones por escribir: $pendientes" \
+    "Esto no lo haces tú: Jorge termina esas secciones y te avisa." \
+    "Cuando te avise:  git fetch origin && git merge origin/integracion/tb2" \
+    "y vuelve a correr:  bash scripts/paso70.sh"
+fi
+evidencia 17 informe       "Informe final (cmd/informe y cmd/word -final)" "QUITAR=\"<texto que te indique Jorge>\" $S informe"
 
-# --- Paso 17: commits a tu nombre ------------------------------------------------
+# --- Paso 18: commits a tu nombre ------------------------------------------------
 if [[ -n "$(git status --porcelain -- docs/informe reports)" ]]; then
-  alto 17 "Commits" "hay cambios sin commit en docs/informe o reports" \
+  alto 18 "Commits" "hay cambios sin commit en docs/informe o reports" \
     "git add docs/informe reports" 'git commit -m "docs(informe): evidencias y capturas de la TB2 en deez (#70)"'
 fi
 propios=$(git log --format='%ae' origin/integracion/tb2..HEAD | grep -cv "^$CORREO_JORGE$" || true)
-((propios > 0)) || alto 17 "Commits" "no hay commits tuyos en la rama" "git add docs/informe reports && git commit -m \"docs(informe): evidencias y capturas de la TB2 en deez (#70)\""
-total=$((total + 1)); ok "Paso 17: cambios en commits a tu nombre"
+((propios > 0)) || alto 18 "Commits" "no hay commits tuyos en la rama" "git add docs/informe reports && git commit -m \"docs(informe): evidencias y capturas de la TB2 en deez (#70)\""
+total=$((total + 1)); ok "Paso 18: cambios en commits a tu nombre"
 
-# --- Paso 18: entrega a Jorge (sin push) ----------------------------------------
+# --- Paso 19: entrega a Jorge (sin push) ----------------------------------------
 [[ -f jose-70.bundle && $(mtime jose-70.bundle) -ge $(git log -1 --format=%ct) ]] && git bundle verify -q jose-70.bundle 2>/dev/null ||
-  alto 18 "Entrega" "falta jose-70.bundle o es anterior a tu último commit" \
+  alto 19 "Entrega" "falta jose-70.bundle o es anterior a tu último commit" \
     "git bundle create jose-70.bundle origin/integracion/tb2..feature/70-evidencias" \
     "Envíale a Jorge jose-70.bundle y el .docx de entregables/. NO hagas push ni merge."
-total=$((total + 1)); ok "Paso 18: jose-70.bundle listo para Jorge"
+total=$((total + 1)); ok "Paso 19: jose-70.bundle listo para Jorge"
 
 echo
 echo "Todo completo ($total pasos). Envía jose-70.bundle y el .docx a Jorge."

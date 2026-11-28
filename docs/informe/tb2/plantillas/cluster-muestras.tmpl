@@ -1,0 +1,9 @@
+Tabla: Dispersión de las repeticiones de cada medición del clúster {#tab:cluster-muestras}
+
+| Nodos | Repeticiones | Mínimo (ms) | Mediana (ms) | Máximo (ms) | Desviación (ms) | Media recortada (ms) |
+|---:|---:|---:|---:|---:|---:|---:|
+{{- range .Cluster.Mediciones}}
+| {{.Nodos}} | {{.SegPorEpoca.N}} | {{dos (mil .SegPorEpoca.Min)}} | {{dos (mil .SegPorEpoca.Mediana)}} | {{dos (mil .SegPorEpoca.Max)}} | {{dos (mil .SegPorEpoca.Desv)}} | {{dos (mil .SegPorEpoca.Media)}} |
+{{- end}}
+
+Nota: Cada repetición es un entrenamiento de {{.Cluster.Protocolo.Epocas}} épocas cuyos pesos se comparan bit a bit con los del entrenamiento secuencial antes de registrarse. Fuente: `reports/bench_cluster_deez_gold.json` (`seg_por_epoca` de cada medición).

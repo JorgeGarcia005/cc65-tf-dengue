@@ -1,0 +1,9 @@
+Tabla: Casos por etapa de vida del MINSA {#tab:etapas}
+
+| Etapa de vida | Casos |
+|---|---:|
+{{- range $i, $t := .S.P.Perfil.Edad.Tramos}}
+| {{etapa $t}} | {{miles (index $.S.P.Perfil.Edad.Conteos $i)}} |
+{{- end}}
+
+Nota: La edad se normaliza a años según `tipo_edad` (A = años, M = meses, D = días). Filas con edad no numérica o `tipo_edad` desconocido: {{miles .S.P.Perfil.Edad.NoNum}}. Fuente: `reports/perfil_bronze.json`.
