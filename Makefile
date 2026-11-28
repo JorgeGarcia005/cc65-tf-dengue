@@ -3,7 +3,7 @@ SHELL := /bin/bash
 
 GO_FILES := $(shell find . -name '*.go' -not -path './web/*' -not -path './.git/*' 2>/dev/null)
 
-.PHONY: check fmt vet test skills data bench bench-api evaluacion informe imagen cluster prueba-caida
+.PHONY: check fmt vet test skills data datos-docker servicio bench bench-api evaluacion informe imagen cluster prueba-caida
 
 ## check: todo lo que el CI exige antes de abrir un PR
 check: skills fmt vet test
@@ -31,6 +31,15 @@ skills:
 data:
 	@bash scripts/descargar-datos.sh
 
+## datos-docker: Parte A en Docker (perfil datos): CSV → silver → gold + shards → modelo.json
+datos-docker:
+	mkdir -p data reports
+	USUARIO="$$(id -u):$$(id -g)" docker compose -f deploy/docker-compose.yml --profile datos up --build entrenar
+
+## servicio: SPA + API + clúster + MongoDB + Redis (requiere deploy/.env y data/gold con modelo.json)
+servicio:
+	API=:8080 USUARIO="$$(id -u):$$(id -g)" docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.api.yml up --build
+
 bench:
 	@go run ./cmd/benchmark
 
@@ -41,7 +50,7 @@ bench-api:
 evaluacion:
 	@go run ./cmd/evaluacion
 
-## imagen: construye la imagen del clúster (solo coordinator y node)
+## imagen: construye la imagen del clúster (coordinator y node; la Parte A va en cc65-tf-datos)
 imagen:
 	docker build -f deploy/Dockerfile -t cc65-tf .
 

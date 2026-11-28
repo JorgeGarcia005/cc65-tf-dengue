@@ -1,7 +1,8 @@
 # syntax=docker/dockerfile:1
-# Imagen única del clúster: coordinator y node en una imagen mínima. Los demás
-# comandos de cmd/ (gold, entrenar, benchapi, informe…) corren en el host con
-# `go run` y no entran a la imagen: con ellos superaba el límite de 40 MB del CI.
+# Imagen del clúster: coordinator y node en una imagen mínima (< 40 MB en el CI).
+# La Parte A (loader, gold, entrenar) tiene su propia imagen, cc65-tf-datos
+# (deploy/Dockerfile.datos); las herramientas del informe y los benchmarks
+# (benchapi, evaluacion, informe, word…) corren en el host con `go run`.
 #
 #   docker build -f deploy/Dockerfile -t cc65-tf .
 #

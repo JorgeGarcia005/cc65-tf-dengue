@@ -1,28 +1,48 @@
 # deploy/
 
-Despliegue del clúster de entrenamiento con Docker Compose: un **coordinador** (parameter
-server) y **N nodos de ML** que se conectan a él por TCP (`coordinator:9000`, red interna).
-MongoDB, Redis, la API y la SPA se agregan a este mismo archivo en los issues #28 a #30 y en TB2.
+Despliegue completo con Docker Compose. La guía paso a paso (datos → modelo inicial → sistema
+completo) está en el [README de la raíz](../README.md#cómo-ejecutarlo); aquí va el detalle.
 
-## Imagen
+| Archivo | Qué levanta |
+|---|---|
+| `docker-compose.yml` | Clúster: `coordinator` (parameter server, `:9000` interno) y `node` × `NODOS`, `mongo`, `redis` en la red interna `cluster`. Perfil `datos`: `loader`, `gold` y `entrenar` (Parte A). |
+| `docker-compose.api.yml` | Modo servicio: publica la API (`:8080`), conecta MongoDB y Redis, lee `deploy/.env` y agrega la SPA `web` (`:8081`). |
+| `docker-compose.bd.yml` | Solo MongoDB y Redis en `127.0.0.1`, para correr la API desde el anfitrión o los tests de integración. |
 
-`deploy/Dockerfile` construye **una sola imagen** (`cc65-tf`) con los dos comandos que corren en
-contenedores, `coordinator` y `node`. El resto de `cmd/` (`gold`, `entrenar`, `benchapi`,
-`informe`…) se ejecuta en el host con `go run`:
+## Imágenes
 
-- dos etapas: `golang:1.24` compila y `gcr.io/distroless/static-debian12:nonroot` ejecuta;
-- binarios estáticos (`CGO_ENABLED=0`) con `-trimpath -ldflags="-s -w"`;
-- sin shell ni gestor de paquetes, y con usuario sin privilegios (`nonroot`, uid 65532).
+| Imagen | Dockerfile | Binarios | Para qué |
+|---|---|---|---|
+| `cc65-tf` | `Dockerfile` | `coordinator`, `node` | Clúster y API. El CI exige < 40 MB y usuario `nonroot`. |
+| `cc65-tf-datos` | `Dockerfile.datos` | `loader`, `gold`, `entrenar` | Parte A: CSV → silver → gold + shards → `modelo.json`. Se usa una vez. |
+| `cc65-tf-web` | `Dockerfile.web` | `web` + `dist/` de la SPA | SPA servida por `cmd/web` con CSP estricta. |
+
+Las tres compilan en una etapa `golang:1.24` (la SPA, antes, en `node:22`) y corren sobre
+`gcr.io/distroless/static-debian12:nonroot`: binarios estáticos (`CGO_ENABLED=0`,
+`-trimpath -ldflags="-s -w"`), sin shell ni gestor de paquetes y con usuario sin privilegios
+(uid 65532). La capa de `go mod download` se reutiliza mientras no cambie `go.mod`.
 
 ```bash
 docker build -f deploy/Dockerfile -t cc65-tf .
 docker image inspect cc65-tf --format '{{.Config.User}} {{.Size}}'
 ```
 
+## Parte A en Docker (perfil `datos`)
+
+```bash
+docker compose -f deploy/docker-compose.yml --profile datos up entrenar
+```
+
+`entrenar` depende de `gold` y `gold` de `loader` (`condition: service_completed_successfully`), así
+que Compose los corre en orden y se detiene si uno falla. Trabajan en `/trabajo` con `../data` y
+`../reports` montados, por eso usan las mismas rutas por defecto que `go run`, y no tienen red
+(`network_mode: none`). `NODOS` fija los shards de `gold`; `EPOCAS`, `TASA` y `LAMBDA`, el
+entrenamiento inicial.
+
 ## Entrenar en el clúster
 
 ```bash
-go run ./cmd/gold -shards 3     # una vez: escribe data/gold/shard_0..2.bin
+go run ./cmd/gold -shards 3     # una vez (o el perfil datos): escribe data/gold/shard_0..2.bin
 docker compose -f deploy/docker-compose.yml up --build --exit-code-from coordinator
 go run ./cmd/entrenar -comparar reports/entrenamiento_cluster.json
 ```
@@ -37,6 +57,10 @@ Sin el CSV del MINSA se puede probar todo con datos sintéticos de la misma form
 go run ./cmd/gold -sintetico 300000 -shards 3 -salida /tmp/gold
 GOLD=/tmp/gold EPOCAS=100 VERIFICAR=true docker compose -f deploy/docker-compose.yml up --build --exit-code-from coordinator
 ```
+
+El gold sintético incluye un `esquema.json` de demostración con las 31 variables del real, así que
+`go run ./cmd/entrenar -gold /tmp/gold -salida /tmp/entrenamiento.json -modelo /tmp/gold/modelo.json`
+escribe el `modelo.json` que necesita el modo servicio (`GOLD=/tmp/gold API=:8080 … up`).
 
 | Variable | Qué hace | Por defecto |
 |---|---|---|

@@ -184,8 +184,16 @@ func escribirJSON(ruta string, v any) {
 // tráfico y el cómputo de la prueba se parezcan a los del entrenamiento real.
 const variablesSintetico = 31
 
-// generarSintetico escribe train.bin, test.bin y los shards con datos
-// sintéticos deterministas. No toca reports/split.json ni esquema.json.
+// departamentosSintetico son los 20 departamentos con columna propia del gold
+// real (reports/split.json); con OTROS y las 10 variables fijas dan las 31.
+var departamentosSintetico = []string{"AMAZONAS", "ANCASH", "AYACUCHO", "CAJAMARCA", "CALLAO", "CUSCO", "HUANUCO", "ICA",
+	"JUNIN", "LA LIBERTAD", "LAMBAYEQUE", "LIMA", "LORETO", "MADRE DE DIOS", "PASCO", "PIURA", "PUNO", "SAN MARTIN",
+	"TUMBES", "UCAYALI"}
+
+// generarSintetico escribe train.bin, test.bin, los shards y un esquema.json
+// de demostración con datos sintéticos deterministas: con ellos cmd/entrenar
+// escribe modelo.json y el Compose levanta API y SPA sin el CSV del MINSA
+// (auditoría TB2 B1). No toca reports/split.json.
 func generarSintetico(salida string, filas, shards, tam int, fracTest float64) error {
 	if err := os.MkdirAll(salida, 0o755); err != nil {
 		return err
@@ -205,6 +213,22 @@ func generarSintetico(salida string, filas, shards, tam int, fracTest float64) e
 		if err := gold.Escribir(filepath.Join(salida, nombre), a); err != nil {
 			return err
 		}
+	}
+	// Esquema con la forma del real; las columnas sintéticas no significan edad
+	// ni departamento: solo sirven para probar el clúster, la API y la SPA.
+	esq, err := features.NuevoEsquema(2011, 100, departamentosSintetico, 30, 18, 2020, 4)
+	if err != nil {
+		return err
+	}
+	if esq.D() != variablesSintetico {
+		return fmt.Errorf("el esquema sintético tiene %d variables; el gold, %d", esq.D(), variablesSintetico)
+	}
+	b, err := json.MarshalIndent(esq, "", "  ")
+	if err != nil {
+		return err
+	}
+	if err := os.WriteFile(filepath.Join(salida, "esquema.json"), append(b, '\n'), 0o644); err != nil {
+		return err
 	}
 	fmt.Printf("gold sintético: %d filas, %d variables, %d bloques de %d filas, %d shards en %s\n",
 		filas, variablesSintetico, ml.NumBloques(filas, tam), tam, shards, salida)

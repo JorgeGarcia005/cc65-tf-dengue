@@ -151,3 +151,38 @@ func TestCopiaDelEsquemaEsIndependiente(t *testing.T) {
 		t.Fatal("la copia no transforma igual que el original")
 	}
 }
+
+// Auditoría TB2 B1: el gold sintético necesita un esquema con la misma forma
+// que el real para que cmd/entrenar escriba modelo.json y la API arranque sin
+// el CSV del MINSA.
+func TestNuevoEsquemaArmaLosNombresYSePrepara(t *testing.T) {
+	e, err := NuevoEsquema(2011, 100, []string{"LORETO", "LIMA", "MADRE DE DIOS"}, 30, 18, 2020, 4)
+	if err != nil {
+		t.Fatal(err)
+	}
+	quiere := []string{"edad_z", "etapa_nino_0_11", "etapa_adolescente_12_17", "etapa_joven_18_29", "etapa_adulto_30_59",
+		"etapa_adulto_mayor_60_mas", "sexo_m", "semana_sin", "semana_cos", "ano_z",
+		"depto_lima", "depto_loreto", "depto_madre_de_dios", "depto_otros"}
+	if !slices.Equal(e.Nombres, quiere) {
+		t.Fatalf("nombres = %v", e.Nombres)
+	}
+	if err := e.Preparar(); err != nil {
+		t.Fatalf("el esquema no se prepara: %v", err)
+	}
+	b, _ := json.Marshal(e)
+	var ida Esquema
+	if err := json.Unmarshal(b, &ida); err != nil || ida.Preparar() != nil || ida.D() != e.D() {
+		t.Fatalf("ida y vuelta: %v", err)
+	}
+	if _, err := NuevoEsquema(2011, 100, nil, 30, 0, 2020, 4); err == nil {
+		t.Fatal("una desviación 0 debe rechazarse (Llenar divide por ella)")
+	}
+	for _, m := range []float64{math.NaN(), math.Inf(1), math.Inf(-1)} {
+		if _, err := NuevoEsquema(2011, 100, nil, m, 18, 2020, 4); err == nil {
+			t.Fatalf("media de edad %v debe rechazarse", m)
+		}
+		if _, err := NuevoEsquema(2011, 100, nil, 30, 18, m, 4); err == nil {
+			t.Fatalf("media de año %v debe rechazarse", m)
+		}
+	}
+}
