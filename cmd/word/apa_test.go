@@ -234,3 +234,18 @@ func TestTextoPlanoEnCeldasEIndices(t *testing.T) {
 		t.Error("párrafo vacío entre la tabla y su nota")
 	}
 }
+
+// TestNotaEnLaMismaPagina: la imagen o la captura seguida de una nota lleva
+// keepNext, para que la nota no quede sola en la página siguiente.
+func TestNotaEnLaMismaPagina(t *testing.T) {
+	md := "![A](f.svg)\n\nNota: Uno.\n\n![B](f.svg)\n\n<!-- captura: C -->\n\nNota: Dos.\n"
+	d := convertirPrueba(t, map[string]string{"01-a.md": md, "f.svg": svgPrueba}, "01-a.md")
+	x := d.b.String()
+	dibujos := regexp.MustCompile(`<w:p><w:pPr>(<w:keepNext/>)?[^>]*>[^<]*(?:<[^>]*>){0,3}<w:r><w:drawing>`).FindAllStringSubmatch(x, -1)
+	if len(dibujos) != 2 || dibujos[0][1] == "" || dibujos[1][1] != "" {
+		t.Errorf("keepNext de las imágenes: %q", dibujos)
+	}
+	if !strings.Contains(x, `<w:p><w:pPr><w:keepNext/><w:pBdr>`) {
+		t.Error("la captura con nota no lleva keepNext")
+	}
+}

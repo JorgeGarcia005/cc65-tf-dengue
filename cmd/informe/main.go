@@ -520,9 +520,37 @@ func cargar() (perfil, limpieza, modelo) {
 
 // datosTB2 son los datos de los valores en línea del informe final
 // (<!--v:EXPR-->…<!--/v-->): .S es la síntesis de la PC3, .Cluster, .API y
-// .Spin* los de la PC4.
+// .Spin* los de la PC4, y .R cada reports/<nombre>.json tal cual, por su
+// nombre (p. ej. .R.evaluacion.metricas_test.AUC; con guiones,
+// index .R "bench_api_jorge-pc_jwt"). Una clave que no existe es un error.
 type datosTB2 struct {
 	sintesisPC4
+	R map[string]any
+	// APIJWT es la medición de latencia de la API con JWT (TB2): la de la
+	// máquina de referencia (maquinaPC4) si existe, si no la primera.
+	APIJWT        reporteAPI
+	APIJWTArchivo string
+}
+
+func nuevoDatosTB2(s sintesis) datosTB2 {
+	d := datosTB2{sintesisPC4: cargarPC4(s), R: map[string]any{}}
+	archivos, _ := filepath.Glob("reports/*.json")
+	for _, a := range archivos {
+		var v any
+		leer(a, &v)
+		d.R[strings.TrimSuffix(filepath.Base(a), ".json")] = v
+	}
+	jwt, _ := filepath.Glob("reports/bench_api_*_jwt.json")
+	slices.Sort(jwt)
+	for _, a := range jwt {
+		if d.APIJWTArchivo == "" || strings.Contains(a, "deez") {
+			d.APIJWTArchivo = a
+		}
+	}
+	if d.APIJWTArchivo != "" {
+		leer(d.APIJWTArchivo, &d.APIJWT)
+	}
+	return d
 }
 
 // generarTB2 regenera las figuras, las regiones y los valores en línea del
@@ -549,7 +577,7 @@ func generarTB2() {
 	for _, c := range []struct {
 		dir   string
 		datos any
-	}{{dir, datosTB2{cargarPC4(s)}}, {"docs/informe/pc4", nil}} {
+	}{{dir, nuevoDatosTB2(s)}, {"docs/informe/pc4", nil}} {
 		cambiados, err := regenerarRegiones(c.dir, c.datos)
 		if err != nil {
 			log.Fatal(err)
