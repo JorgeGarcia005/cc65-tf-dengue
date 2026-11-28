@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
@@ -61,17 +62,36 @@ func servidor(t *testing.T) (*httptest.Server, Credenciales) {
 	return srv, cred
 }
 
+// cspSPA es la política que envía cmd/web.
+const cspSPA = "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'self' http://localhost:8080"
+
+// web simula la SPA: responde codigo con la CSP dada.
+func web(t *testing.T, codigo int, csp string) string {
+	t.Helper()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		if csp != "" {
+			w.Header().Set("Content-Security-Policy", csp)
+		}
+		w.WriteHeader(codigo)
+	}))
+	t.Cleanup(srv.Close)
+	return srv.URL
+}
+
+// casosEsperados: todos los casos menos los dos del límite de intentos.
+const casosEsperados = 22
+
 // TestCasosContraLaAPI: contra la API real, cada caso da lo esperado (salvo
 // el límite de intentos, cuya ventana es de un minuto de reloj).
 func TestCasosContraLaAPI(t *testing.T) {
 	srv, cred := servidor(t)
-	p := &Prueba{URL: srv.URL, Origen: origenSPA, Cred: cred, Cliente: srv.Client(), SinLimite: true}
+	p := &Prueba{URL: srv.URL, Origen: origenSPA, Web: web(t, 200, cspSPA), Cred: cred, Cliente: srv.Client(), SinLimite: true}
 	r, err := p.Correr()
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(r.Casos) < 20 {
-		t.Errorf("solo %d casos", len(r.Casos))
+	if len(r.Casos) != casosEsperados {
+		t.Errorf("%d casos; se esperaban %d", len(r.Casos), casosEsperados)
 	}
 	for _, c := range r.Casos {
 		if !c.OK {
@@ -94,5 +114,28 @@ func TestTokenVencidoEsRechazable(t *testing.T) {
 	f, _ := auth.NuevoFirmador([]byte(secreto), time.Hour)
 	if _, err := f.Verificar(tok); err == nil || !strings.Contains(err.Error(), "venc") {
 		t.Fatalf("Verificar = %v; se esperaba un error de vencimiento", err)
+	}
+}
+
+// TestUnCasoNoDesaparece (PR-102 H2): si la SPA no responde, no tiene CSP o
+// responde 404, el caso de la CSP sigue en el reporte y todos_ok es falso.
+func TestUnCasoNoDesaparece(t *testing.T) {
+	caida := httptest.NewServer(http.NotFoundHandler())
+	urlCaida := caida.URL
+	caida.Close()
+	for nombre, w := range map[string]string{
+		"inalcanzable": urlCaida,
+		"sin CSP":      web(t, 200, ""),
+		"404 con CSP":  web(t, 404, cspSPA),
+	} {
+		srv, cred := servidor(t)
+		p := &Prueba{URL: srv.URL, Origen: origenSPA, Web: w, Cred: cred, Cliente: srv.Client(), SinLimite: true}
+		r, err := p.Correr()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(r.Casos) != casosEsperados || r.TodosOK {
+			t.Errorf("%s: %d casos, todos_ok=%v; se esperaban %d y false", nombre, len(r.Casos), r.TodosOK, casosEsperados)
+		}
 	}
 }

@@ -86,6 +86,9 @@ func NuevoFirmador(secreto []byte, duracion time.Duration) (*Firmador, error) {
 // Lo usa cmd/seguridad para firmar un token ya vencido con el secreto de la
 // corrida y comprobar desde fuera que la API lo rechaza.
 func NuevoFirmadorConReloj(secreto []byte, duracion time.Duration, ahora func() time.Time) (*Firmador, error) {
+	if ahora == nil {
+		return nil, errors.New("el reloj del firmador no puede ser nil")
+	}
 	f, err := NuevoFirmador(secreto, duracion)
 	if err != nil {
 		return nil, err

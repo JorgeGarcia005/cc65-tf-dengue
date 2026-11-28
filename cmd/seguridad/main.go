@@ -68,7 +68,7 @@ func main() {
 		AdminCorreo: os.Getenv("VIGIA_ADMIN_CORREO"), AdminClave: os.Getenv("VIGIA_ADMIN_CLAVE"),
 		AnalistaCorreo: os.Getenv("VIGIA_ANALISTA_CORREO"), AnalistaClave: os.Getenv("VIGIA_ANALISTA_CLAVE"),
 	}
-	if cred.Secreto == "" || cred.AdminClave == "" || cred.AnalistaClave == "" {
+	if cred.Secreto == "" || cred.AdminCorreo == "" || cred.AdminClave == "" || cred.AnalistaCorreo == "" || cred.AnalistaClave == "" {
 		log.Fatal("faltan JWT_SECRETO, VIGIA_ADMIN_* o VIGIA_ANALISTA_* (los de deploy/.env de esta corrida)")
 	}
 	p := &Prueba{URL: strings.TrimRight(*url, "/"), Origen: *origen, Web: *web, Cred: cred,
@@ -139,6 +139,12 @@ func (p *Prueba) pedir(metodo, ruta string, cab map[string]string, cuerpo []byte
 	return res, b, nil
 }
 
+// fallo registra un caso que no se pudo probar: cuenta como no cumplido
+// (PR-102 H2: un caso nunca desaparece del reporte).
+func (p *Prueba) fallo(nombre, peticion, esperado string, err error) {
+	p.caso(nombre, peticion, esperado, "no se pudo probar: "+err.Error(), false)
+}
+
 func (p *Prueba) codigo(metodo, ruta string, cab map[string]string, cuerpo []byte) int {
 	res, _, err := p.pedir(metodo, ruta, cab, cuerpo)
 	if err != nil {
@@ -205,42 +211,59 @@ func (p *Prueba) Correr() (Reporte, error) {
 	// 3. CORS.
 	pre := map[string]string{"Origin": p.Origen, "Access-Control-Request-Method": "POST",
 		"Access-Control-Request-Headers": "authorization, content-type"}
-	if res, _, err := p.pedir("OPTIONS", "/api/v1/predicciones", pre, nil); err == nil {
+	const corsSPA, corsAjeno = "OPTIONS /api/v1/predicciones (Origin SPA)", "OPTIONS /api/v1/predicciones (Origin ajeno)"
+	if res, _, err := p.pedir("OPTIONS", "/api/v1/predicciones", pre, nil); err != nil {
+		p.fallo("CORS: origen de la SPA", corsSPA, "Allow-Origin = "+p.Origen, err)
+	} else {
 		acao := res.Header.Get("Access-Control-Allow-Origin")
-		p.caso("CORS: origen de la SPA", "OPTIONS /api/v1/predicciones (Origin SPA)", "Allow-Origin = "+p.Origen,
-			"Allow-Origin = "+cmpVacio(acao), acao == p.Origen)
+		p.caso("CORS: origen de la SPA", corsSPA, "Allow-Origin = "+p.Origen, "Allow-Origin = "+cmpVacio(acao), acao == p.Origen)
 	}
 	pre["Origin"] = "https://otro-sitio.example"
-	if res, _, err := p.pedir("OPTIONS", "/api/v1/predicciones", pre, nil); err == nil {
+	if res, _, err := p.pedir("OPTIONS", "/api/v1/predicciones", pre, nil); err != nil {
+		p.fallo("CORS: origen ajeno", corsAjeno, "sin Allow-Origin", err)
+	} else {
 		acao := res.Header.Get("Access-Control-Allow-Origin")
-		p.caso("CORS: origen ajeno", "OPTIONS /api/v1/predicciones (Origin ajeno)", "sin Allow-Origin",
-			"Allow-Origin = "+cmpVacio(acao), acao == "")
+		p.caso("CORS: origen ajeno", corsAjeno, "sin Allow-Origin", "Allow-Origin = "+cmpVacio(acao), acao == "")
 	}
 
 	// 4. Cabeceras de seguridad de la API y CSP de la SPA.
-	if res, _, err := p.pedir("GET", "/api/v1/modelo", bearer(analista), nil); err == nil {
+	if res, _, err := p.pedir("GET", "/api/v1/modelo", bearer(analista), nil); err != nil {
+		p.fallo("cabecera nosniff", "GET /api/v1/modelo", "X-Content-Type-Options: nosniff", err)
+	} else {
 		nos := res.Header.Get("X-Content-Type-Options")
 		p.caso("cabecera nosniff", "GET /api/v1/modelo", "X-Content-Type-Options: nosniff", "X-Content-Type-Options: "+cmpVacio(nos), nos == "nosniff")
 	}
-	if res, _, err := p.pedir("POST", "/api/v1/auth/login", map[string]string{"Content-Type": "application/json"}, []byte(`{}`)); err == nil {
+	if res, _, err := p.pedir("POST", "/api/v1/auth/login", map[string]string{"Content-Type": "application/json"}, []byte(`{}`)); err != nil {
+		p.fallo("login sin caché", "POST /api/v1/auth/login", "Cache-Control: no-store", err)
+	} else {
 		cc := res.Header.Get("Cache-Control")
 		p.caso("login sin caché", "POST /api/v1/auth/login", "Cache-Control: no-store", "Cache-Control: "+cmpVacio(cc), strings.Contains(cc, "no-store"))
 	}
-	if p.Web == "" {
-		// Sin SPA que revisar (tests de la API sola).
-	} else if res, _, err := p.pedir("GET", strings.TrimRight(p.Web, "/")+"/", nil, nil); err == nil {
-		csp := res.Header.Get("Content-Security-Policy")
-		ok := strings.Contains(csp, "default-src 'self'") && !strings.Contains(csp, "unsafe-inline") && !strings.Contains(csp, "unsafe-eval")
-		p.caso("CSP de la SPA", "GET "+p.Web+"/", "default-src 'self', sin unsafe-*", resumir(csp), ok)
+	if p.Web != "" {
+		const quiere = "200 con default-src 'self', sin unsafe-*"
+		peticion := "GET " + p.Web + "/"
+		if res, _, err := p.pedir("GET", strings.TrimRight(p.Web, "/")+"/", nil, nil); err != nil {
+			p.fallo("CSP de la SPA", peticion, quiere, err)
+		} else {
+			csp := res.Header.Get("Content-Security-Policy")
+			ok := res.StatusCode == 200 && strings.Contains(csp, "default-src 'self'") &&
+				!strings.Contains(csp, "unsafe-inline") && !strings.Contains(csp, "unsafe-eval")
+			p.caso("CSP de la SPA", peticion, quiere, fmt.Sprintf("%d, %s", res.StatusCode, resumir(csp)), ok)
+		}
 	}
 
 	// 5. WebSocket: ticket de un uso y origen.
 	p.esperarCodigo("WS sin ticket", "GET /api/v1/ws (Origin SPA)", 401, "GET", "/api/v1/ws", cabWS(p.Origen), nil)
-	if t, err := p.ticket(admin); err == nil {
+	if t, err := p.ticket(admin); err != nil {
+		p.fallo("WS de un origen ajeno", "GET /api/v1/ws?ticket=… (Origin ajeno)", "403", err)
+	} else {
 		c := p.codigo("GET", "/api/v1/ws?ticket="+t, cabWS("https://otro-sitio.example"), nil)
 		p.caso("WS de un origen ajeno", "GET /api/v1/ws?ticket=… (Origin ajeno)", "403", strconv.Itoa(c), c == 403)
 	}
-	if t, err := p.ticket(admin); err == nil {
+	if t, err := p.ticket(admin); err != nil {
+		p.fallo("WS con ticket válido", "GET /api/v1/ws?ticket=… (Origin SPA)", "101", err)
+		p.fallo("WS: ticket reutilizado", "el mismo ticket por segunda vez", "401", err)
+	} else {
 		c1 := p.abrirWS(t)
 		c2 := p.abrirWS(t)
 		p.caso("WS con ticket válido", "GET /api/v1/ws?ticket=… (Origin SPA)", "101", strconv.Itoa(c1), c1 == 101)
@@ -316,9 +339,12 @@ func (p *Prueba) esperarLiberacion(reintento string) (int, error) {
 }
 
 func (p *Prueba) ticket(admin string) (string, error) {
-	_, b, err := p.pedir("POST", "/api/v1/ws/ticket", bearer(admin), nil)
+	res, b, err := p.pedir("POST", "/api/v1/ws/ticket", bearer(admin), nil)
 	if err != nil {
 		return "", err
+	}
+	if res.StatusCode != 200 {
+		return "", fmt.Errorf("POST /api/v1/ws/ticket respondió %d", res.StatusCode)
 	}
 	var r struct {
 		Ticket string `json:"ticket"`
