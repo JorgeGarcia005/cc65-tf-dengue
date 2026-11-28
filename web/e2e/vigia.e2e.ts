@@ -57,12 +57,20 @@ test('analista: sin «Clúster» en el menú y 403 propio en /admin', async ({ p
   await captura(page, 'e2e-02-analista-403')
 })
 
-test('inicio: las 10 prioridades, con la evaluación del modelo que sirve la API', async ({ page }) => {
+test('inicio: las 10 prioridades, con la evaluación del modelo que sirve la API', async ({ page, request }) => {
   await entrar(page, analista())
   const tabla = page.getByRole('region', { name: 'Las 10 prioridades' })
   await expect(tabla.getByRole('row')).toHaveCount(11) // encabezado + 10
   if (process.env.E2E_EXIGIR_VERSION === '1') {
-    // Tras el paso 10, la evaluación es del modelo publicado: sin aviso de desfase.
+    // Tras el paso 10, la evaluación es del modelo publicado. Se comprueba en
+    // positivo contra la versión que sirve la API (PR-102 H3): un «no hay
+    // aviso» solo no basta, porque el aviso aparece recién cuando responde
+    // /api/v1/modelo.
+    const salud = await request.get(`${API}/healthz`)
+    expect(salud.ok()).toBeTruthy()
+    const { version_modelo: servida } = (await salud.json()) as { version_modelo: string }
+    expect(servida).toMatch(/^[0-9a-f]{12}$/)
+    await expect(page.locator('[data-kpi="version"]')).toHaveText(servida)
     await expect(page.getByText(/Esta evaluación es del modelo/)).toHaveCount(0)
   }
   await captura(page, 'e2e-03-inicio')
@@ -134,16 +142,26 @@ test('admin: entrenamiento en vivo, caída de un nodo, sello bit a bit y métric
   await ent.getByLabel('Tasa').fill('2')
   await ent.getByLabel('Pausa (ms, demo)').fill('20')
   await ent.getByRole('button', { name: 'Lanzar entrenamiento' }).click()
-  const epoca = ent.locator('dt:text-is("Época") + dd')
-  await expect.poll(async () => Number((await epoca.textContent())?.replace(/\D/g, '') || 0), { timeout: 60_000 }).toBeGreaterThan(40)
+  // «35 / 600»: solo el número antes de la barra (PR-102 H1: quitar los no
+  // dígitos de «0 / 600» daba 600 en la época 0).
+  const epoca = page.locator('[data-kpi="epoca"]')
+  await expect.poll(async () => Number.parseInt((await epoca.textContent()) ?? '', 10) || 0, { timeout: 60_000 }).toBeGreaterThan(40)
+  await expect(page.locator('[data-kpi="perdida"]')).not.toHaveText('—')
   await captura(page, 'e2e-08-admin-entrenando', false)
 
   // Si el corte cae a mitad de una época, el coordinador reasigna el shard
   // (línea «reasignacion»); si cae entre dos, el nodo vuelve a registrarse y
   // recibe su shard en la siguiente. En los dos casos la bitácora muestra la
   // caída y el entrenamiento sigue hasta el sello bit a bit.
+  const bitacora = page.getByRole('log')
+  const registros = async () => ((await bitacora.textContent()) ?? '').split('se registró').length - 1
+  const antes = await registros()
   await page.getByRole('button', { name: /^Tumbar / }).first().click()
-  await expect(page.getByRole('log')).toContainText('salió del clúster', { timeout: 60_000 })
+  await expect(bitacora).toContainText('salió del clúster', { timeout: 60_000 })
+  // Y la recuperación: el shard reasignado o el nodo registrado de nuevo.
+  await expect
+    .poll(async () => ((await bitacora.textContent()) ?? '').includes('reasignacion:') || (await registros()) > antes, { timeout: 60_000 })
+    .toBe(true)
   await capturaDe(page.locator('section').filter({ has: page.getByRole('log') }), 'e2e-09-admin-nodo-caido')
 
   await expect(page.getByText('bit a bit ✓')).toBeVisible({ timeout: 150_000 })
