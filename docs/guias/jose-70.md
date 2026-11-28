@@ -127,12 +127,13 @@ docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.api.yml log
 
 ## Paso 16. Capturas manuales
 
-Solo dos, las que no se pueden automatizar. Con el sistema todavía arriba, en Postman (Windows), importa `docs/api/cc65-tf.postman_collection.json`, cambia la variable `base_url` si usaste otro puerto y pon en `clave` la de `VIGIA_ADMIN_CLAVE`.
+Solo tres, las que no se pueden automatizar: dos de Postman y una del tablero Kanban. Con el sistema todavía arriba, en Postman (Windows), importa `docs/api/cc65-tf.postman_collection.json`, cambia la variable `base_url` si usaste otro puerto y pon en `clave` la de `VIGIA_ADMIN_CLAVE`.
 
 | Archivo en `docs/informe/tb2/capturas/` | Qué debe verse |
 |---|---|
 | `m-postman-runner.png` | *Collection Runner* con la colección completa: todas las pruebas en verde y la columna de tiempo de cada petición |
 | `m-postman-prediccion.png` | `POST /api/v1/predicciones` con la pestaña *Authorization* (Bearer), el cuerpo, la respuesta `200` y el tiempo en ms |
+| `m-kanban.png` | El tablero «TF CC65» de GitHub Projects con todas sus columnas (Backlog, En curso, En revisión, Hecho) y las tarjetas de la TB2; si no cabe, con el zoom del navegador al 67 % |
 
 Guárdalas en PNG, a pantalla completa de la ventana de Postman, sin recortar la barra de estado (ahí sale el tiempo). Si cuando llegues a este paso el informe pide alguna captura más, el control la listará con su nombre exacto.
 
@@ -158,7 +159,7 @@ El merge no toca tus evidencias ni tus capturas, así que los pasos que ya hicis
 QUITAR="<el texto que te indique Jorge>" bash scripts/evidencias-tb2.sh informe
 ```
 
-Regenera las cifras del informe desde los `reports/*.json` nuevos, comprueba que el informe coincide con el repositorio y arma el Word con `cmd/word -final`, que **falla si falta cualquier captura o evidencia**. `QUITAR` borra de la carátula de la plantilla el párrafo con el nombre del integrante que se retiró. El Word queda en `entregables/1ACC0065_TB2_202610_Informe_<código>.docx`, uno por cada código de `entregables/codigos.txt`.
+Guarda primero la evidencia de gestión (`evidencias/gestion.txt`: ramas, etiquetas, Pull Requests y commits por autor), regenera las cifras del informe desde los `reports/*.json` nuevos, comprueba que el informe coincide con el repositorio y arma el Word con `cmd/word -final`, que **falla si falta cualquier captura o evidencia**. `QUITAR` borra de la carátula de la plantilla el párrafo con el nombre del integrante que se retiró. El Word queda en `entregables/1ACC0065_TB2_202610_Informe_<código>.docx`, uno por cada código de `entregables/codigos.txt`.
 
 Ábrelo en Word, acepta actualizar los campos (índices y números de página) y revisa que cada captura se vea completa. Si una no se lee, vuelve a tomarla y **repite el paso 17**.
 

@@ -229,6 +229,9 @@ p_e2e() {
 }
 
 p_informe() {
+  # La evidencia de gestión (sección 19) se toma aquí, justo antes de armar el
+  # Word, para que refleje la historia completa del repositorio.
+  registrar gestion "Ramas, etiquetas, Pull Requests y commits por autor" p_gestion
   echo "-- go run ./cmd/informe (cifras, figuras y fragmentos desde reports/)"
   go run ./cmd/informe 2>&1 | grep -v "^.* escrito "
   echo "-- el informe coincide con el repositorio y no tiene referencias rotas"
@@ -298,6 +301,24 @@ p_contratos() {
   muestra 200 GET /api/v1/cluster admin "" 900
   echo "-- 6. Ticket de un uso para el WebSocket (solo admin)"
   muestra 200 POST /api/v1/ws/ticket admin
+}
+
+p_gestion() {
+  git fetch -q origin 2>/dev/null || true
+  echo "-- ramas principales y de entrega en origin"
+  git branch -r --format='%(refname:short)' | grep -E '^origin/(main|develop|integracion/tb2|release/)' || true
+  echo "-- cantidad de ramas por tipo en origin (feature/, fix/, release/, revision/)"
+  for t in feature fix release revision; do
+    printf '%-9s %s\n' "$t/" "$(git branch -r --format='%(refname:short)' | grep -c "^origin/$t/" || true)"
+  done
+  echo "-- etiquetas de entrega"
+  git tag -l --format='%(refname:short)  %(creatordate:short)  %(subject)'
+  echo "-- Pull Requests integrados con merge commit en integracion/tb2 (TB2)"
+  git log --merges --first-parent --format='%h %ad %s' --date=short origin/integracion/tb2 ^origin/develop | grep 'Merge pull request' || true
+  echo "-- Pull Requests integrados hasta la PC4 (develop; squash y merge commits)"
+  git log --first-parent --format='%s' origin/develop | grep -cE '\(#[0-9]+\)|Merge pull request' || true
+  echo "-- commits por autor en todas las ramas (sin correos)"
+  git shortlog -sn --all --no-merges
 }
 
 p_apagar() {
