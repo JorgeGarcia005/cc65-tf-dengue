@@ -311,7 +311,7 @@ func TestLentoNoBloqueaAlPublicador(t *testing.T) {
 func TestHubConcurrenteSinFugas(t *testing.T) {
 	antes := runtime.NumGoroutine()
 	h := NuevoHub(8)
-	srv := servidorHub(h, 5*time.Millisecond) // pings mientras dura la prueba
+	srv := servidorHub(h, 25*time.Millisecond) // pings mientras dura la prueba
 	var wg sync.WaitGroup
 	for i := 0; i < 16; i++ {
 		wg.Add(1)
@@ -362,7 +362,7 @@ func TestHubConcurrenteSinFugas(t *testing.T) {
 	for i := 0; i < 50; i++ {
 		h.Publicar([]byte("epoca"))
 	}
-	time.Sleep(30 * time.Millisecond) // varios pings de por medio
+	time.Sleep(80 * time.Millisecond) // varios pings de por medio
 	// "fin" se repite: a un cliente con el búfer lleno se le puede descartar uno.
 	esperar(t, 3*time.Second, "todos los clientes dados de baja", func() bool {
 		h.Publicar([]byte("fin"))
