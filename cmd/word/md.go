@@ -144,6 +144,13 @@ var (
 	reComentario = regexp.MustCompile(`<!--.*?-->`)
 )
 
+// sigueNota: la siguiente línea con contenido después de i empieza una nota.
+func sigueNota(lineas []string, i int) bool {
+	for i++; i < len(lineas) && strings.TrimSpace(lineas[i]) == ""; i++ {
+	}
+	return i < len(lineas) && strings.HasPrefix(strings.TrimSpace(lineas[i]), "Nota: ")
+}
+
 // esComentario: una línea que abre un comentario HTML que no es un valor en
 // línea (<!--v:…-->…<!--/v-->, que se lee como texto).
 func esComentario(s string) bool {
@@ -185,7 +192,7 @@ func (d *documento) bloques(lineas []string, base string) {
 			i++
 		case reCaptura.MatchString(t):
 			titulo, etiqueta := separarEtiqueta(reCaptura.FindStringSubmatch(t)[1])
-			d.captura(titulo, etiqueta)
+			d.captura(titulo, etiqueta, sigueNota(lineas, i))
 			i++
 		case reEstilo.MatchString(t):
 			d.referencias = reEstilo.FindStringSubmatch(t)[1] == "referencias"
@@ -215,7 +222,7 @@ func (d *documento) bloques(lineas []string, base string) {
 			i++
 		case reImagen.MatchString(t):
 			m := reImagen.FindStringSubmatch(t)
-			d.figura(m[1], filepath.Join(base, m[2]), m[3])
+			d.figura(m[1], filepath.Join(base, m[2]), m[3], sigueNota(lineas, i))
 			i++
 		case strings.HasPrefix(t, "|"):
 			j := i
@@ -305,10 +312,10 @@ func (d *documento) parrafo(s, ppr string, e estilo) {
 	d.b.WriteString(`</w:p>`)
 }
 
-// cita: el informe es sobrio, así que una cita (> …) es un párrafo normal,
-// sin recuadro ni color.
+// cita: bloque con sangría a ambos lados (APA 7, cita en bloque), sin
+// recuadro ni color.
 func (d *documento) cita(s string) {
-	d.parrafo(s, `<w:jc w:val="both"/>`, texto(22))
+	d.parrafo(s, `<w:spacing w:before="120" w:after="160"/><w:ind w:left="720" w:right="720"/><w:jc w:val="both"/>`, texto(22))
 }
 
 // separarEtiqueta devuelve el título sin su etiqueta {#fig:id} o {#tab:id}.
@@ -362,9 +369,9 @@ func (d *documento) nota(s string) {
 
 // captura deja un espacio enmarcado para pegar una captura de pantalla, con
 // su pie numerado como el de cualquier figura.
-func (d *documento) captura(titulo, etiqueta string) {
+func (d *documento) captura(titulo, etiqueta string, conNota bool) {
 	d.pie("Figura", titulo, etiqueta)
-	d.b.WriteString(`<w:p><w:pPr><w:pBdr>` +
+	d.b.WriteString(`<w:p><w:pPr>` + mantener(conNota) + `<w:pBdr>` +
 		`<w:top w:val="single" w:sz="4" w:space="40" w:color="A6A6A6"/><w:left w:val="single" w:sz="4" w:space="4" w:color="A6A6A6"/>` +
 		`<w:bottom w:val="single" w:sz="4" w:space="40" w:color="A6A6A6"/><w:right w:val="single" w:sz="4" w:space="4" w:color="A6A6A6"/>` +
 		`</w:pBdr><w:spacing w:before="120" w:after="240"/><w:jc w:val="center"/></w:pPr>`)
@@ -607,8 +614,16 @@ func textoVisible(s string) string {
 	return strings.NewReplacer("**", "", "`", "", "*", "").Replace(s)
 }
 
+// mantener: la nota que sigue va en la misma página que la figura.
+func mantener(conNota bool) string {
+	if conNota {
+		return `<w:keepNext/>`
+	}
+	return ""
+}
+
 // figura inserta una imagen SVG con su pie APA encima.
-func (d *documento) figura(alt, ruta, etiqueta string) {
+func (d *documento) figura(alt, ruta, etiqueta string, conNota bool) {
 	svg, err := os.ReadFile(filepath.Join(d.dir, ruta))
 	if err != nil {
 		d.aviso("no se pudo leer la figura %s: %v", ruta, err)
@@ -626,7 +641,7 @@ func (d *documento) figura(alt, ruta, etiqueta string) {
 	cx := int64(anchoTexto) * emuPorDxa
 	cy := int64(float64(cx) * h / w)
 	d.docPr++
-	d.b.WriteString(`<w:p><w:pPr><w:spacing w:before="0" w:after="120"/><w:jc w:val="center"/></w:pPr><w:r><w:drawing>`)
+	d.b.WriteString(`<w:p><w:pPr>` + mantener(conNota) + `<w:spacing w:before="0" w:after="120"/><w:jc w:val="center"/></w:pPr><w:r><w:drawing>`)
 	fmt.Fprintf(&d.b, `<wp:inline distT="0" distB="0" distL="0" distR="0"><wp:extent cx="%d" cy="%d"/><wp:docPr id="%d" name="%s" descr="%s"/>`, cx, cy, d.docPr, img.Nombre, escapar(d.textoPlano(alt)))
 	d.b.WriteString(`<a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:pic>`)
 	fmt.Fprintf(&d.b, `<pic:nvPicPr><pic:cNvPr id="0" name="%s.svg"/><pic:cNvPicPr/></pic:nvPicPr>`, img.Nombre)

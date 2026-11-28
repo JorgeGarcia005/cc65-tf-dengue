@@ -218,6 +218,16 @@ func init() {
 		return m
 	}
 	funciones["semanas"] = func(s []int) string { return rangosSemanas(s) }
+	funciones["sino"] = func(b bool) string {
+		if b {
+			return "sí"
+		}
+		return "no"
+	}
+	// total suma las tres clases de un año de perfil.por_ano_y_clase.
+	funciones["total"] = func(c [3]int) int { return c[0] + c[1] + c[2] }
+	// razon divide dos enteros (p. ej. veces más casos que otro año).
+	funciones["razon"] = func(a, b int) float64 { return float64(a) / float64(b) }
 	// num escribe un número suelto (λ, tasa, umbral) con coma decimal.
 	funciones["num"] = func(x float64) string { return strings.Replace(fmt.Sprintf("%g", x), ".", ",", 1) }
 }

@@ -92,7 +92,7 @@ func TestInformeTB2AlDia(t *testing.T) {
 		t.Fatalf("sin secciones en docs/informe/tb2: %v", err)
 	}
 	p, l, m := cargar()
-	datos := datosTB2{cargarPC4(calcularSintesis(p, l, m))}
+	datos := nuevoDatosTB2(calcularSintesis(p, l, m))
 	for _, a := range archivos {
 		b, err := os.ReadFile(a)
 		if err != nil {

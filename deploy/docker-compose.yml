@@ -23,6 +23,7 @@
 #   API=:8080 docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.api.yml up --build
 name: cc65-tf
 
+# informe:imagenes
 x-imagen: &imagen
   image: cc65-tf
   build:
@@ -37,8 +38,10 @@ x-imagen-datos: &imagen-datos
   build:
     context: ..
     dockerfile: deploy/Dockerfile.datos
+# /informe:imagenes
 
 services:
+  # informe:coordinator
   coordinator:
     <<: *imagen
     user: "${USUARIO:-65532:65532}"
@@ -63,7 +66,9 @@ services:
     expose:
       - "9000"
     networks: [cluster]
+  # /informe:coordinator
 
+  # informe:node
   node:
     <<: *imagen
     # Sin nombre de contenedor fijo: `--scale node=N` crea node-1 … node-N.
@@ -77,10 +82,12 @@ services:
     deploy:
       replicas: ${NODOS:-3}
     networks: [cluster]
+  # /informe:node
 
   # Bases de datos del modo servicio (ADR-0006): MongoDB persistente y Redis
   # como caché de predicciones. Solo en la red interna; el coordinador las usa
   # cuando corre con docker-compose.api.yml.
+  # informe:bases
   mongo:
     image: mongo:7.0.14
     volumes: [mongo-datos:/data/db]
@@ -101,6 +108,7 @@ services:
       timeout: 3s
       retries: 12
     networks: [cluster]
+  # /informe:bases
 
   # ---- Parte A en Docker (perfil «datos», auditoría TB2 B1) ----------------
   # Del CSV bronze al gold y al modelo inicial, en contenedores y en orden:
@@ -108,6 +116,7 @@ services:
   # Requiere data/bronze/vigilancia_dengue_2000_2025.csv (make data o descarga
   # manual, ver README). Escriben en ../data y ../reports del anfitrión con las
   # mismas rutas que `go run` (directorio de trabajo /trabajo). No usan la red.
+  # informe:datos
   loader:
     <<: *imagen-datos
     profiles: [datos]
@@ -141,6 +150,7 @@ services:
     depends_on:
       gold:
         condition: service_completed_successfully
+  # /informe:datos
 
 volumes:
   mongo-datos: {}
