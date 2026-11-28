@@ -1,0 +1,9 @@
+Tabla: Columnas del archivo original: vacíos, valores distintos y valores más frecuentes {#tab:columnas}
+
+| Columna | Vacíos | Valores distintos | Valores más frecuentes (casos) |
+|---|---:|---:|---|
+{{- range .S.P.Perfil.Columnas}}
+| `{{.Nombre}}` | {{miles .Vacios}} | {{miles .Distintos}} | {{top .Top}} |
+{{- end}}
+
+Nota: Perfil de las {{miles .S.P.Perfil.Filas}} filas del archivo `{{.S.P.Archivo}}`. Fuente: `reports/perfil_bronze.json`, generado por `cmd/perfil`.

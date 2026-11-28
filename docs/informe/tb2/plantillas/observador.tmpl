@@ -1,0 +1,11 @@
+{{- with index .R "bench_observador_jorge-pc_gold" -}}
+Tabla: Costo de publicar las métricas en vivo durante el entrenamiento {#tab:observador}
+
+| Nodos | ms por época sin observador | ms por época con observador | Diferencia (%) |
+|---:|---:|---:|---:|
+{{- range .sobrecosto}}
+| {{entero .nodos}} | {{dos .ms_por_epoca_sin}} | {{dos .ms_por_epoca_con}} | {{pct .relativo}} |
+{{- end}}
+
+Nota: {{.maquina.cpu}}, {{entero .maquina.num_cpu}} CPU lógicas, {{.maquina.so}}; datos: {{.fuente}}. «Con observador»: cada evento del clúster se serializa a JSON y se publica en el *hub* de WebSocket con un suscriptor conectado. Se publicaron {{miles (entero .eventos_publicados)}} eventos y se descartaron {{miles (entero .eventos_descartados)}}. Las dos corridas se compararon bit a bit con el entrenamiento secuencial. Fuente: `reports/bench_observador_jorge-pc_gold.json`.
+{{- end}}

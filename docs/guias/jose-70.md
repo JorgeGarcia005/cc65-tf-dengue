@@ -121,6 +121,20 @@ Guárdalas en PNG, a pantalla completa de la ventana de Postman, sin recortar la
 
 Cuando el control marque [✓] el paso 15, ya puedes apagar el sistema: `bash scripts/evidencias-tb2.sh apagar`.
 
+## Pausa entre el paso 15 y el 16
+
+**Al terminar el paso 15 te detienes.** El paso 16 arma el Word final, y el informe todavía tiene secciones que escribe Jorge por bloques (cada bloque pasa por un PR y el juez). Mientras falte alguna, el control se detiene en el paso 16 con el mensaje «el informe aún tiene secciones por escribir» y la lista de archivos: es lo esperado, no es un error tuyo.
+
+Cuando Jorge te avise que el informe está completo en `integracion/tb2`:
+
+```bash
+git fetch origin
+git merge origin/integracion/tb2      # sin rebase; si Git abre el editor, guarda y cierra
+bash scripts/paso70.sh
+```
+
+El merge no toca tus evidencias ni tus capturas, así que los pasos 2 a 15 siguen marcados. Si alguna sección nueva pide una captura más, el control vuelve al paso 15 y la lista con su nombre exacto: la tomas y sigues. Con todo en [✓] hasta el 15, el control te deja pasar al 16.
+
 ## Paso 16. Informe final
 
 ```bash

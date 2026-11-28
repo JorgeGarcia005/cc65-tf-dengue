@@ -1,0 +1,28 @@
+// Ciclo de vida de un nodo (UML 2.5, máquina de estados). Código:
+// cmd/node/main.go y (*Nodo).Servir en internal/cluster/nodo.go.
+// Fuente de docs/informe/tb2/fig/nodo.svg: make figuras.
+digraph nodo {
+  graph [rankdir=TB, fontname="Liberation Serif", fontsize=11, nodesep=0.5, ranksep=0.42, splines=polyline, pad=0.1]
+  node  [shape=box, style=rounded, fontname="Liberation Serif", fontsize=10.5, penwidth=0.9, margin="0.14,0.06", height=0.4]
+  edge  [fontname="Liberation Serif", fontsize=9, penwidth=0.8, arrowsize=0.6, arrowhead=vee]
+
+  inicio [shape=circle, style=filled, fillcolor=black, label="", width=0.16, height=0.16, fixedsize=true]
+  fin    [shape=doublecircle, style=filled, fillcolor=black, label="", width=0.12, height=0.12, fixedsize=true]
+  conectando [label="Conectando\n(reintenta hasta -espera)"]
+  registrado [label="Registrado\n(envió «registro»: nombre, versión, workers)"]
+  cargando   [label="Cargando el shard\n(lee el archivo y verifica su huella)"]
+  listo      [label="Listo\n(espera órdenes)"]
+  calculando [label="Calculando\n(worker pool: un parcial por bloque)"]
+
+  inicio -> conectando
+  conectando -> registrado [label=" conexión TCP / «registro»"]
+  conectando -> fin [label=" plazo vencido / error"]
+  registrado -> cargando [label=" «asignacion»"]
+  cargando -> listo [label=" / «listo»"]
+  listo -> cargando [label=" «asignacion»\n (shard reasignado)"]
+  listo -> calculando [label=" «epoca»"]
+  calculando -> listo [label=" / «gradiente»"]
+  listo -> fin [label=" «fin»"]
+  listo -> conectando [label=" conexión perdida\n [quedan reconexiones]"]
+  calculando -> conectando [label=" conexión perdida"]
+}

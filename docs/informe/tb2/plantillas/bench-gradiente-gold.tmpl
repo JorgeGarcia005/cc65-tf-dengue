@@ -1,0 +1,9 @@
+Tabla: Tiempo del cálculo del gradiente de una época sobre el conjunto de entrenamiento real {#tab:bench-gradiente-gold}
+
+| Configuración | Workers | Media recortada (ms) | IC 95 % (ms) | Speedup | Eficiencia (%) | Igual bit a bit |
+|---|---:|---:|---|---:|---:|:---:|
+{{- range .GradGold.Mediciones}}
+| {{.Config}} | {{.Workers}} | {{ms .Segundos.Media}} | [{{ms .Segundos.Inf}}; {{ms .Segundos.Sup}}] | {{dos .Speedup}} | {{pct .Eficiencia}} | {{if .Bits}}sí{{else}}no{{end}} |
+{{- end}}
+
+Nota: {{.GradGold.Maquina.CPU}}, {{.GradGold.Maquina.NumCPU}} CPU lógicas, {{.GradGold.Maquina.SO}}; datos: {{.GradGold.Fuente}}. Mismo protocolo que la @tab:bench-gradiente. Fuente: `reports/{{.GradGold.Archivo}}`.

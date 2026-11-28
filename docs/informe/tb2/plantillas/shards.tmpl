@@ -1,0 +1,9 @@
+Tabla: Shards del conjunto de entrenamiento {#tab:shards}
+
+| Shard | Bloque inicial | Bloques | Filas |
+|---:|---:|---:|---:|
+{{- range .S.M.S.Shards}}
+| {{index . "shard"}} | {{index . "bloque_inicial"}} | {{index . "bloques"}} | {{miles (index . "filas")}} |
+{{- end}}
+
+Nota: Bloques de {{.S.M.S.TamBloque}} filas ({{.S.M.S.Bloques}} en total), contiguos en cada shard. Fuente: `reports/split.json`.

@@ -224,12 +224,20 @@ func init() {
 		}
 		return "no"
 	}
+	funciones["add"] = func(a, b int) int { return a + b }
+	funciones["mil"] = func(x float64) float64 { return 1000 * x } // s → ms
+	funciones["kb"] = func(x float64) float64 { return x / 1024 }
+	funciones["uno"] = func(x float64) string { return strings.Replace(fmt.Sprintf("%.1f", x), ".", ",", 1) }
+	funciones["derefF"] = func(p *float64) float64 { return *p }
+	funciones["num"] = func(x float64) string { return strings.Replace(fmt.Sprintf("%g", x), ".", ",", 1) }
+	funciones["inv"] = func(x float64) float64 { return 1 / x }
 	// total suma las tres clases de un año de perfil.por_ano_y_clase.
 	funciones["total"] = func(c [3]int) int { return c[0] + c[1] + c[2] }
 	// razon divide dos enteros (p. ej. veces más casos que otro año).
 	funciones["razon"] = func(a, b int) float64 { return float64(a) / float64(b) }
 	// num escribe un número suelto (λ, tasa, umbral) con coma decimal.
 	funciones["num"] = func(x float64) string { return strings.Replace(fmt.Sprintf("%g", x), ".", ",", 1) }
+	funciones["inv"] = func(x float64) float64 { return 1 / x }
 }
 
 // topSemanas devuelve, en orden de semana, las k semanas con mayor valor.
