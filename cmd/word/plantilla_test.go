@@ -49,7 +49,8 @@ func generar(t *testing.T, raiz string, cambios reemplazos) (string, error) {
 		t.Fatal(err)
 	}
 	t.Chdir(dir)
-	docx, avisos, err := armar(plantillaMinima(raiz), ".", []string{"01-x.md"}, cambios, nil)
+	docx, res, err := armar(plantillaMinima(raiz), ".", []string{"01-x.md"}, cambios, nil)
+	avisos := res.avisos
 	if err != nil {
 		return "", err
 	}
@@ -262,11 +263,11 @@ func TestInformesSinAvisos(t *testing.T) {
 		if err != nil || len(secciones) == 0 {
 			t.Fatalf("sin secciones en %s: %v", dir, err)
 		}
-		_, avisos, err := armar(plantillaMinima(raizSoloWR), ".", secciones, nil, nil)
+		_, res, err := armar(plantillaMinima(raizSoloWR), ".", secciones, nil, nil)
 		if err != nil {
 			t.Fatalf("%s: %v", dir, err)
 		}
-		for _, a := range avisos {
+		for _, a := range res.avisos {
 			t.Errorf("%s: %s", dir, a)
 		}
 	}
