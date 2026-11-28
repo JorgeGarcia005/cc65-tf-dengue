@@ -125,8 +125,14 @@ func (n *Nodo) calcular(m protocolo.Mensaje) protocolo.Mensaje {
 	if len(m.W) != a.D+1 {
 		return fallo(m, "llegaron %d pesos, el shard necesita %d", len(m.W), a.D+1)
 	}
+	cpu0, okCPU := cpuProceso()
 	ini := time.Now()
 	parciales := n.pool.Parciales(a.Dataset, m.W)
-	return protocolo.Mensaje{Tipo: protocolo.Gradiente, Epoca: m.Epoca, Shard: m.Shard,
+	r := protocolo.Mensaje{Tipo: protocolo.Gradiente, Epoca: m.Epoca, Shard: m.Shard,
 		BloqueInicial: a.BloqueInicial, Parciales: parciales, MicrosCalculo: time.Since(ini).Microseconds()}
+	if cpu1, ok := cpuProceso(); okCPU && ok {
+		cpu := max(cpu1-cpu0, 0) // solo métrica: no entra en el gradiente
+		r.MicrosCPU = &cpu
+	}
+	return r
 }

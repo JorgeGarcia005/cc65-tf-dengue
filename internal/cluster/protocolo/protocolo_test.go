@@ -491,3 +491,33 @@ func TestConexionCuentaBytesEnviadosYRecibidos(t *testing.T) {
 		t.Fatalf("enviados %d, recibidos %d; se esperaban %d", env, rec, 2*len(linea))
 	}
 }
+
+// PR-92 H3: us_cpu = 0 es un dato (cálculo más corto que la resolución de
+// getrusage) y viaja; la ausencia de us_cpu significa «el nodo no lo informa».
+func TestMicrosCPUCeroViajaYNegativoSeRechaza(t *testing.T) {
+	cero := int64(0)
+	b, err := json.Marshal(Mensaje{Tipo: Gradiente, Shard: 1, MicrosCPU: &cero})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(b), `"us_cpu":0`) {
+		t.Fatalf("us_cpu = 0 no viaja: %s", b)
+	}
+	var ida Mensaje
+	if err := json.Unmarshal(b, &ida); err != nil || ida.MicrosCPU == nil || *ida.MicrosCPU != 0 {
+		t.Fatalf("ida y vuelta: %v %v", err, ida.MicrosCPU)
+	}
+	sin, _ := json.Marshal(Mensaje{Tipo: Gradiente, Shard: 1})
+	if strings.Contains(string(sin), "us_cpu") {
+		t.Fatalf("sin dato no debe enviarse: %s", sin)
+	}
+	ok := Mensaje{Tipo: Gradiente, Shard: 1, MicrosCPU: &cero, Parciales: []ml.Parcial{{Grad: []float64{1, 2}, Perdida: 1, Peso: 1}}}
+	if err := ok.Validar(); err != nil {
+		t.Fatalf("us_cpu = 0 es válido: %v", err)
+	}
+	neg := int64(-1)
+	m := Mensaje{Tipo: Gradiente, Shard: 1, MicrosCPU: &neg}
+	if err := m.Validar(); err == nil || !strings.Contains(err.Error(), "negativo") {
+		t.Fatalf("us_cpu negativo debe rechazarse por negativo: %v", err)
+	}
+}

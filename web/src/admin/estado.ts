@@ -10,6 +10,17 @@ export const VERSION_EVENTOS = 1
 export const TIPOS = ['registro', 'tarea', 'gradiente', 'epoca', 'reasignacion', 'descarte', 'abortado', 'fin', 'modelo'] as const
 export type TipoEvento = (typeof TIPOS)[number]
 
+/** cluster.MetricasNodo: la última época que calculó el nodo (#91). */
+export interface MetricasNodo {
+  epoca: number
+  shards: number
+  calculo_ms: number
+  latencia_ms: number
+  red_ms: number
+  /** 0..1; ausente si el nodo no informa su CPU. */
+  uso_cpu?: number
+}
+
 /** cluster.EstadoNodo. */
 export interface EstadoNodo {
   nombre: string
@@ -18,6 +29,7 @@ export interface EstadoNodo {
   sano: boolean
   carga: number
   motivo?: string
+  metricas?: MetricasNodo
 }
 
 /** cluster.Evento (internal/cluster/eventos.go), uno por mensaje del WebSocket o línea del .jsonl. */
@@ -31,13 +43,29 @@ export interface EventoCluster {
   perdida?: number
   pesos?: number[]
   micros_calculo?: number
+  /** En «gradiente» (#91): CPU del nodo durante el cálculo y µs desde su primera tarea de la época. */
+  micros_cpu?: number
+  micros_ida_vuelta?: number
   detalle?: string
   nodos?: EstadoNodo[]
+}
+
+/** Métricas que muestra el panel por nodo (#91), de /cluster o de los eventos «gradiente». */
+export interface MetricasVista {
+  epoca: number
+  calculoMs: number
+  latenciaMs: number
+  redMs: number
+  /** 0..1, o null si el nodo no informa su CPU. */
+  usoCpu: number | null
 }
 
 export interface NodoVista extends EstadoNodo {
   ultimoShard?: number
   microsCalculo?: number
+  vista?: MetricasVista
+  /** CPU acumulada de la época de `vista` (un nodo con varios shards los calcula en serie). */
+  microsCpuEpoca?: number | null
   /** Veces que salió del clúster en esta sesión del panel (un nodo cortado se vuelve a registrar enseguida). */
   caidas?: number
 }
@@ -105,9 +133,63 @@ const opcional = (v: unknown, ok: (x: unknown) => boolean) => v === undefined ||
 const texto = (v: unknown) => typeof v === 'string'
 const entero = (v: unknown) => Number.isInteger(v)
 
+function esMetricasNodo(v: unknown): v is MetricasNodo {
+  const m = v as Record<string, unknown> | null
+  return (
+    !!m &&
+    typeof m === 'object' &&
+    entero(m.epoca) &&
+    entero(m.shards) &&
+    finito(m.calculo_ms) &&
+    finito(m.latencia_ms) &&
+    finito(m.red_ms) &&
+    opcional(m.uso_cpu, (u) => finito(u) && (u as number) >= 0 && (u as number) <= 1)
+  )
+}
+
 function esEstadoNodo(v: unknown): v is EstadoNodo {
   const n = v as Record<string, unknown> | null
-  return !!n && typeof n === 'object' && texto(n.nombre) && typeof n.sano === 'boolean' && entero(n.carga) && entero(n.workers) && opcional(n.motivo, texto)
+  return (
+    !!n &&
+    typeof n === 'object' &&
+    texto(n.nombre) &&
+    typeof n.sano === 'boolean' &&
+    entero(n.carga) &&
+    entero(n.workers) &&
+    opcional(n.motivo, texto) &&
+    opcional(n.metricas, esMetricasNodo)
+  )
+}
+
+/** De la forma de /api/v1/cluster a la que pinta el panel. */
+function vistaDe(m: MetricasNodo): MetricasVista {
+  return { epoca: m.epoca, calculoMs: m.calculo_ms, latenciaMs: m.latencia_ms, redMs: m.red_ms, usoCpu: m.uso_cpu ?? null }
+}
+
+/**
+ * Métricas en vivo de un evento «gradiente» (#91). Dentro de una misma época
+ * los shards de un nodo se suman (los calcula en serie); la latencia es la del
+ * último gradiente, medida desde su primera tarea.
+ *
+ * Numeración (PR-92 H2): el evento lleva la época EN CURSO contada desde 0
+ * (cluster.Evento.Epoca), y /api/v1/cluster la época CERRADA contada desde 1
+ * (cluster.MetricasNodo.Epoca). Aquí todo se guarda como la segunda: el
+ * gradiente de la época E (1-based) llega con ev.epoca = E − 1.
+ */
+function conGradiente(n: NodoVista, ev: EventoCluster): Pick<NodoVista, 'vista' | 'microsCpuEpoca'> {
+  if (ev.micros_ida_vuelta === undefined) return {}
+  const epoca = ev.epoca + 1
+  const misma = n.vista?.epoca === epoca
+  const calcUs = (misma ? n.vista!.calculoMs * 1000 : 0) + (ev.micros_calculo ?? 0) // Go omite el 0
+  // CPU acumulada en la época: 0 es un dato (PR-92 H3); sin micros_cpu, el nodo no la informa.
+  const previa = misma ? n.microsCpuEpoca : 0
+  const cpuUs = previa === null || previa === undefined || ev.micros_cpu === undefined ? null : previa + ev.micros_cpu
+  const latUs = ev.micros_ida_vuelta
+  const usoCpu = cpuUs !== null && calcUs > 0 && n.workers > 0 ? Math.min(cpuUs / (calcUs * n.workers), 1) : null
+  return {
+    vista: { epoca, calculoMs: calcUs / 1000, latenciaMs: latUs / 1000, redMs: Math.max(latUs - calcUs, 0) / 1000, usoCpu },
+    microsCpuEpoca: cpuUs,
+  }
 }
 
 /** Valida un evento antes de reducirlo: un mensaje raro no rompe el panel. */
@@ -124,6 +206,8 @@ export function esEvento(v: unknown): v is EventoCluster {
     opcional(e.shard, entero) &&
     opcional(e.perdida, finito) &&
     opcional(e.micros_calculo, finito) &&
+    opcional(e.micros_cpu, finito) &&
+    opcional(e.micros_ida_vuelta, finito) &&
     opcional(e.detalle, texto) &&
     opcional(e.pesos, (p) => Array.isArray(p) && p.every(finito)) &&
     opcional(e.nodos, (ns) => Array.isArray(ns) && ns.every(esEstadoNodo))
@@ -146,10 +230,25 @@ export function anotar(e: EstadoPanel, txt: string, nivel: Nivel, t = new Date()
 }
 
 /** La instantánea de nodos del coordinador reemplaza a la anterior, conservando la actividad vista. */
+/**
+ * Mezcla una instantánea de nodos (de /api/v1/cluster o de un evento). Sus
+ * métricas son de la última época cerrada: si los eventos ya mostraron una
+ * época posterior, se conservan las de los eventos. Un entrenamiento nuevo
+ * reinicia la vista con «reiniciar» o con su primer gradiente.
+ */
 function conInstantanea(e: EstadoPanel, nodos: EstadoNodo[] | undefined): EstadoPanel {
   if (!nodos) return e
   const m: Record<string, NodoVista> = {}
-  for (const n of nodos) m[n.nombre] = { ...e.nodos[n.nombre], ...n }
+  for (const n of nodos) {
+    const previo = e.nodos[n.nombre]
+    const vigente = previo?.vista && previo.vista.epoca > (n.metricas?.epoca ?? 0)
+    if (n.metricas && !vigente) {
+      // La CPU acumulada era de otra época: la próxima suma empieza de cero (PR-92 H2).
+      m[n.nombre] = { ...previo, ...n, vista: vistaDe(n.metricas), microsCpuEpoca: undefined }
+    } else {
+      m[n.nombre] = { ...previo, ...n, vista: previo?.vista }
+    }
+  }
   return { ...e, nodos: m }
 }
 
@@ -172,8 +271,11 @@ export function reducir(e: EstadoPanel, ev: EventoCluster, origen: Origen = 'viv
     }
     case 'tarea':
       return tocarNodo(e, ev.nodo, { ultimoShard: ev.shard })
-    case 'gradiente':
-      return tocarNodo(e, ev.nodo, { ultimoShard: ev.shard, microsCalculo: ev.micros_calculo })
+    case 'gradiente': {
+      const previo = ev.nodo ? e.nodos[ev.nodo] : undefined
+      const metricas = previo ? conGradiente(previo, ev) : {}
+      return tocarNodo(e, ev.nodo, { ultimoShard: ev.shard, microsCalculo: ev.micros_calculo, ...metricas })
+    }
     case 'epoca': {
       const base = e.baseEpoca ?? ev.epoca - 1
       const epoca = ev.epoca - base
@@ -205,23 +307,62 @@ export function reducir(e: EstadoPanel, ev: EventoCluster, origen: Origen = 'viv
   }
 }
 
-/** Antes de lanzar otro entrenamiento: curva y pesos de cero; nodos y bitácora siguen. */
+/**
+ * Antes de lanzar otro entrenamiento: curva y pesos de cero; nodos y bitácora
+ * siguen, pero sin las métricas del anterior (sus épocas vuelven a empezar en 1).
+ */
 export function reiniciarEntrenamiento(e: EstadoPanel): EstadoPanel {
-  return { ...e, curva: [], pesos: null, epoca: 0, baseEpoca: null, reasignaciones: 0, terminado: false, abortado: null, modelo: null }
+  const nodos = Object.fromEntries(Object.entries(e.nodos).map(([k, n]) => [k, { ...n, vista: undefined, microsCpuEpoca: undefined }]))
+  return { ...e, nodos, curva: [], pesos: null, epoca: 0, baseEpoca: null, reasignaciones: 0, terminado: false, abortado: null, modelo: null }
 }
 
-/** GET /api/v1/cluster (cluster.Estado). */
+/** api.MetricasAPI: latencia de las predicciones dentro del servidor (#91). */
+export interface MetricasAPI {
+  predicciones: number
+  ventana: number
+  p50_ms: number
+  p95_ms: number
+  max_ms: number
+  aciertos_cache: number
+  no_registradas: number
+  limite_p95_ms: number
+  cumple_limite_p95: boolean
+}
+
+/** GET /api/v1/cluster (cluster.Estado + métricas de la API). */
 export interface EstadoCluster {
   epocas: number
   perdida: number
   nodos: EstadoNodo[]
   reasignaciones: number
   error?: string
+  api?: MetricasAPI
+}
+
+export function esMetricasAPI(v: unknown): v is MetricasAPI {
+  const m = v as Record<string, unknown> | null
+  return (
+    !!m &&
+    typeof m === 'object' &&
+    ['predicciones', 'ventana', 'no_registradas'].every((k) => entero(m[k])) &&
+    ['p50_ms', 'p95_ms', 'max_ms', 'aciertos_cache', 'limite_p95_ms'].every((k) => finito(m[k])) &&
+    typeof m.cumple_limite_p95 === 'boolean'
+  )
 }
 
 export function esEstadoCluster(v: unknown): v is EstadoCluster {
   const c = v as Record<string, unknown> | null
-  return !!c && typeof c === 'object' && entero(c.epocas) && finito(c.perdida) && entero(c.reasignaciones) && Array.isArray(c.nodos) && c.nodos.every(esEstadoNodo) && opcional(c.error, texto)
+  return (
+    !!c &&
+    typeof c === 'object' &&
+    entero(c.epocas) &&
+    finito(c.perdida) &&
+    entero(c.reasignaciones) &&
+    Array.isArray(c.nodos) &&
+    c.nodos.every(esEstadoNodo) &&
+    opcional(c.error, texto) &&
+    opcional(c.api, esMetricasAPI)
+  )
 }
 
 /**

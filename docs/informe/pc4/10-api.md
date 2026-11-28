@@ -112,6 +112,7 @@ func (s *Servidor) predecir(w http.ResponseWriter, r *http.Request) {
 		if ok && json.Unmarshal(b, &p) == nil && len(p.Contribuciones) > 0 {
 			w.Header().Set("X-Cache", "HIT")
 			responderBytes(w, http.StatusOK, b)
+			s.latencias.anotar(time.Since(inicio), true)
 			s.registrar(registroDe(cn, p, true, inicio))
 			return
 		}
@@ -133,6 +134,7 @@ func (s *Servidor) predecir(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("X-Cache", "MISS")
 	}
 	responderBytes(w, http.StatusOK, b)
+	s.latencias.anotar(time.Since(inicio), false)
 	s.registrar(registroDe(cn, p, false, inicio))
 }
 ```

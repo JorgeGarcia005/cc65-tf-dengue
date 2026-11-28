@@ -2,6 +2,7 @@ import { act, fireEvent, render, screen, waitFor, within } from '@testing-librar
 import { MemoryRouter } from 'react-router-dom'
 import { describe, expect, it, vi } from 'vitest'
 import App from '../App'
+import { formato } from '../mapa/datos'
 import { ProveedorSesion } from '../sesion/Sesion'
 
 const AHORA = 1_800_000_000
@@ -36,7 +37,7 @@ interface Llamada {
   cuerpo?: unknown
 }
 
-function montar(opciones: { modelo?: object; rechazarRitmo?: boolean; ticket?: string } = {}) {
+function montar(opciones: { modelo?: object; rechazarRitmo?: boolean; ticket?: string; cluster?: object } = {}) {
   WSFalso.instancias = []
   sessionStorage.setItem('vigia.sesion', JSON.stringify({ token: 't', correo: 'admin@vigia.pe', rol: 'admin', expira: AHORA + 3600 }))
   const llamadas: Llamada[] = []
@@ -46,7 +47,7 @@ function montar(opciones: { modelo?: object; rechazarRitmo?: boolean; ticket?: s
     const metodo = init?.method ?? 'GET'
     const cuerpo = init?.body ? JSON.parse(String(init.body)) : undefined
     llamadas.push({ url, metodo, cuerpo })
-    if (url.endsWith('/api/v1/cluster')) return json(CLUSTER)
+    if (url.endsWith('/api/v1/cluster')) return json(opciones.cluster ?? CLUSTER)
     if (url.endsWith('/api/v1/modelo')) return json(opciones.modelo ?? MODELO)
     if (url.endsWith('/api/v1/ws/ticket')) return json({ ticket: opciones.ticket ?? `tk-${llamadas.length}`, expira: AHORA + 30 })
     if (url.endsWith('/api/v1/entrenamientos') && metodo === 'POST') {
@@ -142,6 +143,36 @@ describe('panel admin en vivo', () => {
     expect(seccion('mapa-vivo').querySelector('[data-depto="TACNA"]')).toHaveAttribute('data-agrupado', 'true')
     expect(fillLoreto()).not.toBe(antes)
     expect(seccion('mapa-vivo').querySelector('svg')!.getAttribute('aria-label')).toMatch(/época 1.*el mayor es Loreto/)
+  })
+
+  // #91 · enunciado TB2 §6: el panel admin muestra uso de CPU, latencia, número de nodos y logs.
+  it('muestra CPU y latencia por nodo, nodos sanos y el p95 de la API; un gradiente las actualiza', async () => {
+    const metricas = { epoca: 7, shards: 1, calculo_ms: 13.9, latencia_ms: 15.2, red_ms: 1.3, uso_cpu: 0.93 }
+    const api = { predicciones: 40, ventana: 40, p50_ms: 0.8, p95_ms: 1.94, max_ms: 3.2, aciertos_cache: 0.5, no_registradas: 0, limite_p95_ms: 100, cumple_limite_p95: true }
+    const cluster = { ...CLUSTER, nodos: [{ ...nodo('nodo-0'), metricas }, nodo('nodo-1'), nodo('nodo-2', false)], api }
+    montar({ cluster })
+    const ws = await conectado()
+    const m0 = await waitFor(() => {
+      const el = document.querySelector('[data-metricas="nodo-0"]') as HTMLElement
+      expect(el).not.toBeNull()
+      return el
+    })
+    expect(m0.querySelector('[data-metrica="cpu"]')).toHaveTextContent(`CPU ${formato.porcentaje(0.93)}`)
+    expect(m0.querySelector('[data-metrica="latencia"]')).toHaveTextContent(`latencia ${formato.uno(15.2)} ms`)
+    expect(m0.querySelector('[data-metrica="desglose"]')).toHaveTextContent(`cálculo ${formato.uno(13.9)} · red ${formato.uno(1.3)}`)
+    expect(document.querySelector('[data-metricas="nodo-1"]')).toBeNull() // sin épocas todavía
+    expect(document.querySelector('[data-kpi="nodos"]')).toHaveTextContent('2 / 3')
+    expect(document.querySelector('[data-kpi="p95-api"]')).toHaveTextContent(`${formato.uno(1.94)} ms ✓ < 100 ms`)
+
+    // En vivo: el gradiente de la 8.ª época (epoca: 7, numeración del coordinador) en nodo-1.
+    ws.emitir({ tipo: 'gradiente', epoca: 7, nodo: 'nodo-1', shard: 1, micros_calculo: 10_000, micros_cpu: 80_000, micros_ida_vuelta: 11_000 })
+    const m1 = document.querySelector('[data-metricas="nodo-1"]') as HTMLElement
+    expect(m1.querySelector('[data-metrica="cpu"]')).toHaveTextContent(`CPU ${formato.porcentaje(0.5)}`)
+    expect(m1.querySelector('[data-metrica="latencia"]')).toHaveTextContent(`latencia ${formato.uno(11)} ms`)
+    // PR-92 H2: el de nodo-0 en esa misma 8.ª época reemplaza la instantánea de la 7.ª, sin sumarla.
+    ws.emitir({ tipo: 'gradiente', epoca: 7, nodo: 'nodo-0', shard: 0, micros_calculo: 2_000, micros_cpu: 4_000, micros_ida_vuelta: 2_400 })
+    expect(m0.querySelector('[data-metrica="desglose"]')).toHaveTextContent(`cálculo ${formato.uno(2)} · red ${formato.uno(0.4)}`)
+    expect(m0.querySelector('[data-metrica="cpu"]')).toHaveTextContent(`CPU ${formato.porcentaje(4_000 / (2_000 * 16))}`) // 16 workers
   })
 
   it('sin modo demo, reintenta el lanzamiento sin ritmo_ms', async () => {

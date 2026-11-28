@@ -175,7 +175,7 @@ paths:
   /api/v1/cluster:
     get:
       tags: [cluster]
-      summary: Estado del clúster (nodos, carga, época y pérdida)
+      summary: Estado del clúster y métricas del panel admin (nodos, carga, CPU, latencia, época y pérdida)
       operationId: verCluster
       security: [{bearerAuth: []}]
       responses:
@@ -275,7 +275,12 @@ paths:
         registro, tarea, gradiente, epoca, reasignacion, descarte, abortado,
         fin) y, al publicarse un modelo entrenado, uno `modelo` de la API con la
         versión en `detalle` y los pesos finales en `pesos` (los de `epoca` son
-        los usados en esa época, antes de actualizarlos). El servidor manda ping
+        los usados en esa época, antes de actualizarlos). Cada `gradiente` trae
+        además `micros_calculo` (cálculo informado por el nodo), `micros_cpu`
+        (CPU del proceso del nodo en ese cálculo; ausente si no la informa) y
+        `micros_ida_vuelta` (desde que el coordinador empezó a enviarle su primera
+        tarea de la época). `epoca` en los eventos es la época en curso contada
+        desde 0; en `MetricasNodo`, la cerrada desde 1. El servidor manda ping
         cada 20 s y cierra con 1001 al apagarse.
       operationId: servirWS
       security: [{ticketWS: []}]
@@ -474,6 +479,32 @@ components:
         nodos:
           type: array
           items: {$ref: "#/components/schemas/EstadoNodo"}
+        api: {$ref: "#/components/schemas/MetricasAPI"}
+    MetricasAPI:
+      type: object
+      required: [predicciones, ventana, p50_ms, p95_ms, max_ms, aciertos_cache, no_registradas, limite_p95_ms, cumple_limite_p95]
+      description: "Latencia de POST /api/v1/predicciones medida dentro del servidor en las últimas 1024 peticiones (#91). No incluye la red: el p95 como cliente lo mide cmd/benchapi."
+      properties:
+        predicciones: {type: integer, description: "Desde que arrancó el servidor."}
+        ventana: {type: integer, description: "Predicciones que entran en los percentiles."}
+        p50_ms: {type: number, format: double}
+        p95_ms: {type: number, format: double}
+        max_ms: {type: number, format: double}
+        aciertos_cache: {type: number, format: double, description: "Fracción servida desde Redis en la ventana."}
+        no_registradas: {type: integer, description: "Predicciones que el búfer hacia MongoDB descartó (ADR-0006)."}
+        limite_p95_ms: {type: number, format: double, example: 100}
+        cumple_limite_p95: {type: boolean}
+    MetricasNodo:
+      type: object
+      required: [epoca, shards, calculo_ms, latencia_ms, red_ms]
+      description: "Última época en que el nodo calculó (#91)."
+      properties:
+        epoca: {type: integer, minimum: 1, description: "Época cerrada, contada desde 1."}
+        shards: {type: integer, description: "Shards que calculó en esa época."}
+        calculo_ms: {type: number, format: double, description: "Cómputo informado por el nodo."}
+        latencia_ms: {type: number, format: double, description: "Desde que el coordinador empieza a enviarle su primera tarea hasta que recibe su último gradiente."}
+        red_ms: {type: number, format: double, description: "latencia_ms − calculo_ms: red, JSON y cola."}
+        uso_cpu: {type: number, format: double, minimum: 0, maximum: 1, description: "CPU del proceso del nodo durante el cálculo sobre la capacidad de sus workers. Ausente si el nodo no la informa."}
     EstadoNodo:
       type: object
       properties:
@@ -483,6 +514,7 @@ components:
         sano: {type: boolean}
         carga: {type: integer, description: "Shards asignados."}
         motivo: {type: string}
+        metricas: {$ref: "#/components/schemas/MetricasNodo"}
     ParametrosEntrenamiento:
       type: object
       additionalProperties: false

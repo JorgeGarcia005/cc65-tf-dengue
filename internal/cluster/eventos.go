@@ -31,17 +31,22 @@ const (
 // Evento es lo que ve el observador del coordinador. Pesos y Nodos son copias:
 // el observador no puede alterar el entrenamiento.
 type Evento struct {
-	V       int          `json:"v"`
-	Tipo    string       `json:"tipo"`
-	T       time.Time    `json:"t"`
-	Epoca   int          `json:"epoca"` // época en curso (para EvEpoca, la que terminó: 1, 2, …)
-	Nodo    string       `json:"nodo,omitempty"`
-	Shard   *int         `json:"shard,omitempty"`
-	Perdida float64      `json:"perdida,omitempty"`
-	Pesos   []float64    `json:"pesos,omitempty"` // w usado en la época, con el sesgo al final
-	Micros  int64        `json:"micros_calculo,omitempty"`
-	Detalle string       `json:"detalle,omitempty"`
-	Nodos   []EstadoNodo `json:"nodos,omitempty"`
+	V       int       `json:"v"`
+	Tipo    string    `json:"tipo"`
+	T       time.Time `json:"t"`
+	Epoca   int       `json:"epoca"` // época en curso (para EvEpoca, la que terminó: 1, 2, …)
+	Nodo    string    `json:"nodo,omitempty"`
+	Shard   *int      `json:"shard,omitempty"`
+	Perdida float64   `json:"perdida,omitempty"`
+	Pesos   []float64 `json:"pesos,omitempty"` // w usado en la época, con el sesgo al final
+	Micros  int64     `json:"micros_calculo,omitempty"`
+	// En EvGradiente (#91): CPU del nodo durante el cálculo y µs desde que el
+	// coordinador le envió su primera tarea de la época.
+	// MicrosCPU es nil si el nodo no informa su CPU (0 sí es un dato, PR-92 H3).
+	MicrosCPU       *int64       `json:"micros_cpu,omitempty"`
+	MicrosIdaVuelta int64        `json:"micros_ida_vuelta,omitempty"`
+	Detalle         string       `json:"detalle,omitempty"`
+	Nodos           []EstadoNodo `json:"nodos,omitempty"`
 }
 
 // emitir entrega un evento al observador, si hay. Lo llama solo el bucle de

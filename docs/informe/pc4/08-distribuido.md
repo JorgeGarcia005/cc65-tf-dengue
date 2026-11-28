@@ -159,6 +159,10 @@ func (c *Coordinador) GradienteErr(w []float64) (ml.Gradiente, error) {
 	}
 	ini := time.Now()
 	clear(c.calcNodo)
+	clear(c.envioNodo)
+	clear(c.ultimoNodo)
+	clear(c.shardsNodo)
+	clear(c.cpuNodo)
 	c.calcSuma = 0
 	c.w = w
 	for s := range c.listo {
@@ -205,6 +209,7 @@ func (c *Coordinador) GradienteErr(w []float64) (ml.Gradiente, error) {
 	c.tiempos.SegCalculoMax += float64(calcMax) / 1e6
 	c.tiempos.SegCalculoSuma += float64(c.calcSuma) / 1e6
 	c.muEstado.Unlock()
+	c.cerrarMetricas()
 	c.publicar(g.Perdida)
 	if c.op.Observador != nil {
 		c.emitir(Evento{Tipo: EvEpoca, Epoca: c.epoca, Perdida: g.Perdida, Pesos: append([]float64(nil), w...)})
@@ -260,12 +265,20 @@ func (c *Coordinador) despachar(s int) error {
 			}
 			c.asignado[s] = true
 		}
+		// La marca de la latencia va ANTES de escribir en el socket (PR-92 H1): en
+		// cuanto los bytes salen, el nodo puede calcular y responder mientras esta
+		// goroutine todavía no vuelve de enviarTarea. Así la latencia siempre
+		// contiene el cálculo e incluye la codificación y la escritura de la tarea.
+		inicioEnvio := time.Now()
 		if err := c.enviarTarea(j, s); err != nil {
 			c.descartar(j, fmt.Sprintf("error de envío: %v", err))
 			continue
 		}
 		c.enviado[s] = true
 		c.vence[s] = time.Now().Add(c.op.TimeoutEpoca) // plazo propio del shard
+		if _, ok := c.envioNodo[j]; !ok {
+			c.envioNodo[j] = inicioEnvio // la latencia del nodo cuenta desde su primera tarea
+		}
 		c.emitir(Evento{Tipo: EvTarea, Epoca: c.epoca, Nodo: c.nodos[j].nombre, Shard: shard(s)})
 		return nil
 	}
@@ -326,10 +339,16 @@ func (n *Nodo) calcular(m protocolo.Mensaje) protocolo.Mensaje {
 	if len(m.W) != a.D+1 {
 		return fallo(m, "llegaron %d pesos, el shard necesita %d", len(m.W), a.D+1)
 	}
+	cpu0, okCPU := cpuProceso()
 	ini := time.Now()
 	parciales := n.pool.Parciales(a.Dataset, m.W)
-	return protocolo.Mensaje{Tipo: protocolo.Gradiente, Epoca: m.Epoca, Shard: m.Shard,
+	r := protocolo.Mensaje{Tipo: protocolo.Gradiente, Epoca: m.Epoca, Shard: m.Shard,
 		BloqueInicial: a.BloqueInicial, Parciales: parciales, MicrosCalculo: time.Since(ini).Microseconds()}
+	if cpu1, ok := cpuProceso(); okCPU && ok {
+		cpu := max(cpu1-cpu0, 0) // solo métrica: no entra en el gradiente
+		r.MicrosCPU = &cpu
+	}
+	return r
 }
 ```
 <!-- /generado -->
