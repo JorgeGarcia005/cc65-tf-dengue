@@ -634,9 +634,7 @@ Las salidas siguientes se guardaron con `scripts/evidencias-tb2.sh` en la máqui
 
 <!-- evidencia: evidencias/parte-a.txt -->
 
-**Clúster con verificación.** El modo de entrenamiento único con `VERIFICAR=true` registra los nodos, entrena y confirma que los pesos son idénticos bit a bit al entrenamiento secuencial; la misma orden se ejecuta en cada Pull Request en el trabajo «Docker» del CI.
-
-<!-- evidencia: evidencias/cluster.txt -->
+**Clúster con verificación.** El modo de entrenamiento único con `VERIFICAR=true` registra los nodos, entrena y confirma que los pesos son idénticos bit a bit al entrenamiento secuencial. Su salida se presenta en la sección 9.5, junto con las demás pruebas de esa propiedad, y la prueba de caída de un nodo en la sección 9.4.
 
 **Sistema completo (paso 4).** `docker compose ps` muestra los siete contenedores; MongoDB y Redis en estado `healthy`, que es lo que espera el coordinador antes de arrancar. El log del coordinador sigue el orden de la @fig:estados-coordinador: la API responde antes de que lleguen los nodos y acepta entrenamientos cuando se registran todos.
 

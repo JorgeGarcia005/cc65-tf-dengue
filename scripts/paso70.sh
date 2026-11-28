@@ -102,6 +102,18 @@ fi
 total=$((total + 1)); ok "Paso 15: todas las capturas del informe están en $CAPT/"
 
 # --- Paso 16: informe final -----------------------------------------------------
+# Candado: el paso 16 arma el Word final, así que no se puede correr mientras el
+# informe tenga secciones por escribir (las escribe Jorge por bloques, con PR y
+# juez). Se abre solo cuando integracion/tb2 trae todo el texto y tu rama lo
+# tiene (git merge origin/integracion/tb2; el paso 1 lo exige).
+pendientes=$(grep -l '<!-- pendiente:' docs/informe/tb2/*.md 2>/dev/null | xargs -r -n1 basename | sort | tr '\n' ' ')
+if [[ -n "$pendientes" ]]; then
+  total=$((total + 1))
+  alto 16 "Informe final" "el informe aún tiene secciones por escribir: $pendientes" \
+    "Esto no lo haces tú: Jorge termina esas secciones y te avisa." \
+    "Cuando te avise:  git fetch origin && git merge origin/integracion/tb2" \
+    "y vuelve a correr:  bash scripts/paso70.sh"
+fi
 evidencia 16 informe       "Informe final (cmd/informe y cmd/word -final)" "QUITAR=\"<texto que te indique Jorge>\" $S informe"
 
 # --- Paso 17: commits a tu nombre ------------------------------------------------
