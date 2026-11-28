@@ -87,6 +87,9 @@ func NuevoEsquema(anoMin, minCasosDepto int, departamentos []string, mediaEdad, 
 	if !(desvEdad > 0) || !(desvAno > 0) || math.IsInf(desvEdad, 0) || math.IsInf(desvAno, 0) {
 		return nil, errors.New("features: las desviaciones deben ser finitas y positivas")
 	}
+	if math.IsNaN(mediaEdad) || math.IsInf(mediaEdad, 0) || math.IsNaN(mediaAno) || math.IsInf(mediaAno, 0) {
+		return nil, errors.New("features: las medias deben ser finitas") // PR-94 H2
+	}
 	e := &Esquema{AnoMin: anoMin, MinCasosDepto: minCasosDepto, MediaEdad: mediaEdad, DesvEdad: desvEdad,
 		MediaAno: mediaAno, DesvAno: desvAno}
 	for _, d := range departamentos {

@@ -177,4 +177,12 @@ func TestNuevoEsquemaArmaLosNombresYSePrepara(t *testing.T) {
 	if _, err := NuevoEsquema(2011, 100, nil, 30, 0, 2020, 4); err == nil {
 		t.Fatal("una desviación 0 debe rechazarse (Llenar divide por ella)")
 	}
+	for _, m := range []float64{math.NaN(), math.Inf(1), math.Inf(-1)} {
+		if _, err := NuevoEsquema(2011, 100, nil, m, 18, 2020, 4); err == nil {
+			t.Fatalf("media de edad %v debe rechazarse", m)
+		}
+		if _, err := NuevoEsquema(2011, 100, nil, 30, 18, m, 4); err == nil {
+			t.Fatalf("media de año %v debe rechazarse", m)
+		}
+	}
 }
