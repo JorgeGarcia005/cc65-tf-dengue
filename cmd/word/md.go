@@ -5,7 +5,9 @@ package main
 // citas, imágenes, ecuaciones ($…$ y $$…$$), enlaces e inclusiones.
 
 import (
+	"bytes"
 	"fmt"
+	"image/png"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -64,8 +66,11 @@ func (e estilo) rPr() string {
 func texto(tam int) estilo { return estilo{Fuente: fuenteTexto, Tam: tam} }
 
 // Recursos que el documento necesita además del XML del cuerpo.
+// Una figura SVG va con un PNG transparente de respaldo (RelPNG) y Word 2016
+// o posterior muestra el SVG; una captura PNG va sola (SVG nil).
 type imagen struct {
 	SVG    []byte
+	PNG    []byte
 	Nombre string // base sin extensión, p. ej. "figura3"
 	RelSVG string
 	RelPNG string
@@ -97,6 +102,9 @@ type documento struct {
 	bulletID  int       // numId de viñetas de la plantilla
 	dir       string
 	avisos    []string
+	// pendientes: capturas y evidencias del Markdown cuyo archivo todavía no
+	// existe (se dejan como espacio marcado; cmd/word -final no las admite).
+	pendientes []string
 	// referencias activa el formato APA 7 de la lista de referencias
 	// (directiva <!-- estilo: referencias --> en el Markdown).
 	referencias bool
@@ -138,6 +146,9 @@ var (
 	reTitulo   = regexp.MustCompile(`^(#{1,4})\s+(.*)$`)
 	reEstilo   = regexp.MustCompile(`^<!--\s*estilo:\s*(\S+)\s*-->\s*$`)
 	reCaptura  = regexp.MustCompile(`^<!--\s*captura:\s*(.+?)\s*-->\s*$`)
+	// reArchivoCaptura separa el archivo [capturas/x.png] al final de una captura.
+	reArchivoCaptura = regexp.MustCompile(`^(.*?)\s*\[([^\]\s]+\.(?:png|svg))\]\s*$`)
+	reEvidencia      = regexp.MustCompile(`^<!--\s*evidencia:\s*(\S+)\s*-->\s*$`)
 	// reEtiqueta separa la etiqueta {#fig:id} o {#tab:id} al final de un título.
 	reEtiqueta   = regexp.MustCompile(`^(.*?)\s*\{#((?:fig|tab):[\w-]+)\}\s*$`)
 	reReferencia = regexp.MustCompile(`@((?:fig|tab):[\w-]+)`)
@@ -191,8 +202,25 @@ func (d *documento) bloques(lineas []string, base string) {
 			}
 			i++
 		case reCaptura.MatchString(t):
-			titulo, etiqueta := separarEtiqueta(reCaptura.FindStringSubmatch(t)[1])
-			d.captura(titulo, etiqueta, sigueNota(lineas, i))
+			resto, archivo := reCaptura.FindStringSubmatch(t)[1], ""
+			if m := reArchivoCaptura.FindStringSubmatch(resto); m != nil {
+				resto, archivo = m[1], filepath.Join(base, m[2])
+			}
+			titulo, etiqueta := separarEtiqueta(resto)
+			if archivo != "" && existe(filepath.Join(d.dir, archivo)) {
+				d.figura(titulo, archivo, etiqueta, sigueNota(lineas, i))
+			} else {
+				d.captura(titulo, etiqueta, archivo, sigueNota(lineas, i))
+			}
+			i++
+		case reEvidencia.MatchString(t):
+			ruta := filepath.Join(base, reEvidencia.FindStringSubmatch(t)[1])
+			if c, err := os.ReadFile(filepath.Join(d.dir, ruta)); err == nil {
+				d.codigo(lineasDe([]byte(strings.TrimRight(string(c), "\r\n"))))
+			} else {
+				d.pendientes = append(d.pendientes, filepath.ToSlash(ruta))
+				d.parrafo("[Pendiente: evidencia "+filepath.ToSlash(ruta)+"]", `<w:jc w:val="center"/>`, estilo{Fuente: fuenteTexto, Color: "808080", Tam: 20})
+			}
 			i++
 		case reEstilo.MatchString(t):
 			d.referencias = reEstilo.FindStringSubmatch(t)[1] == "referencias"
@@ -369,14 +397,19 @@ func (d *documento) nota(s string) {
 
 // captura deja un espacio enmarcado para pegar una captura de pantalla, con
 // su pie numerado como el de cualquier figura.
-func (d *documento) captura(titulo, etiqueta string, conNota bool) {
+func (d *documento) captura(titulo, etiqueta, archivo string, conNota bool) {
 	d.pie("Figura", titulo, etiqueta)
+	aviso := "[Pegar aquí la captura]"
+	if archivo != "" {
+		aviso = "[Pendiente: " + filepath.ToSlash(archivo) + "]"
+	}
+	d.pendientes = append(d.pendientes, "captura «"+d.textoPlano(titulo)+"» "+filepath.ToSlash(archivo))
 	d.b.WriteString(`<w:p><w:pPr>` + mantener(conNota) + `<w:pBdr>` +
 		`<w:top w:val="single" w:sz="4" w:space="40" w:color="A6A6A6"/><w:left w:val="single" w:sz="4" w:space="4" w:color="A6A6A6"/>` +
 		`<w:bottom w:val="single" w:sz="4" w:space="40" w:color="A6A6A6"/><w:right w:val="single" w:sz="4" w:space="4" w:color="A6A6A6"/>` +
 		`</w:pBdr><w:spacing w:before="120" w:after="240"/><w:jc w:val="center"/></w:pPr>`)
 	e := estilo{Fuente: fuenteTexto, Color: "808080", Tam: 20}
-	d.b.WriteString(`<w:r><w:rPr>` + e.rPr() + `</w:rPr><w:t>[Pegar aquí la captura]</w:t></w:r></w:p>`)
+	d.b.WriteString(`<w:r><w:rPr>` + e.rPr() + `</w:rPr><w:t>` + escapar(aviso) + `</w:t></w:r></w:p>`)
 }
 
 // lista convierte una lista con viñetas o numerada; devuelve la línea siguiente.
@@ -624,29 +657,72 @@ func mantener(conNota bool) string {
 
 // figura inserta una imagen SVG con su pie APA encima.
 func (d *documento) figura(alt, ruta, etiqueta string, conNota bool) {
-	svg, err := os.ReadFile(filepath.Join(d.dir, ruta))
+	datos, err := os.ReadFile(filepath.Join(d.dir, ruta))
 	if err != nil {
 		d.aviso("no se pudo leer la figura %s: %v", ruta, err)
 		return
 	}
-	w, h := tamanoSVG(svg)
+	var w, h float64
+	esPNG := strings.EqualFold(filepath.Ext(ruta), ".png")
+	if esPNG {
+		cfg, err := png.DecodeConfig(bytes.NewReader(datos))
+		if err != nil {
+			d.aviso("%s no es un PNG válido: %v", ruta, err)
+			return
+		}
+		w, h = float64(cfg.Width), float64(cfg.Height)
+	} else {
+		w, h = tamanoSVG(datos)
+	}
 	d.pie("Figura", alt, etiqueta)
 	img := imagen{
-		SVG:    svg,
 		Nombre: fmt.Sprintf("figura%d", d.figuras),
 		RelSVG: fmt.Sprintf("rIdFigS%d", d.figuras),
 		RelPNG: fmt.Sprintf("rIdFigP%d", d.figuras),
 	}
+	if esPNG {
+		img.PNG = datos
+	} else {
+		img.SVG = datos
+	}
 	d.imagenes = append(d.imagenes, img)
-	cx := int64(anchoTexto) * emuPorDxa
-	cy := int64(float64(cx) * h / w)
+	cx, cy := extension(w, h)
 	d.docPr++
 	d.b.WriteString(`<w:p><w:pPr>` + mantener(conNota) + `<w:spacing w:before="0" w:after="120"/><w:jc w:val="center"/></w:pPr><w:r><w:drawing>`)
 	fmt.Fprintf(&d.b, `<wp:inline distT="0" distB="0" distL="0" distR="0"><wp:extent cx="%d" cy="%d"/><wp:docPr id="%d" name="%s" descr="%s"/>`, cx, cy, d.docPr, img.Nombre, escapar(d.textoPlano(alt)))
 	d.b.WriteString(`<a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:pic>`)
-	fmt.Fprintf(&d.b, `<pic:nvPicPr><pic:cNvPr id="0" name="%s.svg"/><pic:cNvPicPr/></pic:nvPicPr>`, img.Nombre)
-	fmt.Fprintf(&d.b, `<pic:blipFill><a:blip r:embed="%s"><a:extLst><a:ext uri="{96DAC541-7B7A-43D3-8B79-37D633B846F1}"><asvg:svgBlip xmlns:asvg="http://schemas.microsoft.com/office/drawing/2016/SVG/main" r:embed="%s"/></a:ext></a:extLst></a:blip><a:stretch><a:fillRect/></a:stretch></pic:blipFill>`, img.RelPNG, img.RelSVG)
+	ext := "svg"
+	if esPNG {
+		ext = "png"
+	}
+	fmt.Fprintf(&d.b, `<pic:nvPicPr><pic:cNvPr id="0" name="%s.%s"/><pic:cNvPicPr/></pic:nvPicPr>`, img.Nombre, ext)
+	if esPNG {
+		fmt.Fprintf(&d.b, `<pic:blipFill><a:blip r:embed="%s"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill>`, img.RelPNG)
+	} else {
+		fmt.Fprintf(&d.b, `<pic:blipFill><a:blip r:embed="%s"><a:extLst><a:ext uri="{96DAC541-7B7A-43D3-8B79-37D633B846F1}"><asvg:svgBlip xmlns:asvg="http://schemas.microsoft.com/office/drawing/2016/SVG/main" r:embed="%s"/></a:ext></a:extLst></a:blip><a:stretch><a:fillRect/></a:stretch></pic:blipFill>`, img.RelPNG, img.RelSVG)
+	}
 	fmt.Fprintf(&d.b, `<pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="%d" cy="%d"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr></pic:pic></a:graphicData></a:graphic></wp:inline></w:drawing></w:r></w:p>`, cx, cy)
+}
+
+// altoMaximo: una figura no pasa de 20 cm de alto, para que entre en la página
+// con su pie y su nota (PR-98 H1); si es más alta, se reduce entera.
+const altoMaximo = int64(20 * 360000) // EMU (360 000 por cm)
+
+// extension: tamaño en EMU de una imagen de w × h, al ancho del texto y con
+// el alto acotado, sin deformarla.
+func extension(w, h float64) (cx, cy int64) {
+	cx = int64(anchoTexto) * emuPorDxa
+	cy = int64(float64(cx) * h / w)
+	if cy > altoMaximo {
+		cx = int64(float64(cx) * float64(altoMaximo) / float64(cy))
+		cy = altoMaximo
+	}
+	return cx, cy
+}
+
+func existe(ruta string) bool {
+	_, err := os.Stat(ruta)
+	return err == nil
 }
 
 var (

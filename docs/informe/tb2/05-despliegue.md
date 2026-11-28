@@ -621,23 +621,23 @@ Nota: Fuente: comentario inicial de cada script.
 
 ## 5.7 Ejecución paso a paso
 
-Desde un clon limpio del repositorio, con Docker y Compose v2, el sistema completo se levanta con cuatro órdenes. En Linux se antepone `USUARIO="$(id -u):$(id -g)"` para que los contenedores escriban en `data/` y `reports/` con el usuario propio; en PowerShell, las variables se fijan antes con `$env:API=":8080"`.
+Desde un clon limpio del repositorio, con Docker y Compose v2, el sistema completo se levanta con cuatro órdenes. En Linux se crean antes las carpetas (`mkdir -p data reports`; si no existen, Docker las crea como `root`) y se antepone `USUARIO="$(id -u):$(id -g)"` para que los contenedores escriban en ellas con el usuario propio; en PowerShell, las variables se fijan antes con `$env:API=":8080"`.
 
-1. **Datos.** `make data` descarga el CSV a `data/bronze/` y verifica su SHA-256.
+1. **Datos.** `make data` descarga el CSV a `data/bronze/` y verifica su SHA-256. El portal responde `HTTP 418` a clientes sin navegador y a centros de datos; en ese caso se descarga el archivo con un navegador, se guarda como `data/bronze/vigilancia_dengue_2000_2025.csv` y `make data` solo verifica el checksum.
 2. **Parte A.** `docker compose -f deploy/docker-compose.yml --profile datos up entrenar` ejecuta `loader`, `gold` y `entrenar` en orden y deja el gold, los shards y `modelo.json` en `data/gold/`.
 3. **Secretos.** `cp deploy/.env.example deploy/.env` y completar `JWT_SECRETO` y las claves de las dos cuentas.
 4. **Sistema.** `API=:8080 docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.api.yml up --build` levanta siete contenedores: el coordinador, tres nodos, MongoDB, Redis y la SPA. La SPA queda en <http://localhost:8081>, la API en <http://localhost:8080> y Swagger en <http://localhost:8080/docs>.
 
-<!-- captura: Parte A en Docker: salida de los servicios loader, gold y entrenar terminando con código 0 {#fig:ejecucion-datos} -->
+Las salidas siguientes se guardaron con `scripts/evidencias-tb2.sh` en la máquina de referencia: cada una lleva la fecha, la máquina y el commit con que se ejecutó, y ninguna se editó a mano (la salida completa de Docker queda en el archivo `.log` del mismo nombre).
 
-Nota: Primera ejecución del paso 2 en la máquina de referencia.
+**Parte A (paso 2).** Los tres servicios terminan con código 0 y dejan el gold, los shards y el modelo inicial en `data/gold/`.
 
-<!-- captura: Contenedores del modo servicio en ejecución (docker compose ps): coordinator, tres node, mongo y redis sanos, y web {#fig:ejecucion-ps} -->
+<!-- evidencia: evidencias/parte-a.txt -->
 
-Nota: Salida de `docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.api.yml ps` tras el paso 4. Los estados `healthy` de `mongo` y `redis` son los que espera el coordinador.
+**Clúster con verificación.** El modo de entrenamiento único con `VERIFICAR=true` registra los nodos, entrena y confirma que los pesos son idénticos bit a bit al entrenamiento secuencial; la misma orden se ejecuta en cada Pull Request en el trabajo «Docker» del CI.
 
-<!-- captura: Log del coordinador al arrancar: API abierta, nodos registrados y «la API acepta entrenamientos» {#fig:ejecucion-log} -->
+<!-- evidencia: evidencias/cluster.txt -->
 
-Nota: Salida de `docker compose … logs coordinator`. Muestra la secuencia de la @fig:estados-coordinador en el modo servicio.
+**Sistema completo (paso 4).** `docker compose ps` muestra los siete contenedores; MongoDB y Redis en estado `healthy`, que es lo que espera el coordinador antes de arrancar. El log del coordinador sigue el orden de la @fig:estados-coordinador: la API responde antes de que lleguen los nodos y acepta entrenamientos cuando se registran todos.
 
-En la @fig:ejecucion-log se ve el orden de la sección 5.5: la API responde antes de que lleguen los nodos y acepta entrenamientos cuando se registran los tres. El modo de entrenamiento único, con la verificación contra el secuencial, se ejecuta en cada Pull Request en el trabajo «Docker» del CI con `VERIFICAR=true`, junto con la prueba de caída de un nodo.
+<!-- evidencia: evidencias/servicio.txt -->

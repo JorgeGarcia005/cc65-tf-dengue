@@ -110,3 +110,26 @@ func TestInformeTB2AlDia(t *testing.T) {
 		}
 	}
 }
+
+// TestEvidenciasSoloDelScript (#70): toda evidencia versionada salió de
+// scripts/evidencias-tb2.sh y terminó bien. Una evidencia fallida, editada sin
+// su cabecera o pegada a mano no pasa el CI.
+func TestEvidenciasSoloDelScript(t *testing.T) {
+	t.Chdir(filepath.Join("..", ".."))
+	archivos, _ := filepath.Glob("docs/informe/tb2/evidencias/*.txt")
+	for _, a := range archivos {
+		b, err := os.ReadFile(a)
+		if err != nil {
+			t.Fatal(err)
+		}
+		lineas := strings.Split(strings.TrimRight(string(b), "\n"), "\n")
+		if len(lineas) < 5 || !strings.HasPrefix(lineas[0], "# evidencia: ") ||
+			!strings.HasPrefix(lineas[1], "# fecha: ") || !strings.HasPrefix(lineas[3], "# commit: ") {
+			t.Errorf("%s: sin la cabecera de scripts/evidencias-tb2.sh", a)
+			continue
+		}
+		if lineas[len(lineas)-1] != "# resultado: OK" {
+			t.Errorf("%s: el paso no terminó bien (última línea %q)", a, lineas[len(lineas)-1])
+		}
+	}
+}

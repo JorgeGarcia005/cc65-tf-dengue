@@ -1,7 +1,10 @@
 package main
 
 import (
+	"bytes"
 	"fmt"
+	"image"
+	"image/png"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -247,5 +250,66 @@ func TestNotaEnLaMismaPagina(t *testing.T) {
 	}
 	if !strings.Contains(x, `<w:p><w:pPr><w:keepNext/><w:pBdr>`) {
 		t.Error("la captura con nota no lleva keepNext")
+	}
+}
+
+// pngPrueba: un PNG de w × h píxeles.
+func pngPrueba(t *testing.T, w, h int) string {
+	t.Helper()
+	var b bytes.Buffer
+	if err := png.Encode(&b, image.NewGray(image.Rect(0, 0, w, h))); err != nil {
+		t.Fatal(err)
+	}
+	return b.String()
+}
+
+// TestCapturaConArchivo: si la captura existe se inserta como figura PNG con
+// su pie; si no, queda el espacio marcado y cuenta como pendiente. Las
+// evidencias de texto, igual.
+func TestCapturaConArchivo(t *testing.T) {
+	md := "<!-- captura: Inicio de sesión {#fig:login} [capturas/01-login.png] -->\n\n" +
+		"<!-- captura: Panel {#fig:panel} [capturas/02-panel.png] -->\n\n" +
+		"<!-- evidencia: evidencias/ps.txt -->\n\n<!-- evidencia: evidencias/falta.txt -->\n\nVer @fig:panel.\n"
+	dir := map[string]string{"01-a.md": md, "capturas/01-login.png": pngPrueba(t, 1280, 720), "evidencias/ps.txt": "NAME   STATUS\nmongo  healthy\n"}
+	tmp := t.TempDir()
+	for n, c := range dir {
+		if err := os.MkdirAll(filepath.Dir(filepath.Join(tmp, n)), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(tmp, n), []byte(c), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	d := convertirTodo(tmp, []string{"01-a.md"}, 200, 4)
+	x := d.b.String()
+	if err := xmlBienFormado(envolver(x)); err != nil {
+		t.Fatal(err)
+	}
+	if len(d.imagenes) != 1 || d.imagenes[0].PNG == nil || d.imagenes[0].SVG != nil {
+		t.Fatalf("imágenes: %+v", d.imagenes)
+	}
+	if !strings.Contains(x, `name="figura1.png"`) || strings.Contains(x, "svgBlip") {
+		t.Error("la captura PNG no debe llevar SVG")
+	}
+	if !strings.Contains(textoDe(x), "mongo  healthy") || !strings.Contains(textoDe(x), "Ver Figura 2.") {
+		t.Errorf("texto: %s", textoDe(x))
+	}
+	if len(d.pendientes) != 2 || !strings.Contains(d.pendientes[0], "capturas/02-panel.png") || d.pendientes[1] != "evidencias/falta.txt" {
+		t.Errorf("pendientes: %q", d.pendientes)
+	}
+	if len(d.avisos) > 0 {
+		t.Errorf("avisos: %v", d.avisos)
+	}
+}
+
+// TestAltoMaximo (PR-98 H1): una imagen muy alta se reduce entera para que no
+// pase de 20 cm, sin deformarse.
+func TestAltoMaximo(t *testing.T) {
+	cx, cy := extension(400, 2000)
+	if cy != altoMaximo || cx*2000 != cy*400 {
+		t.Errorf("cx=%d cy=%d", cx, cy)
+	}
+	if cx, _ := extension(800, 400); cx != int64(anchoTexto)*emuPorDxa {
+		t.Errorf("una imagen apaisada va al ancho del texto: %d", cx)
 	}
 }

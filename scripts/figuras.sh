@@ -8,6 +8,11 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 command -v dot >/dev/null || { echo "falta Graphviz (dot): apt install graphviz / winget install graphviz" >&2; exit 1; }
+# El SVG se genera con cairo: el texto queda como trazos (glifos), así el
+# diagrama se ve igual en Word, LibreOffice y el navegador aunque no tengan
+# la fuente. La fuente es Liberation Serif, con las mismas métricas que Times
+# New Roman (apt install fonts-liberation).
+fc-match "Liberation Serif" 2>/dev/null | grep -q Liberation || { echo "falta la fuente Liberation Serif (apt install fonts-liberation)" >&2; exit 1; }
 verificar=false
 [[ "${1:-}" == "--verificar" ]] && verificar=true
 estado=0
@@ -15,12 +20,12 @@ for fuente in docs/informe/tb2/diagramas/*.dot; do
   nombre=$(basename "$fuente" .dot)
   destino=docs/informe/tb2/fig/$nombre.svg
   if $verificar; then
-    if ! cmp -s <(dot -Tsvg "$fuente") "$destino"; then
+    if ! cmp -s <(dot -Tsvg:cairo "$fuente") "$destino"; then
       echo "desactualizado: $destino (corra make figuras)" >&2
       estado=1
     fi
   else
-    dot -Tsvg "$fuente" -o "$destino"
+    dot -Tsvg:cairo "$fuente" -o "$destino"
     echo "escrito $destino"
   fi
 done

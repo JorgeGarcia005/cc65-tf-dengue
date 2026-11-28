@@ -2,10 +2,10 @@
 // Fuente de docs/informe/tb2/fig/estados_coordinador.svg: make figuras.
 // Transiciones: evento [guarda] / acción. Código: cmd/coordinator/main.go y api.go.
 digraph estados_coordinador {
-  graph [rankdir=TB, fontname="Times New Roman", fontsize=11, nodesep=0.45, ranksep=0.42,
+  graph [rankdir=TB, fontname="Liberation Serif", fontsize=11, nodesep=0.45, ranksep=0.42,
          splines=polyline, pad=0.1, newrank=true]
-  node  [shape=box, style=rounded, fontname="Times New Roman", fontsize=10.5, penwidth=0.9, margin="0.14,0.06", height=0.4]
-  edge  [fontname="Times New Roman", fontsize=9, penwidth=0.8, arrowsize=0.6, arrowhead=vee]
+  node  [shape=box, style=rounded, fontname="Liberation Serif", fontsize=10.5, penwidth=0.9, margin="0.14,0.06", height=0.4]
+  edge  [fontname="Liberation Serif", fontsize=9, penwidth=0.8, arrowsize=0.6, arrowhead=vee]
 
   inicio [shape=circle, style=filled, fillcolor=black, label="", width=0.16, height=0.16, fixedsize=true]
   cargando [label="Iniciando\n(lee los flags, escucha TCP :9000)"]

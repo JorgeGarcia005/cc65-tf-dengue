@@ -48,6 +48,7 @@ func main() {
 	titulo := flag.String("titulo", "Riesgo de dengue con signos de alarma: regresión logística distribuida en Go", "título de la carátula")
 	tituloViejo := flag.String("titulo-plantilla", "SmartTransit: Predicción Concurrente de Demanda de Transporte", "título de la carátula de la plantilla")
 	entregableViejo := flag.String("entregable-plantilla", "TB1", "código de entregable que figura en la plantilla")
+	final := flag.Bool("final", false, "versión para entregar: falla si falta alguna captura o evidencia")
 	permitirAvisos := flag.Bool("permitir-avisos", false, "escribe el .docx aunque haya avisos (referencias rotas, figuras que faltan…)")
 	quitar := flag.String("quitar", "", "textos separados por coma: se borran de la carátula los párrafos que los contienen")
 	codigos := flag.String("codigos", "", "códigos de alumno separados por coma (por defecto, <salida>/codigos.txt)")
@@ -63,13 +64,14 @@ func main() {
 	if err != nil {
 		log.Fatalf("plantilla: %v", err)
 	}
-	docx, avisos, err := armar(p, *fuentes, secciones, reemplazos{
+	docx, res, err := armar(p, *fuentes, secciones, reemplazos{
 		{*tituloViejo, *titulo},
 		{*entregableViejo, *entregable},
 	}, partirLista(*quitar))
 	if err != nil {
 		log.Fatal(err)
 	}
+	avisos := res.avisos
 	for _, a := range avisos {
 		log.Printf("aviso: %s", a)
 	}
@@ -77,6 +79,12 @@ func main() {
 	// el Word): no se escribe el .docx salvo que se pida.
 	if len(avisos) > 0 && !*permitirAvisos {
 		log.Fatalf("%d avisos: corríjalos o use -permitir-avisos", len(avisos))
+	}
+	for _, f := range res.pendientes {
+		log.Printf("pendiente: %s", f)
+	}
+	if *final && len(res.pendientes) > 0 {
+		log.Fatalf("-final: faltan %d capturas o evidencias (docs/guias/jose-70.md)", len(res.pendientes))
 	}
 	if err := os.MkdirAll(*salida, 0o755); err != nil {
 		log.Fatal(err)
@@ -192,12 +200,12 @@ var (
 )
 
 // armar construye el .docx completo.
-func armar(p *paquete, dir string, secciones []string, cambios reemplazos, quitar []string) ([]byte, []string, error) {
+func armar(p *paquete, dir string, secciones []string, cambios reemplazos, quitar []string) ([]byte, resultado, error) {
 	doc := string(p.partes["word/document.xml"])
 	ini := strings.Index(doc, "<w:body>")
 	fin := strings.LastIndex(doc, "</w:body>")
 	if ini < 0 || fin < 0 {
-		return nil, nil, fmt.Errorf("plantilla sin <w:body>")
+		return nil, resultado{}, fmt.Errorf("plantilla sin <w:body>")
 	}
 	cuerpo := doc[ini+len("<w:body>") : fin]
 
@@ -210,13 +218,13 @@ func armar(p *paquete, dir string, secciones []string, cambios reemplazos, quita
 		}
 	}
 	if caratula == "" {
-		return nil, nil, fmt.Errorf("no se encontró el párrafo «Indice» que cierra la carátula")
+		return nil, resultado{}, fmt.Errorf("no se encontró el párrafo «Indice» que cierra la carátula")
 	}
 	for _, c := range cambios {
 		var ok bool
 		caratula, ok = reemplazarParrafo(caratula, c[0], c[1])
 		if !ok {
-			return nil, nil, fmt.Errorf("la carátula no tiene el texto %q", c[0])
+			return nil, resultado{}, fmt.Errorf("la carátula no tiene el texto %q", c[0])
 		}
 	}
 
@@ -224,23 +232,23 @@ func armar(p *paquete, dir string, secciones []string, cambios reemplazos, quita
 	// el número de página.
 	sect := reSectPr.FindString(cuerpo)
 	if sect == "" {
-		return nil, nil, fmt.Errorf("plantilla sin <w:sectPr>")
+		return nil, resultado{}, fmt.Errorf("plantilla sin <w:sectPr>")
 	}
 	caratula = reSectPr.ReplaceAllString(caratula, "")
 	caratula, faltan := quitarParrafos(caratula, quitar)
 	if len(faltan) > 0 {
-		return nil, nil, fmt.Errorf("la carátula no tiene los textos a quitar %q", faltan)
+		return nil, resultado{}, fmt.Errorf("la carátula no tiene los textos a quitar %q", faltan)
 	}
 
 	numBase, bulletID, decimal, err := numeracion(string(p.partes["word/numbering.xml"]))
 	if err != nil {
-		return nil, nil, err
+		return nil, resultado{}, err
 	}
 	d := convertirTodo(".", secciones, numBase, bulletID)
 
 	cabecera, err := declararNamespaces(doc[:ini+len("<w:body>")])
 	if err != nil {
-		return nil, nil, err
+		return nil, resultado{}, err
 	}
 	var b strings.Builder
 	b.WriteString(cabecera)
@@ -251,7 +259,7 @@ func armar(p *paquete, dir string, secciones []string, cambios reemplazos, quita
 	b.WriteString(doc[fin:])
 	nuevo := b.String()
 	if err := xmlBienFormado(nuevo); err != nil {
-		return nil, nil, fmt.Errorf("document.xml mal formado: %w", err)
+		return nil, resultado{}, fmt.Errorf("document.xml mal formado: %w", err)
 	}
 	p.poner("word/document.xml", []byte(nuevo))
 
@@ -278,6 +286,12 @@ func armar(p *paquete, dir string, secciones []string, cambios reemplazos, quita
 	}
 	png1 := pngTransparente()
 	for _, img := range d.imagenes {
+		if img.SVG == nil { // captura PNG
+			p.poner("word/media/"+img.Nombre+".png", img.PNG)
+			conservar = append(conservar,
+				fmt.Sprintf(`<Relationship Id="%s" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/%s.png"/>`, img.RelPNG, img.Nombre))
+			continue
+		}
 		p.poner("word/media/"+img.Nombre+".svg", img.SVG)
 		p.poner("word/media/"+img.Nombre+".png", png1)
 		conservar = append(conservar,
@@ -294,6 +308,9 @@ func armar(p *paquete, dir string, secciones []string, cambios reemplazos, quita
 	ct := string(p.partes["[Content_Types].xml"])
 	if !strings.Contains(ct, `Extension="svg"`) {
 		ct = strings.Replace(ct, "<Default ", `<Default ContentType="image/svg+xml" Extension="svg"/><Default `, 1)
+	}
+	if !strings.Contains(ct, `Extension="png"`) {
+		ct = strings.Replace(ct, "<Default ", `<Default ContentType="image/png" Extension="png"/><Default `, 1)
 	}
 	p.poner("[Content_Types].xml", []byte(ct))
 
@@ -319,7 +336,13 @@ func armar(p *paquete, dir string, secciones []string, cambios reemplazos, quita
 	p.poner("word/settings.xml", []byte(set))
 
 	out, err := p.bytes()
-	return out, d.avisos, err
+	return out, resultado{avisos: d.avisos, pendientes: d.pendientes}, err
+}
+
+// resultado: avisos (errores del Markdown) y pendientes (capturas y
+// evidencias cuyo archivo aún no existe) de armar.
+type resultado struct {
+	avisos, pendientes []string
 }
 
 // numeracion devuelve el primer numId libre, el numId de viñetas y un

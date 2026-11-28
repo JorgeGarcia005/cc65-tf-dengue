@@ -38,3 +38,6 @@ Thumbs.db
 
 # Informes en Word generados por cmd/word (y su plantilla): se entregan por el Aula Virtual
 entregables/
+
+# Paquetes de commits para revisión (docs/guias/jose-70.md)
+*.bundle
