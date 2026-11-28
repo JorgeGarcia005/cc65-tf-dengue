@@ -48,6 +48,7 @@ func main() {
 	titulo := flag.String("titulo", "Riesgo de dengue con signos de alarma: regresión logística distribuida en Go", "título de la carátula")
 	tituloViejo := flag.String("titulo-plantilla", "SmartTransit: Predicción Concurrente de Demanda de Transporte", "título de la carátula de la plantilla")
 	entregableViejo := flag.String("entregable-plantilla", "TB1", "código de entregable que figura en la plantilla")
+	permitirAvisos := flag.Bool("permitir-avisos", false, "escribe el .docx aunque haya avisos (referencias rotas, figuras que faltan…)")
 	quitar := flag.String("quitar", "", "textos separados por coma: se borran de la carátula los párrafos que los contienen")
 	codigos := flag.String("codigos", "", "códigos de alumno separados por coma (por defecto, <salida>/codigos.txt)")
 	flag.Parse()
@@ -71,6 +72,11 @@ func main() {
 	}
 	for _, a := range avisos {
 		log.Printf("aviso: %s", a)
+	}
+	// Un aviso es un error del informe (p. ej. @fig:typo quedaría literal en
+	// el Word): no se escribe el .docx salvo que se pida.
+	if len(avisos) > 0 && !*permitirAvisos {
+		log.Fatalf("%d avisos: corríjalos o use -permitir-avisos", len(avisos))
 	}
 	if err := os.MkdirAll(*salida, 0o755); err != nil {
 		log.Fatal(err)

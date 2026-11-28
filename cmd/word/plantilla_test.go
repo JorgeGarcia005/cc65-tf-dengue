@@ -250,3 +250,24 @@ func TestXMLBienFormadoRechazaPrefijosSinDeclarar(t *testing.T) {
 		}
 	}
 }
+
+// TestInformesSinAvisos (PR-96 H2): las secciones reales del informe final y
+// de la PC4 se convierten sin avisos (referencia o etiqueta rota, figura o
+// archivo que no se lee, bloque mermaid). La plantilla no se versiona, así que
+// se usa la mínima; lo que se prueba es el Markdown.
+func TestInformesSinAvisos(t *testing.T) {
+	t.Chdir(filepath.Join("..", ".."))
+	for _, dir := range []string{"docs/informe/tb2", "docs/informe/pc4"} {
+		secciones, err := filepath.Glob(filepath.Join(dir, "[0-9][0-9]-*.md"))
+		if err != nil || len(secciones) == 0 {
+			t.Fatalf("sin secciones en %s: %v", dir, err)
+		}
+		_, avisos, err := armar(plantillaMinima(raizSoloWR), ".", secciones, nil, nil)
+		if err != nil {
+			t.Fatalf("%s: %v", dir, err)
+		}
+		for _, a := range avisos {
+			t.Errorf("%s: %s", dir, a)
+		}
+	}
+}
