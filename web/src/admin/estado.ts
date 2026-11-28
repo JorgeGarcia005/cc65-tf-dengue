@@ -170,17 +170,24 @@ function vistaDe(m: MetricasNodo): MetricasVista {
  * Métricas en vivo de un evento «gradiente» (#91). Dentro de una misma época
  * los shards de un nodo se suman (los calcula en serie); la latencia es la del
  * último gradiente, medida desde su primera tarea.
+ *
+ * Numeración (PR-92 H2): el evento lleva la época EN CURSO contada desde 0
+ * (cluster.Evento.Epoca), y /api/v1/cluster la época CERRADA contada desde 1
+ * (cluster.MetricasNodo.Epoca). Aquí todo se guarda como la segunda: el
+ * gradiente de la época E (1-based) llega con ev.epoca = E − 1.
  */
 function conGradiente(n: NodoVista, ev: EventoCluster): Pick<NodoVista, 'vista' | 'microsCpuEpoca'> {
-  if (ev.micros_ida_vuelta === undefined || ev.micros_calculo === undefined) return {}
-  const misma = n.vista?.epoca === ev.epoca
-  const calcUs = (misma ? n.vista!.calculoMs * 1000 : 0) + ev.micros_calculo
+  if (ev.micros_ida_vuelta === undefined) return {}
+  const epoca = ev.epoca + 1
+  const misma = n.vista?.epoca === epoca
+  const calcUs = (misma ? n.vista!.calculoMs * 1000 : 0) + (ev.micros_calculo ?? 0) // Go omite el 0
+  // CPU acumulada en la época: 0 es un dato (PR-92 H3); sin micros_cpu, el nodo no la informa.
   const previa = misma ? n.microsCpuEpoca : 0
-  const cpuUs = previa === null || previa === undefined || !ev.micros_cpu ? null : previa + ev.micros_cpu
+  const cpuUs = previa === null || previa === undefined || ev.micros_cpu === undefined ? null : previa + ev.micros_cpu
   const latUs = ev.micros_ida_vuelta
   const usoCpu = cpuUs !== null && calcUs > 0 && n.workers > 0 ? Math.min(cpuUs / (calcUs * n.workers), 1) : null
   return {
-    vista: { epoca: ev.epoca, calculoMs: calcUs / 1000, latenciaMs: latUs / 1000, redMs: Math.max(latUs - calcUs, 0) / 1000, usoCpu },
+    vista: { epoca, calculoMs: calcUs / 1000, latenciaMs: latUs / 1000, redMs: Math.max(latUs - calcUs, 0) / 1000, usoCpu },
     microsCpuEpoca: cpuUs,
   }
 }
@@ -223,15 +230,24 @@ export function anotar(e: EstadoPanel, txt: string, nivel: Nivel, t = new Date()
 }
 
 /** La instantánea de nodos del coordinador reemplaza a la anterior, conservando la actividad vista. */
+/**
+ * Mezcla una instantánea de nodos (de /api/v1/cluster o de un evento). Sus
+ * métricas son de la última época cerrada: si los eventos ya mostraron una
+ * época posterior, se conservan las de los eventos. Un entrenamiento nuevo
+ * reinicia la vista con «reiniciar» o con su primer gradiente.
+ */
 function conInstantanea(e: EstadoPanel, nodos: EstadoNodo[] | undefined): EstadoPanel {
   if (!nodos) return e
   const m: Record<string, NodoVista> = {}
   for (const n of nodos) {
     const previo = e.nodos[n.nombre]
-    // La instantánea de /cluster trae la última época cerrada; si los eventos ya
-    // mostraron una más nueva, se conserva la de los eventos.
-    const vista = n.metricas && !(previo?.vista && previo.vista.epoca > n.metricas.epoca) ? vistaDe(n.metricas) : previo?.vista
-    m[n.nombre] = { ...previo, ...n, vista }
+    const vigente = previo?.vista && previo.vista.epoca > (n.metricas?.epoca ?? 0)
+    if (n.metricas && !vigente) {
+      // La CPU acumulada era de otra época: la próxima suma empieza de cero (PR-92 H2).
+      m[n.nombre] = { ...previo, ...n, vista: vistaDe(n.metricas), microsCpuEpoca: undefined }
+    } else {
+      m[n.nombre] = { ...previo, ...n, vista: previo?.vista }
+    }
   }
   return { ...e, nodos: m }
 }
@@ -291,9 +307,13 @@ export function reducir(e: EstadoPanel, ev: EventoCluster, origen: Origen = 'viv
   }
 }
 
-/** Antes de lanzar otro entrenamiento: curva y pesos de cero; nodos y bitácora siguen. */
+/**
+ * Antes de lanzar otro entrenamiento: curva y pesos de cero; nodos y bitácora
+ * siguen, pero sin las métricas del anterior (sus épocas vuelven a empezar en 1).
+ */
 export function reiniciarEntrenamiento(e: EstadoPanel): EstadoPanel {
-  return { ...e, curva: [], pesos: null, epoca: 0, baseEpoca: null, reasignaciones: 0, terminado: false, abortado: null, modelo: null }
+  const nodos = Object.fromEntries(Object.entries(e.nodos).map(([k, n]) => [k, { ...n, vista: undefined, microsCpuEpoca: undefined }]))
+  return { ...e, nodos, curva: [], pesos: null, epoca: 0, baseEpoca: null, reasignaciones: 0, terminado: false, abortado: null, modelo: null }
 }
 
 /** api.MetricasAPI: latencia de las predicciones dentro del servidor (#91). */

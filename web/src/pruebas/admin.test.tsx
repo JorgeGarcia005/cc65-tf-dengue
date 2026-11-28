@@ -164,11 +164,15 @@ describe('panel admin en vivo', () => {
     expect(document.querySelector('[data-kpi="nodos"]')).toHaveTextContent('2 / 3')
     expect(document.querySelector('[data-kpi="p95-api"]')).toHaveTextContent(`${formato.uno(1.94)} ms ✓ < 100 ms`)
 
-    // En vivo: el gradiente de la época 8 reemplaza a la instantánea (16 workers en nodo-1).
-    ws.emitir({ tipo: 'gradiente', epoca: 8, nodo: 'nodo-1', shard: 1, micros_calculo: 10_000, micros_cpu: 80_000, micros_ida_vuelta: 11_000 })
+    // En vivo: el gradiente de la 8.ª época (epoca: 7, numeración del coordinador) en nodo-1.
+    ws.emitir({ tipo: 'gradiente', epoca: 7, nodo: 'nodo-1', shard: 1, micros_calculo: 10_000, micros_cpu: 80_000, micros_ida_vuelta: 11_000 })
     const m1 = document.querySelector('[data-metricas="nodo-1"]') as HTMLElement
     expect(m1.querySelector('[data-metrica="cpu"]')).toHaveTextContent(`CPU ${formato.porcentaje(0.5)}`)
     expect(m1.querySelector('[data-metrica="latencia"]')).toHaveTextContent(`latencia ${formato.uno(11)} ms`)
+    // PR-92 H2: el de nodo-0 en esa misma 8.ª época reemplaza la instantánea de la 7.ª, sin sumarla.
+    ws.emitir({ tipo: 'gradiente', epoca: 7, nodo: 'nodo-0', shard: 0, micros_calculo: 2_000, micros_cpu: 4_000, micros_ida_vuelta: 2_400 })
+    expect(m0.querySelector('[data-metrica="desglose"]')).toHaveTextContent(`cálculo ${formato.uno(2)} · red ${formato.uno(0.4)}`)
+    expect(m0.querySelector('[data-metrica="cpu"]')).toHaveTextContent(`CPU ${formato.porcentaje(4_000 / (2_000 * 16))}`) // 16 workers
   })
 
   it('sin modo demo, reintenta el lanzamiento sin ritmo_ms', async () => {
