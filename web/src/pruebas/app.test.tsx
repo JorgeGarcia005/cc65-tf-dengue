@@ -191,6 +191,28 @@ describe('sesión y destino tras el login (PR-79 H3, H4)', () => {
     expect(await screen.findByRole('heading', { name: 'Dónde y cuándo reforzar' })).toBeInTheDocument()
   })
 
+  // Auditoría TB2 B7: con React Router v7, navegar('/login') y salir() en el
+  // mismo clic dejaban ganar al <Navigate> de ConSesion, que recordaba la vista.
+  // Un admin que sale desde /admin y vuelve a entrar como admin debe empezar en el inicio.
+  it.each(['/admin', '/mapa'])('salir a propósito desde %s no recuerda la vista (mismo rol)', async (desde) => {
+    vi.stubGlobal('fetch', vi.fn(() => Promise.resolve(okLogin('t2', 'admin'))))
+    montarConSonda(desde, { rol: 'admin' })
+    await userEvent.click(screen.getByRole('button', { name: 'Salir' }))
+    await userEvent.type(screen.getByLabelText('Correo'), 'admin@vigia.pe')
+    await userEvent.type(screen.getByLabelText('Clave'), 'x')
+    await userEvent.click(screen.getByRole('button', { name: 'Entrar' }))
+    expect(await screen.findByRole('heading', { name: 'Dónde y cuándo reforzar' })).toBeInTheDocument()
+  })
+
+  it('sin sesión, entrar a una vista sí la recuerda tras el login', async () => {
+    vi.stubGlobal('fetch', vi.fn(() => Promise.resolve(okLogin('t2', 'admin'))))
+    montarConSonda('/admin')
+    await userEvent.type(screen.getByLabelText('Correo'), 'admin@vigia.pe')
+    await userEvent.type(screen.getByLabelText('Clave'), 'x')
+    await userEvent.click(screen.getByRole('button', { name: 'Entrar' }))
+    expect(await screen.findByRole('heading', { name: 'Clúster y entrenamiento en vivo' })).toBeInTheDocument()
+  })
+
   it.each(['//evil.example', '/\\evil.example', 'https://evil.example', '/login', '/admin'])(
     'un destino no seguro o sin permiso (%s) lleva al inicio',
     async (desde) => {

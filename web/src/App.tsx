@@ -1,15 +1,20 @@
-import { Navigate, NavLink, Outlet, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
+import { Navigate, NavLink, Outlet, Route, Routes, useLocation } from 'react-router-dom'
 import type { Rol } from './api/cliente'
 import { useSesion } from './sesion/Sesion'
 import { VISTAS } from './rutas'
 import Login from './paginas/Login'
 import { NoEncontrado, Prohibido } from './paginas/Errores'
 
-/** Exige sesión; sin ella, manda al login recordando a dónde iba. */
+/**
+ * Exige sesión; sin ella, manda al login recordando a dónde iba, salvo si el
+ * usuario salió a propósito: el próximo usuario empieza en el inicio.
+ */
 function ConSesion() {
-  const { sesion } = useSesion()
+  const { sesion, salidaVoluntaria } = useSesion()
   const ubicacion = useLocation()
-  if (!sesion) return <Navigate to="/login" replace state={{ desde: ubicacion.pathname + ubicacion.search }} />
+  if (!sesion) {
+    return <Navigate to="/login" replace state={salidaVoluntaria ? undefined : { desde: ubicacion.pathname + ubicacion.search }} />
+  }
   return <Marco />
 }
 
@@ -21,12 +26,8 @@ function ConRol({ roles, children }: { roles: Rol[]; children: React.ReactElemen
 
 function Marco() {
   const { sesion, salir, puede } = useSesion()
-  const navegar = useNavigate()
-  // Salir a propósito no recuerda la vista: el próximo usuario empieza en el inicio.
-  const cerrarSesion = () => {
-    navegar('/login', { replace: true })
-    salir()
-  }
+  // Salir a propósito no recuerda la vista: ConSesion redirige sin «desde».
+  const cerrarSesion = () => salir(true)
   return (
     <div className="marco">
       <a className="saltar" href="#contenido">

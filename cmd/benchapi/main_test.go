@@ -352,7 +352,10 @@ func TestMedirConLoginUsaJWT(t *testing.T) {
 	if err := mem.GuardarUsuario(context.Background(), almacen.Usuario{Correo: "bench@vigia.pe", Hash: hash, Rol: "analista"}); err != nil {
 		t.Fatal(err)
 	}
-	op := opciones{url: ts.URL, peticiones: 40, concurrencia: 4, calientes: 4, semilla: 13, timeout: 5 * time.Second,
+	// 20 s: el login deriva PBKDF2 de 600 000 iteraciones, que con -race y 2 vCPU
+	// ocupados por otros paquetes pasó de 5 s (auditoría TB2 B4). Es el plazo de
+	// red del test, no el límite de 100 ms de la API (lo mide verificar).
+	op := opciones{url: ts.URL, peticiones: 40, concurrencia: 4, calientes: 4, semilla: 13, timeout: 20 * time.Second,
 		correo: "bench@vigia.pe", clave: "clave-del-benchmark"}
 	rep, err := medir(context.Background(), op, time.Second, silencio)
 	if err != nil {
