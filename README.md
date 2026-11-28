@@ -51,8 +51,9 @@ flowchart LR
 ## Cómo ejecutarlo
 
 Requisitos: **Docker** con Compose v2 (Docker Desktop en Windows o macOS). Para desarrollar y
-correr las pruebas: Go 1.24+ y Node 22. En Linux, antepón `USUARIO="$(id -u):$(id -g)"` a los
-comandos de Compose para que los contenedores escriban en `data/` y `reports/` con tu usuario.
+correr las pruebas: Go 1.24+ y Node 22. En Linux, crea antes `mkdir -p data reports` (si no
+existen, Docker los crea como `root`) y antepón `USUARIO="$(id -u):$(id -g)"` a los comandos de
+Compose para que los contenedores escriban en ellos con tu usuario.
 En PowerShell, las variables se fijan antes: `$env:API=":8080"; $env:DEMO="true"; docker compose …`.
 
 ### 1. Datos (una vez)
@@ -83,7 +84,7 @@ variables). No significa nada epidemiológicamente; el mapa y la evaluación sig
 `reports/evaluacion.json` del dato real.
 
 ```bash
-docker compose -f deploy/docker-compose.yml --profile datos run --rm --no-deps gold /usr/local/bin/gold -sintetico 300000 -shards 3
+docker compose -f deploy/docker-compose.yml --profile datos run --rm --no-deps --build gold /usr/local/bin/gold -sintetico 300000 -shards 3
 docker compose -f deploy/docker-compose.yml --profile datos run --rm --no-deps entrenar /usr/local/bin/entrenar -salida reports/entrenamiento_sintetico.json
 ```
 

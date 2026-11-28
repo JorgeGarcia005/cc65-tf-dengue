@@ -33,6 +33,7 @@ data:
 
 ## datos-docker: Parte A en Docker (perfil datos): CSV → silver → gold + shards → modelo.json
 datos-docker:
+	mkdir -p data reports
 	USUARIO="$$(id -u):$$(id -g)" docker compose -f deploy/docker-compose.yml --profile datos up --build entrenar
 
 ## servicio: SPA + API + clúster + MongoDB + Redis (requiere deploy/.env y data/gold con modelo.json)

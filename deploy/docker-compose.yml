@@ -29,6 +29,15 @@ x-imagen: &imagen
     context: ..
     dockerfile: deploy/Dockerfile
 
+# Imagen de la Parte A (perfil «datos»): los tres servicios declaran cómo
+# construirla, así `run --no-deps gold …` o `run --no-deps entrenar …` la
+# construyen en un clon limpio en vez de buscarla en Docker Hub (PR-94 H1).
+x-imagen-datos: &imagen-datos
+  image: cc65-tf-datos
+  build:
+    context: ..
+    dockerfile: deploy/Dockerfile.datos
+
 services:
   coordinator:
     <<: *imagen
@@ -100,10 +109,7 @@ services:
   # manual, ver README). Escriben en ../data y ../reports del anfitrión con las
   # mismas rutas que `go run` (directorio de trabajo /trabajo). No usan la red.
   loader:
-    image: cc65-tf-datos
-    build:
-      context: ..
-      dockerfile: deploy/Dockerfile.datos
+    <<: *imagen-datos
     profiles: [datos]
     user: "${USUARIO:-65532:65532}"
     command: ["/usr/local/bin/loader"]
@@ -112,7 +118,7 @@ services:
       - ../reports:/trabajo/reports
     network_mode: none
   gold:
-    image: cc65-tf-datos
+    <<: *imagen-datos
     profiles: [datos]
     user: "${USUARIO:-65532:65532}"
     command: ["/usr/local/bin/gold", "-shards=${NODOS:-3}"]
@@ -124,7 +130,7 @@ services:
       loader:
         condition: service_completed_successfully
   entrenar:
-    image: cc65-tf-datos
+    <<: *imagen-datos
     profiles: [datos]
     user: "${USUARIO:-65532:65532}"
     command: ["/usr/local/bin/entrenar", "-epocas=${EPOCAS:-600}", "-tasa=${TASA:-2}", "-lambda=${LAMBDA:-0.0001}"]
