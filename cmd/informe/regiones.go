@@ -13,9 +13,22 @@ package main
 //	fuente:RUTA#FUNCION   la función FUNCION del archivo Go RUTA, copiada del
 //	                      fuente con su comentario (FUNCION o (*Tipo).Metodo);
 //	                      también un tipo (struct o interfaz) por su nombre
+//	archivo:RUTA          el archivo RUTA completo (Dockerfile, YAML, Promela,
+//	                      scripts…), con su ruta en un comentario
+//	archivo:RUTA#NOMBRE   solo las líneas entre los marcadores informe:NOMBRE y
+//	                      /informe:NOMBRE del archivo (en un comentario de su
+//	                      lenguaje), sin los marcadores
 //	spin                  la tabla de reports/spin.json
 //	cluster               la tabla de reports/bench_cluster_*.json
 //	api                   la tabla de reports/bench_api_*.json
+//
+// Además, una cifra suelta dentro de un párrafo se escribe como
+//
+//	<!--v:EXPR-->valor<!--/v-->
+//
+// donde EXPR es una expresión de text/template (con las funciones de las
+// plantillas, p. ej. "cuatro .S.M.E.Test.AUC") que cmd/informe evalúa sobre
+// los datos del informe y escribe en lugar de valor (informe TB2).
 //
 // Así el código del algoritmo y las cifras del informe salen del repositorio
 // al generar, nunca se pegan a mano (AGENTS.md §3.6; observación 2 del
@@ -33,13 +46,17 @@ import (
 	"regexp"
 	"slices"
 	"strings"
+	"text/template"
 )
 
 var reRegion = regexp.MustCompile(`(?s)<!-- generado:([^ ]+) -->\n.*?<!-- /generado -->`)
 
-// regenerarRegiones reescribe las regiones de cada .md de dir y devuelve los
-// archivos que cambiaron.
-func regenerarRegiones(dir string) ([]string, error) {
+var reValor = regexp.MustCompile(`<!--v:(.+?)-->(.*?)<!--/v-->`)
+
+// regenerarRegiones reescribe las regiones y los valores en línea de cada .md
+// de dir y devuelve los archivos que cambiaron. datos son los datos de los
+// valores en línea (nil si la carpeta no los usa).
+func regenerarRegiones(dir string, datos any) ([]string, error) {
 	archivos, err := filepath.Glob(filepath.Join(dir, "*.md"))
 	if err != nil {
 		return nil, err
@@ -51,6 +68,9 @@ func regenerarRegiones(dir string) ([]string, error) {
 			return nil, err
 		}
 		nuevo, err := expandirRegiones(viejo)
+		if err == nil {
+			nuevo, err = expandirValores(nuevo, datos)
+		}
 		if err != nil {
 			return nil, fmt.Errorf("%s: %w", a, err)
 		}
@@ -78,8 +98,43 @@ func expandirRegiones(texto []byte) ([]byte, error) {
 	return salida, primerErr
 }
 
+// expandirValores reescribe cada <!--v:EXPR-->…<!--/v--> con el valor de EXPR.
+func expandirValores(texto []byte, datos any) ([]byte, error) {
+	var primerErr error
+	salida := reValor.ReplaceAllFunc(texto, func(m []byte) []byte {
+		expr := string(reValor.FindSubmatch(m)[1])
+		v, err := evaluar(expr, datos)
+		if err != nil {
+			if primerErr == nil {
+				primerErr = fmt.Errorf("valor %q: %w", expr, err)
+			}
+			return m
+		}
+		return []byte("<!--v:" + expr + "-->" + v + "<!--/v-->")
+	})
+	return salida, primerErr
+}
+
+func evaluar(expr string, datos any) (string, error) {
+	if datos == nil {
+		return "", fmt.Errorf("esta carpeta no tiene datos para valores en línea")
+	}
+	t, err := template.New("v").Funcs(funciones).Option("missingkey=error").Parse("{{" + expr + "}}")
+	if err != nil {
+		return "", err
+	}
+	var b strings.Builder
+	if err := t.Execute(&b, datos); err != nil {
+		return "", err
+	}
+	return b.String(), nil
+}
+
 func generarRegion(nombre string) (string, error) {
 	switch {
+	case strings.HasPrefix(nombre, "archivo:"):
+		ruta, fragmento, _ := strings.Cut(strings.TrimPrefix(nombre, "archivo:"), "#")
+		return regionArchivo(ruta, fragmento)
 	case strings.HasPrefix(nombre, "fuente:"):
 		ruta, fn, ok := strings.Cut(strings.TrimPrefix(nombre, "fuente:"), "#")
 		if !ok {
@@ -98,6 +153,96 @@ func generarRegion(nombre string) (string, error) {
 		return tablaAPI()
 	}
 	return "", fmt.Errorf("región desconocida")
+}
+
+// lenguajes: por extensión o nombre de archivo → lenguaje del bloque y
+// comentario de una línea (vacío: el formato no tiene comentarios).
+var lenguajes = map[string][3]string{
+	".go": {"go", "// ", ""}, ".ts": {"ts", "// ", ""}, ".tsx": {"tsx", "// ", ""},
+	".yml": {"yaml", "# ", ""}, ".yaml": {"yaml", "# ", ""}, ".sh": {"bash", "# ", ""},
+	".pml": {"promela", "/* ", " */"}, ".json": {"json", "", ""}, ".env": {"bash", "# ", ""},
+	"Dockerfile": {"dockerfile", "# ", ""}, "Makefile": {"makefile", "# ", ""}, ".conf": {"nginx", "# ", ""},
+}
+
+func lenguajeDe(ruta string) [3]string {
+	base := filepath.Base(ruta)
+	if strings.HasPrefix(base, "Dockerfile") {
+		return lenguajes["Dockerfile"]
+	}
+	if l, ok := lenguajes[base]; ok {
+		return l
+	}
+	if l, ok := lenguajes[filepath.Ext(base)]; ok {
+		return l
+	}
+	return [3]string{"text", "", ""}
+}
+
+var reMarcador = regexp.MustCompile(`(^|[^\w/])(/?)informe:([\w-]+)\b`)
+
+// regionArchivo copia un archivo del repositorio, o solo el fragmento entre
+// los marcadores informe:NOMBRE y /informe:NOMBRE. Las líneas con marcadores
+// no se copian y se quita la sangría común del fragmento.
+func regionArchivo(ruta, fragmento string) (string, error) {
+	src, err := os.ReadFile(ruta)
+	if err != nil {
+		return "", err
+	}
+	lineas := strings.Split(strings.TrimRight(strings.ReplaceAll(string(src), "\r\n", "\n"), "\n"), "\n")
+	var out []string
+	dentro, abierto, cerrado := fragmento == "", false, false
+	for _, l := range lineas {
+		m := reMarcador.FindStringSubmatch(l)
+		if m == nil {
+			if dentro {
+				out = append(out, l)
+			}
+			continue
+		}
+		if m[3] == fragmento {
+			if m[2] == "" {
+				dentro, abierto = true, true
+			} else {
+				dentro, cerrado = false, true
+			}
+		}
+	}
+	switch {
+	case fragmento != "" && !abierto:
+		return "", fmt.Errorf("%s no tiene el marcador informe:%s", ruta, fragmento)
+	case fragmento != "" && !cerrado:
+		return "", fmt.Errorf("%s: falta /informe:%s", ruta, fragmento)
+	case len(out) == 0:
+		return "", fmt.Errorf("%s: fragmento vacío", ruta)
+	}
+	out = sinSangriaComun(out)
+	lang := lenguajeDe(ruta)
+	cabecera := ""
+	if lang[1] != "" {
+		cabecera = lang[1] + ruta + lang[2] + "\n"
+	}
+	return "```" + lang[0] + "\n" + cabecera + strings.Join(out, "\n") + "\n```\n", nil
+}
+
+func sinSangriaComun(lineas []string) []string {
+	comun := -1
+	for _, l := range lineas {
+		if strings.TrimSpace(l) == "" {
+			continue
+		}
+		n := len(l) - len(strings.TrimLeft(l, " \t"))
+		if comun < 0 || n < comun {
+			comun = n
+		}
+	}
+	out := make([]string, len(lineas))
+	for i, l := range lineas {
+		if len(l) >= comun && comun > 0 {
+			l = l[comun:]
+		}
+		out[i] = l
+	}
+	return out
 }
 
 // extraerFuncion devuelve el texto exacto de una función o de un tipo (con su

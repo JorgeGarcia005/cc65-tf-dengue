@@ -81,3 +81,32 @@ func TestExtraerTipoDentroDeUnBloque(t *testing.T) {
 		t.Fatalf("tipo en bloque: %q, %v", got, err)
 	}
 }
+
+// TestInformeTB2AlDia: los fragmentos de código, de archivos y las cifras en
+// línea del informe final coinciden con el repositorio y los reportes. Si
+// alguien edita un valor a mano o cambia el código sin regenerar, falla.
+func TestInformeTB2AlDia(t *testing.T) {
+	t.Chdir(filepath.Join("..", ".."))
+	archivos, err := filepath.Glob("docs/informe/tb2/*.md")
+	if err != nil || len(archivos) == 0 {
+		t.Fatalf("sin secciones en docs/informe/tb2: %v", err)
+	}
+	p, l, m := cargar()
+	datos := datosTB2{cargarPC4(calcularSintesis(p, l, m))}
+	for _, a := range archivos {
+		b, err := os.ReadFile(a)
+		if err != nil {
+			t.Fatal(err)
+		}
+		nuevo, err := expandirRegiones(b)
+		if err == nil {
+			nuevo, err = expandirValores(nuevo, datos)
+		}
+		if err != nil {
+			t.Fatalf("%s: %v", a, err)
+		}
+		if string(nuevo) != string(b) {
+			t.Errorf("%s no coincide con el repositorio: corra go run ./cmd/informe", a)
+		}
+	}
+}
