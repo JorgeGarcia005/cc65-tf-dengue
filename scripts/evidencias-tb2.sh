@@ -13,7 +13,7 @@
 # Uso (desde la raíz del repo, en WSL o Git Bash, con Docker Desktop):
 #   bash scripts/evidencias-tb2.sh <paso>
 # Pasos, en orden: entorno parte-a cluster caida servicio entrenamiento
-#                  benchapi bd evaluacion spin pruebas seguridad e2e informe; y apagar
+#                  benchapi bd evaluacion spin pruebas seguridad e2e contratos informe; y apagar
 #
 # Variables: PUERTO_API (8080), PUERTO_WEB (8081), NODOS (3), QUITAR (texto de
 # la carátula que cmd/word borra, p. ej. el nombre de un exintegrante).
@@ -238,6 +238,68 @@ p_informe() {
   ls -l entregables/1ACC0065_TB2_*.docx
 }
 
+# muestra <esperado> <método> <ruta> <quién: analista|admin|-> [cuerpo] [máx. caracteres
+# del cuerpo de la respuesta]: imprime la petición y la respuesta (estado,
+# cabeceras útiles y cuerpo, recortado si es largo), sin tokens ni claves, y
+# falla si el código no es el esperado.
+muestra() {
+  local esperado=$1 metodo=$2 ruta=$3 quien=$4 cuerpo=${5:-} max=${6:-700}
+  local args=(-sS -i -X "$metodo") resp cab body codigo
+  echo ">>> $metodo $ruta"
+  case "$quien" in
+    analista) args+=(-H "Authorization: Bearer $TOK_ANALISTA"); echo "Authorization: Bearer <JWT del analista>" ;;
+    admin)    args+=(-H "Authorization: Bearer $TOK_ADMIN");    echo "Authorization: Bearer <JWT del admin>" ;;
+  esac
+  if [[ -n "$cuerpo" ]]; then
+    args+=(-H 'Content-Type: application/json' -d "$cuerpo")
+    echo "Content-Type: application/json"
+    echo
+    sed 's/"clave":"[^"]*"/"clave":"<clave omitida>"/' <<<"$cuerpo"
+  fi
+  resp=$(curl "${args[@]}" "$URL$ruta" | tr -d '\r')
+  cab=${resp%%$'\n\n'*}
+  body=${resp#*$'\n\n'}
+  [[ "$body" == "$resp" ]] && body=""
+  codigo=$(head -1 <<<"$cab" | awk '{print $2}')
+  echo "<<< $(head -1 <<<"$cab")"
+  grep -iE '^(content-type|x-cache|location|retry-after|cache-control):' <<<"$cab" || true
+  body=$(sed -E 's/"(token|ticket)":"[^"]*"/"\1":"<\1 omitido>"/g' <<<"$body")
+  if ((${#body} > max)); then
+    printf '\n%s… (%d caracteres en total)\n\n' "${body:0:max}" "${#body}"
+  else
+    printf '\n%s\n\n' "$body"
+  fi
+  [[ "$codigo" == "$esperado" ]] || { echo "se esperaba HTTP $esperado y llegó $codigo"; return 1; }
+}
+
+p_contratos() {
+  export LC_ALL=C.UTF-8
+  local ca cc
+  ca=$(env_de VIGIA_ANALISTA_CORREO); cc=$(env_de VIGIA_ANALISTA_CLAVE)
+  TOK_ANALISTA=$(login "$ca" "$cc")
+  TOK_ADMIN=$(login "$(env_de VIGIA_ADMIN_CORREO)" "$(env_de VIGIA_ADMIN_CLAVE)")
+  [[ -n "$TOK_ANALISTA" && -n "$TOK_ADMIN" ]] ||
+    { echo "no se pudo iniciar sesión (¿sistema arriba? API=:8080 DEMO=true docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.api.yml up -d)"; return 1; }
+  local caso='{"departamento":"LORETO","ano":2025,"semana":9,"edad":7,"tipo_edad":"A","sexo":"F"}'
+  echo "-- 1. Inicio de sesión del analista"
+  muestra 200 POST /api/v1/auth/login - "{\"correo\":\"$ca\",\"clave\":\"$cc\"}"
+  echo "-- 2. Predicción de un caso (la primera vez se calcula; la segunda sale de Redis)"
+  muestra 200 POST /api/v1/predicciones analista "$caso" 1400
+  muestra 200 POST /api/v1/predicciones analista "$caso" 300
+  echo "-- 3. Consulta inválida: falta la edad"
+  muestra 400 POST /api/v1/predicciones analista '{"departamento":"LORETO","ano":2025,"semana":9,"sexo":"F"}'
+  echo "-- 4. Modelo publicado, riesgo para el mapa y evaluación (respuestas recortadas)"
+  muestra 200 GET /api/v1/modelo analista
+  muestra 200 GET /api/v1/riesgo analista "" 500
+  muestra 200 GET /api/v1/evaluacion analista "" 500
+  echo "-- 5. Autorización: sin token, rol sin permiso y admin"
+  muestra 401 GET /api/v1/modelo -
+  muestra 403 GET /api/v1/cluster analista
+  muestra 200 GET /api/v1/cluster admin "" 900
+  echo "-- 6. Ticket de un uso para el WebSocket (solo admin)"
+  muestra 200 POST /api/v1/ws/ticket admin
+}
+
 p_apagar() {
   "${SERV[@]}" down --remove-orphans
 }
@@ -255,9 +317,10 @@ case "$paso" in
   evaluacion)    registrar evaluacion "Evaluación del modelo en el conjunto de prueba" p_evaluacion ;;
   spin)          registrar spin "Verificación del protocolo con Spin" p_spin ;;
   pruebas)       registrar pruebas "Pruebas de Go (-race) y de la SPA" p_pruebas ;;
+  contratos)     registrar contratos "Peticiones y respuestas reales de la API" p_contratos ;;
   seguridad)     registrar seguridad "Controles de seguridad desde fuera (cmd/seguridad)" p_seguridad ;;
   e2e)           registrar e2e "Pruebas de punta a punta con Playwright y capturas" p_e2e ;;
   informe)       registrar informe "Informe final: cmd/informe y cmd/word -final" p_informe ;;
   apagar)        p_apagar ;;
-  *) echo "uso: bash scripts/evidencias-tb2.sh <entorno|parte-a|cluster|caida|servicio|entrenamiento|benchapi|bd|evaluacion|spin|pruebas|seguridad|e2e|informe|apagar>" >&2; exit 2 ;;
+  *) echo "uso: bash scripts/evidencias-tb2.sh <entorno|parte-a|cluster|caida|servicio|entrenamiento|benchapi|bd|evaluacion|spin|pruebas|seguridad|e2e|contratos|informe|apagar>" >&2; exit 2 ;;
 esac
