@@ -154,6 +154,7 @@ type limpieza struct {
 
 type benchLoader struct {
 	Archivo string
+	Filas   int `json:"filas"`
 	Maquina struct {
 		CPU    string `json:"cpu"`
 		NumCPU int    `json:"num_cpu"`

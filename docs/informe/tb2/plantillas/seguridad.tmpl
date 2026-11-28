@@ -1,0 +1,21 @@
+{{- with index .R "seguridad" -}}
+Tabla: Controles de seguridad probados desde fuera contra el sistema en ejecución {#tab:seguridad}
+
+| # | Caso | Petición | Esperado | Obtenido | Cumple |
+|---:|---|---|---|---|:---:|
+{{- range $i, $c := .casos}}
+| {{inc $i}} | {{$c.caso}} | {{$c.peticion}} | {{$c.esperado}} | {{$c.obtenido}} | {{if $c.ok}}sí{{else}}**no**{{end}} |
+{{- end}}
+
+Nota: `go run ./cmd/seguridad` contra la API en `{{.url}}`, con la SPA en `{{.origen_spa}}` como origen permitido; generado el {{.generado}}. Todos los casos cumplen: {{if .todos_ok}}sí{{else}}**no**{{end}}. Fuente: `reports/seguridad.json`.
+{{- else -}}
+Tabla: Controles de seguridad probados desde fuera contra el sistema en ejecución {#tab:seguridad}
+
+| # | Caso | Petición | Esperado | Obtenido | Cumple |
+|---:|---|---|---|---|:---:|
+| — | Se genera en el paso 13 de la guía de #70 | — | — | — | — |
+
+Nota: Falta `reports/seguridad.json`; `cmd/informe` completa esta tabla al regenerar el informe.
+
+<!-- falta: reports/seguridad.json -->
+{{- end}}

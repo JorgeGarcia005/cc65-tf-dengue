@@ -313,3 +313,24 @@ func TestAltoMaximo(t *testing.T) {
 		t.Errorf("una imagen apaisada va al ancho del texto: %d", cx)
 	}
 }
+
+// TestFaltaReporte: «<!-- falta: reports/x.json -->», que cmd/informe deja
+// cuando una plantilla no encontró su reporte, cuenta como pendiente (-final
+// falla) y deja el espacio marcado, sin avisos.
+func TestFaltaReporte(t *testing.T) {
+	tmp := t.TempDir()
+	md := "Texto.\n\n<!-- falta: reports/seguridad.json -->\n"
+	if err := os.WriteFile(filepath.Join(tmp, "01-a.md"), []byte(md), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	d := convertirTodo(tmp, []string{"01-a.md"}, 200, 4)
+	if err := xmlBienFormado(envolver(d.b.String())); err != nil {
+		t.Fatal(err)
+	}
+	if len(d.pendientes) != 1 || d.pendientes[0] != "reports/seguridad.json" || len(d.avisos) > 0 {
+		t.Fatalf("pendientes %q, avisos %v", d.pendientes, d.avisos)
+	}
+	if !strings.Contains(textoDe(d.b.String()), "[Pendiente: reports/seguridad.json]") {
+		t.Error("falta la marca en el documento")
+	}
+}

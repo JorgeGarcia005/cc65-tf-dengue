@@ -1,0 +1,9 @@
+Tabla: Combinaciones de departamento, semana y etapa de vida con más casos esperados con signos de alarma {#tab:prioridades}
+
+| # | Departamento | Semana | Etapa de vida | Casos de prueba | Riesgo calibrado (%) | Casos esperados | Del total del país (%) | Acumulado (%) |
+|---:|---|---:|---|---:|---:|---:|---:|---:|
+{{- range $i, $c := .Prioridades 10}}
+| {{inc $i}} | {{depto $c.Departamento}} | {{$c.Semana}} | {{etapa $c.Etapa}} | {{miles $c.Casos}} | {{pct $c.Riesgo}} | {{miles (entero $c.Esperados)}} | {{pct $c.Fraccion}} | {{pct $c.Acumulada}} |
+{{- end}}
+
+Nota: Solo combinaciones con al menos {{.Eval.Riesgo.MinCasos}} casos de prueba. Es la misma lista que muestra la vista de inicio de la SPA. Fuente: `reports/evaluacion.json` (`prioridades`).

@@ -1,0 +1,9 @@
+Tabla: Riesgo y casos esperados por etapa de vida en el país {#tab:impacto-etapas}
+
+| Etapa de vida | Casos de prueba | Tasa observada (%) | Riesgo calibrado medio (%) | Razón frente al país | Casos esperados con signos de alarma | Del total del país (%) |
+|---|---:|---:|---:|---:|---:|---:|
+{{- range .EtapasPais}}
+| {{etapa .Etapa}} | {{miles .Casos}} | {{pct .Tasa}} | {{pct .Riesgo}} | {{dos .Razon}} | {{miles (entero .Esperados)}} | {{pct .Fraccion}} |
+{{- end}}
+
+Nota: Todas las semanas y departamentos. «Razón frente al país»: riesgo de la etapa dividido entre el riesgo medio del país; mayor que 1, más riesgo que el promedio. Fuente: `reports/evaluacion.json` (`riesgo.celdas`).

@@ -1,0 +1,11 @@
+{{- with .Eval -}}
+Tabla: Calibración del riesgo por deciles en el conjunto de prueba {#tab:calibracion}
+
+| Decil | Casos | Riesgo calibrado medio (%) | Tasa observada (%) | IC 95 % de la tasa (%) |
+|---:|---:|---:|---:|---|
+{{- range $i, $c := .Calibracion}}
+| {{inc $i}} | {{miles $c.Casos}} | {{pct $c.Riesgo}} | {{pct $c.Tasa}} | [{{pct $c.Inf}}; {{pct $c.Sup}}] |
+{{- end}}
+
+Nota: Los casos de prueba se ordenan por riesgo calibrado y se parten en diez grupos de igual tamaño. Un modelo bien calibrado tiene, en cada decil, una tasa observada cercana al riesgo medio. Fuente: `reports/evaluacion.json` (`calibracion`).
+{{- end}}

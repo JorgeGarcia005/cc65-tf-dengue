@@ -1,0 +1,9 @@
+Tabla: Semanas epidemiológicas con más casos esperados con signos de alarma en el país {#tab:impacto-semanas}
+
+| # | Semana | Casos de prueba | Riesgo calibrado medio (%) | Casos esperados con signos de alarma | Del total del año (%) |
+|---:|---:|---:|---:|---:|---:|
+{{- range $i, $c := .SemanasTop 8}}
+| {{inc $i}} | {{$c.Semana}} | {{miles $c.Casos}} | {{pct $c.Riesgo}} | {{miles (entero $c.Esperados)}} | {{pct $c.Fraccion}} |
+{{- end}}
+
+Nota: Todo el país y todas las edades. {{with .TemporadaAlta}}La mitad de los casos esperados del año se concentra en {{.Semanas}} semanas consecutivas, de la {{.Desde}} a la {{.Hasta}} ({{pct .Fraccion}} %).{{end}} Fuente: `reports/evaluacion.json` (`riesgo.celdas`).

@@ -11,7 +11,7 @@ El control revisa todos los pasos desde el 1 y **se detiene en el primero que no
 ## Reglas
 
 1. **Las evidencias no se editan a mano.** Las escribe `scripts/evidencias-tb2.sh` con fecha, máquina y commit, y el CI rechaza las que no tienen esa cabecera o no terminaron con `# resultado: OK`. Si un paso falla: lees el error al final de `docs/informe/tb2/evidencias/<paso>.txt`, corriges la causa y vuelves a correr **el mismo paso**.
-2. **Nada de push ni merge.** Al final le envías a Jorge un *bundle* (paso 18). Tampoco cierras issues ni tocas `develop`, `main` o los tags.
+2. **Nada de push ni merge.** Al final le envías a Jorge un *bundle* (paso 19). Tampoco cierras issues ni tocas `develop`, `main` o los tags.
 3. **Los commits van a tu nombre** (cuenta `JJva-06`): la rúbrica pide commits de los dos.
 4. **No versiones** `deploy/.env`, `data/`, `entregables/` ni claves. El `.gitignore` ya los excluye: no uses `git add -f`.
 5. **Si algo no se puede resolver en 15 minutos, detente y escríbele a Jorge** con la salida de `bash scripts/paso70.sh` y el archivo de evidencia. No improvises cambios en el código.
@@ -58,7 +58,7 @@ Cada paso es una sola orden. Córrelas en este orden, con el control después de
 | 3 | `bash scripts/evidencias-tb2.sh parte-a` | Parte A en Docker: `loader` → `gold` → `entrenar`; deja `data/gold/` y el modelo inicial | 5 min |
 | 4 | `bash scripts/evidencias-tb2.sh cluster` | Entrenamiento único en el clúster con `VERIFICAR=true`: pesos idénticos bit a bit al secuencial | 3 min |
 | 5 | `bash scripts/evidencias-tb2.sh caida` | Mata un nodo a mitad del entrenamiento y exige el mismo modelo | 3 min |
-| 6 | `bash scripts/evidencias-tb2.sh servicio` | Levanta el sistema completo con `DEMO=true` y espera a que se registren los nodos. **Desde aquí el sistema queda arriba hasta el paso 15** | 3 min |
+| 6 | `bash scripts/evidencias-tb2.sh servicio` | Levanta el sistema completo con `DEMO=true` y espera a que se registren los nodos. **Desde aquí el sistema queda arriba hasta el paso 16** | 3 min |
 | 7 | `bash scripts/evidencias-tb2.sh entrenamiento` | Entrena por la API con los parámetros del modelo inicial y anota la versión publicada | 2 min |
 | 8 | `bash scripts/evidencias-tb2.sh benchapi` | Latencia de la API con JWT → `reports/bench_api_deez_jwt.json`; falla si el p95 no es menor que 100 ms | 1 min |
 | 9 | `bash scripts/evidencias-tb2.sh bd` | Cadena del entrenamiento en MongoDB y Redis (modelo, entrenamiento, predicciones, caché, usuarios) | 1 min |
@@ -108,22 +108,40 @@ Recorre la SPA como analista y como administrador (9 pruebas) y guarda estas cap
 | `e2e-11-swagger.png` | Swagger con el candado de autorización |
 | `e2e-12-responsive-375.png` | La SPA a 375 px de ancho |
 
-## Paso 15. Capturas manuales
+## Paso 15. Contratos de la API
 
-Solo dos, las que no se pueden automatizar. Con el sistema todavía arriba, en Postman (Windows), importa `docs/api/cc65-tf.postman_collection.json`, cambia la variable `base_url` si usaste otro puerto y pon en `clave` la de `VIGIA_ADMIN_CLAVE`.
+Con el sistema todavía arriba:
+
+```bash
+bash scripts/evidencias-tb2.sh contratos
+```
+
+Inicia sesión como analista y como admin y guarda en `evidencias/contratos.txt` cada petición y su respuesta real: login, una predicción calculada y la misma repetida (sale de Redis), una consulta inválida (400), el modelo, el riesgo y la evaluación (recortados), sin token (401), analista en el clúster (403), admin en el clúster y el ticket del WebSocket. Los tokens, el ticket y las claves no se imprimen. Falla si algún código no es el esperado.
+
+**Si ya habías apagado el sistema** (porque terminaste los pasos anteriores antes de que existiera este), levántalo sin repetir el paso 6:
+
+```bash
+API=:8080 DEMO=true PUERTO_API=${PUERTO_API:-8080} PUERTO_WEB=${PUERTO_WEB:-8081} docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.api.yml up -d
+docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.api.yml logs coordinator | grep "acepta entrenamientos"   # repítelo hasta que aparezca
+```
+
+## Paso 16. Capturas manuales
+
+Solo tres, las que no se pueden automatizar: dos de Postman y una del tablero Kanban. Con el sistema todavía arriba, en Postman (Windows), importa `docs/api/cc65-tf.postman_collection.json`, cambia la variable `base_url` si usaste otro puerto y pon en `clave` la de `VIGIA_ADMIN_CLAVE`.
 
 | Archivo en `docs/informe/tb2/capturas/` | Qué debe verse |
 |---|---|
 | `m-postman-runner.png` | *Collection Runner* con la colección completa: todas las pruebas en verde y la columna de tiempo de cada petición |
 | `m-postman-prediccion.png` | `POST /api/v1/predicciones` con la pestaña *Authorization* (Bearer), el cuerpo, la respuesta `200` y el tiempo en ms |
+| `m-kanban.png` | El tablero «TF CC65» de GitHub Projects con todas sus columnas (Backlog, En curso, En revisión, Hecho) y las tarjetas de la TB2; si no cabe, con el zoom del navegador al 67 % |
 
 Guárdalas en PNG, a pantalla completa de la ventana de Postman, sin recortar la barra de estado (ahí sale el tiempo). Si cuando llegues a este paso el informe pide alguna captura más, el control la listará con su nombre exacto.
 
-Cuando el control marque [✓] el paso 15, ya puedes apagar el sistema: `bash scripts/evidencias-tb2.sh apagar`.
+Cuando el control marque [✓] el paso 16, ya puedes apagar el sistema: `bash scripts/evidencias-tb2.sh apagar`.
 
-## Pausa entre el paso 15 y el 16
+## Pausa entre el paso 16 y el 17
 
-**Al terminar el paso 15 te detienes.** El paso 16 arma el Word final, y el informe todavía tiene secciones que escribe Jorge por bloques (cada bloque pasa por un PR y el juez). Mientras falte alguna, el control se detiene en el paso 16 con el mensaje «el informe aún tiene secciones por escribir» y la lista de archivos: es lo esperado, no es un error tuyo.
+**Al terminar el paso 16 te detienes.** El paso 17 arma el Word final, y el informe todavía tiene secciones que escribe Jorge por bloques (cada bloque pasa por un PR y el juez). Mientras falte alguna, el control se detiene en el paso 17 con el mensaje «el informe aún tiene secciones por escribir» y la lista de archivos: es lo esperado, no es un error tuyo.
 
 Cuando Jorge te avise que el informe está completo en `integracion/tb2`:
 
@@ -133,19 +151,19 @@ git merge origin/integracion/tb2      # sin rebase; si Git abre el editor, guard
 bash scripts/paso70.sh
 ```
 
-El merge no toca tus evidencias ni tus capturas, así que los pasos 2 a 15 siguen marcados. Si alguna sección nueva pide una captura más, el control vuelve al paso 15 y la lista con su nombre exacto: la tomas y sigues. Con todo en [✓] hasta el 15, el control te deja pasar al 16.
+El merge no toca tus evidencias ni tus capturas, así que los pasos que ya hiciste siguen marcados. Si el merge trae un paso nuevo (así llegó el 15), el control se detiene en él con la orden exacta: lo corres y sigues. Si alguna sección nueva pide una captura más, el control vuelve al paso 16 y la lista con su nombre exacto: la tomas y sigues. Con todo en [✓] hasta el 16, el control te deja pasar al 17.
 
-## Paso 16. Informe final
+## Paso 17. Informe final
 
 ```bash
 QUITAR="<el texto que te indique Jorge>" bash scripts/evidencias-tb2.sh informe
 ```
 
-Regenera las cifras del informe desde los `reports/*.json` nuevos, comprueba que el informe coincide con el repositorio y arma el Word con `cmd/word -final`, que **falla si falta cualquier captura o evidencia**. `QUITAR` borra de la carátula de la plantilla el párrafo con el nombre del integrante que se retiró. El Word queda en `entregables/1ACC0065_TB2_202610_Informe_<código>.docx`, uno por cada código de `entregables/codigos.txt`.
+Guarda primero la evidencia de gestión (`evidencias/gestion.txt`: ramas, etiquetas, Pull Requests y commits por autor), regenera las cifras del informe desde los `reports/*.json` nuevos, comprueba que el informe coincide con el repositorio y arma el Word con `cmd/word -final`, que **falla si falta cualquier captura o evidencia**. `QUITAR` borra de la carátula de la plantilla el párrafo con el nombre del integrante que se retiró. El Word queda en `entregables/1ACC0065_TB2_202610_Informe_<código>.docx`, uno por cada código de `entregables/codigos.txt`.
 
-Ábrelo en Word, acepta actualizar los campos (índices y números de página) y revisa que cada captura se vea completa. Si una no se lee, vuelve a tomarla y **repite el paso 16**.
+Ábrelo en Word, acepta actualizar los campos (índices y números de página) y revisa que cada captura se vea completa. Si una no se lee, vuelve a tomarla y **repite el paso 17**.
 
-## Paso 17. Commits
+## Paso 18. Commits
 
 ```bash
 git status
@@ -155,7 +173,7 @@ git commit -m "docs(informe): evidencias, capturas y cifras de la TB2 en deez (#
 
 `git status` no debe mostrar `deploy/.env`, `data/` ni `entregables/`. Si aparecen, **no los agregues**: avísale a Jorge.
 
-## Paso 18. Entrega a Jorge
+## Paso 19. Entrega a Jorge
 
 ```bash
 git bundle create jose-70.bundle origin/integracion/tb2..feature/70-evidencias
