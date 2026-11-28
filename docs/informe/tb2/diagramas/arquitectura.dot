@@ -3,10 +3,10 @@
 // Los nombres de imágenes, servicios, puertos y redes son los de
 // deploy/docker-compose.yml y deploy/docker-compose.api.yml.
 digraph arquitectura {
-  graph [rankdir=TB, fontname="Times New Roman", fontsize=11, nodesep=0.4, ranksep=0.55,
+  graph [rankdir=TB, fontname="Liberation Serif", fontsize=11, nodesep=0.4, ranksep=0.55,
          splines=polyline, pad=0.1, compound=true, newrank=true]
-  node  [shape=box, fontname="Times New Roman", fontsize=11, penwidth=0.9, height=0.42, margin="0.14,0.06"]
-  edge  [fontname="Times New Roman", fontsize=9.5, penwidth=0.8, arrowsize=0.6, arrowhead=vee]
+  node  [shape=box, fontname="Liberation Serif", fontsize=11, penwidth=0.9, height=0.42, margin="0.14,0.06"]
+  edge  [fontname="Liberation Serif", fontsize=9.5, penwidth=0.8, arrowsize=0.6, arrowhead=vee]
 
   subgraph cluster_navegador {
     label=<«dispositivo» Navegador del usuario>; labeljust=l; fontsize=9.5; penwidth=0.7
