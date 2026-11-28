@@ -637,8 +637,8 @@ func (c *Coordinador) atender(ev evento) bool {
 		ahora := time.Now()
 		c.ultimoNodo[j] = ahora
 		c.shardsNodo[j]++
-		if m.MicrosCPU > 0 && c.cpuNodo[j] >= 0 {
-			c.cpuNodo[j] += m.MicrosCPU
+		if m.MicrosCPU != nil && c.cpuNodo[j] >= 0 {
+			c.cpuNodo[j] += *m.MicrosCPU
 		} else {
 			c.cpuNodo[j] = -1 // un shard sin dato: el uso de CPU de la época no se informa
 		}
@@ -777,7 +777,7 @@ func (c *Coordinador) cerrarMetricas() {
 		lat := fin.Sub(ini).Microseconds()
 		m := &MetricasNodo{Epoca: c.epoca, Shards: c.shardsNodo[j], CalculoMs: float64(calc) / 1e3,
 			LatenciaMs: float64(lat) / 1e3, RedMs: float64(max(lat-calc, 0)) / 1e3}
-		if cpu := c.cpuNodo[j]; cpu > 0 && calc > 0 && n.workers > 0 {
+		if cpu := c.cpuNodo[j]; cpu >= 0 && calc > 0 && n.workers > 0 {
 			u := min(float64(cpu)/(float64(calc)*float64(n.workers)), 1)
 			m.UsoCPU = &u
 		}

@@ -42,7 +42,8 @@ type Evento struct {
 	Micros  int64     `json:"micros_calculo,omitempty"`
 	// En EvGradiente (#91): CPU del nodo durante el cálculo y µs desde que el
 	// coordinador le envió su primera tarea de la época.
-	MicrosCPU       int64        `json:"micros_cpu,omitempty"`
+	// MicrosCPU es nil si el nodo no informa su CPU (0 sí es un dato, PR-92 H3).
+	MicrosCPU       *int64       `json:"micros_cpu,omitempty"`
 	MicrosIdaVuelta int64        `json:"micros_ida_vuelta,omitempty"`
 	Detalle         string       `json:"detalle,omitempty"`
 	Nodos           []EstadoNodo `json:"nodos,omitempty"`

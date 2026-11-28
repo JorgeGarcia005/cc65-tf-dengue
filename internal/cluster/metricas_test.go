@@ -36,7 +36,7 @@ func TestMetricasPorNodoTrasEntrenar(t *testing.T) {
 			t.Fatalf("métricas de %s: %+v (épocas %d)", n.Nombre, *m, est.Epocas)
 		}
 		if runtime.GOOS == "linux" {
-			if m.UsoCPU == nil || *m.UsoCPU <= 0 || *m.UsoCPU > 1 {
+			if m.UsoCPU == nil || *m.UsoCPU < 0 || *m.UsoCPU > 1 {
 				t.Fatalf("uso de CPU de %s: %v", n.Nombre, m.UsoCPU)
 			}
 		}
@@ -49,7 +49,7 @@ func TestMetricasPorNodoTrasEntrenar(t *testing.T) {
 		t.Fatalf("%d eventos gradiente; quería 12", len(gradientes))
 	}
 	for _, g := range gradientes {
-		if g.MicrosIdaVuelta < g.Micros || (runtime.GOOS == "linux" && g.MicrosCPU <= 0) {
+		if g.MicrosIdaVuelta < g.Micros || (runtime.GOOS == "linux" && (g.MicrosCPU == nil || *g.MicrosCPU < 0)) {
 			t.Fatalf("gradiente sin métricas: %+v", g)
 		}
 	}
