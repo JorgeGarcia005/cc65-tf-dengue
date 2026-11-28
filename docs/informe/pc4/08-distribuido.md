@@ -265,15 +265,19 @@ func (c *Coordinador) despachar(s int) error {
 			}
 			c.asignado[s] = true
 		}
+		// La marca de la latencia va ANTES de escribir en el socket (PR-92 H1): en
+		// cuanto los bytes salen, el nodo puede calcular y responder mientras esta
+		// goroutine todavía no vuelve de enviarTarea. Así la latencia siempre
+		// contiene el cálculo e incluye la codificación y la escritura de la tarea.
+		inicioEnvio := time.Now()
 		if err := c.enviarTarea(j, s); err != nil {
 			c.descartar(j, fmt.Sprintf("error de envío: %v", err))
 			continue
 		}
 		c.enviado[s] = true
-		ahora := time.Now()
-		c.vence[s] = ahora.Add(c.op.TimeoutEpoca) // plazo propio del shard
+		c.vence[s] = time.Now().Add(c.op.TimeoutEpoca) // plazo propio del shard
 		if _, ok := c.envioNodo[j]; !ok {
-			c.envioNodo[j] = ahora // la latencia del nodo cuenta desde su primera tarea
+			c.envioNodo[j] = inicioEnvio // la latencia del nodo cuenta desde su primera tarea
 		}
 		c.emitir(Evento{Tipo: EvTarea, Epoca: c.epoca, Nodo: c.nodos[j].nombre, Shard: shard(s)})
 		return nil
