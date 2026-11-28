@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Evidencia de los issues #28, #29, #30 y #61: la API vive en el coordinador del clúster
 # en Docker, con MongoDB y Redis, y se prueba desde el anfitrión con JWT. Requiere el
-# gold real (scripts/evidencia-cluster.sh antes).
+# gold real en data/gold (make datos-docker antes).
 #
 # Desde #61 las rutas exigen token: el script genera un JWT_SECRETO y claves de un solo
 # uso para esta corrida (no se escriben en disco ni en la evidencia) e inicia sesión.
