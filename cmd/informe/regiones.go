@@ -162,12 +162,16 @@ var lenguajes = map[string][3]string{
 	".yml": {"yaml", "# ", ""}, ".yaml": {"yaml", "# ", ""}, ".sh": {"bash", "# ", ""},
 	".pml": {"promela", "/* ", " */"}, ".json": {"json", "", ""}, ".env": {"bash", "# ", ""},
 	"Dockerfile": {"dockerfile", "# ", ""}, "Makefile": {"makefile", "# ", ""}, ".conf": {"nginx", "# ", ""},
+	".ps1": {"powershell", "# ", ""},
 }
 
 func lenguajeDe(ruta string) [3]string {
 	base := filepath.Base(ruta)
 	if strings.HasPrefix(base, "Dockerfile") {
 		return lenguajes["Dockerfile"]
+	}
+	if base == ".env" || strings.HasPrefix(base, ".env.") { // .env.example
+		return lenguajes[".env"]
 	}
 	if l, ok := lenguajes[base]; ok {
 		return l
@@ -188,7 +192,9 @@ func regionArchivo(ruta, fragmento string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	lineas := strings.Split(strings.TrimRight(strings.ReplaceAll(string(src), "\r\n", "\n"), "\n"), "\n")
+	// Sin BOM (los .ps1 lo llevan para PowerShell 5.1) ni CRLF.
+	texto := strings.TrimPrefix(strings.ReplaceAll(string(src), "\r\n", "\n"), "\uFEFF")
+	lineas := strings.Split(strings.TrimRight(texto, "\n"), "\n")
 	var out []string
 	dentro, abierto, cerrado := fragmento == "", false, false
 	for _, l := range lineas {

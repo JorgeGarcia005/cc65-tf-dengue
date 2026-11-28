@@ -88,3 +88,19 @@ func TestValoresEnLinea(t *testing.T) {
 		t.Error("sin datos debía dar error")
 	}
 }
+
+// TestRegionArchivoLenguajes (PR-96 H3): .env.example y .ps1 llevan su
+// comentario de ruta, y el BOM de un .ps1 no llega al informe.
+func TestRegionArchivoLenguajes(t *testing.T) {
+	t.Chdir(t.TempDir())
+	escribirPrueba(t, "deploy/.env.example", "JWT_SECRETO=\r\n")
+	escribirPrueba(t, "scripts/x.ps1", "\uFEFF# Hola\r\nparam()\r\n")
+	for nombre, want := range map[string]string{
+		"archivo:deploy/.env.example": "```bash\n# deploy/.env.example\nJWT_SECRETO=\n```\n",
+		"archivo:scripts/x.ps1":       "```powershell\n# scripts/x.ps1\n# Hola\nparam()\n```\n",
+	} {
+		if got, err := generarRegion(nombre); err != nil || got != want {
+			t.Errorf("%s: %q, %v; want %q", nombre, got, err, want)
+		}
+	}
+}
