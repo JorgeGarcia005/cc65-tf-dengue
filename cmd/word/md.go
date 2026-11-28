@@ -84,28 +84,71 @@ type documento struct {
 	orden    []enlace
 	numIds   []int // listas numeradas creadas (cada una reinicia en 1)
 	figuras  int
+	tablas   int
 	docPr    int
-	numBase  int // primer numId libre en numbering.xml
-	bulletID int // numId de viñetas de la plantilla
-	dir      string
-	avisos   []string
+	marcas   int // id de los marcadores (bookmarks) de los pies
+	// etiquetas: {#fig:id} o {#tab:id} → número. En la segunda pasada
+	// (fijas) vienen de la primera y resuelven @fig:id y @tab:id.
+	etiquetas map[string]int
+	fijas     bool
+	vistas    map[string]bool
+	entradas  []entrada // figuras y tablas, en orden, para sus índices
+	numBase   int       // primer numId libre en numbering.xml
+	bulletID  int       // numId de viñetas de la plantilla
+	dir       string
+	avisos    []string
 	// referencias activa el formato APA 7 de la lista de referencias
 	// (directiva <!-- estilo: referencias --> en el Markdown).
 	referencias bool
 }
 
 func nuevoDocumento(dir string, numBase, bulletID int) *documento {
-	return &documento{enlaces: map[string]string{}, docPr: 1000, numBase: numBase, bulletID: bulletID, dir: dir}
+	return &documento{enlaces: map[string]string{}, docPr: 1000, numBase: numBase, bulletID: bulletID, dir: dir,
+		etiquetas: map[string]int{}, vistas: map[string]bool{}}
+}
+
+// entrada es una figura o una tabla del índice de figuras o de tablas.
+type entrada struct {
+	Tipo     string // "Figura" o "Tabla"
+	N        int
+	Titulo   string // texto visible, sin formato
+	Marcador string
+}
+
+// convertirTodo convierte las secciones en dos pasadas: la primera numera
+// figuras y tablas, y la segunda escribe el documento con las referencias
+// cruzadas (@fig:id, @tab:id) ya resueltas, aunque apunten hacia adelante.
+func convertirTodo(dir string, secciones []string, numBase, bulletID int) *documento {
+	primera := nuevoDocumento(dir, numBase, bulletID)
+	for _, s := range secciones {
+		primera.Convertir(s)
+	}
+	d := nuevoDocumento(dir, numBase, bulletID)
+	d.etiquetas, d.fijas = primera.etiquetas, true
+	for _, s := range secciones {
+		d.Convertir(s)
+	}
+	return d
 }
 
 var (
-	reImagen   = regexp.MustCompile(`^!\[([^\]]*)\]\(([^)]+)\)\s*$`)
+	reImagen   = regexp.MustCompile(`^!\[([^\]]*)\]\(([^)]+)\)(?:\s*\{#(fig:[\w-]+)\})?\s*$`)
 	reIncluir  = regexp.MustCompile(`^<!--\s*incluir(-codigo)?:\s*(\S+)\s*-->\s*$`)
 	reNumerada = regexp.MustCompile(`^(\d+)\.\s+(.*)$`)
 	reTitulo   = regexp.MustCompile(`^(#{1,4})\s+(.*)$`)
 	reEstilo   = regexp.MustCompile(`^<!--\s*estilo:\s*(\S+)\s*-->\s*$`)
 	reCaptura  = regexp.MustCompile(`^<!--\s*captura:\s*(.+?)\s*-->\s*$`)
+	// reEtiqueta separa la etiqueta {#fig:id} o {#tab:id} al final de un título.
+	reEtiqueta   = regexp.MustCompile(`^(.*?)\s*\{#((?:fig|tab):[\w-]+)\}\s*$`)
+	reReferencia = regexp.MustCompile(`@((?:fig|tab):[\w-]+)`)
+	reComentario = regexp.MustCompile(`<!--.*?-->`)
 )
+
+// esComentario: una línea que abre un comentario HTML que no es un valor en
+// línea (<!--v:…-->…<!--/v-->, que se lee como texto).
+func esComentario(s string) bool {
+	return strings.HasPrefix(s, "<!--") && !strings.HasPrefix(s, "<!--v:")
+}
 
 // Convertir agrega al cuerpo el Markdown del archivo (ruta relativa a d.dir).
 func (d *documento) Convertir(ruta string) {
@@ -141,12 +184,13 @@ func (d *documento) bloques(lineas []string, base string) {
 			}
 			i++
 		case reCaptura.MatchString(t):
-			d.captura(reCaptura.FindStringSubmatch(t)[1])
+			titulo, etiqueta := separarEtiqueta(reCaptura.FindStringSubmatch(t)[1])
+			d.captura(titulo, etiqueta)
 			i++
 		case reEstilo.MatchString(t):
 			d.referencias = reEstilo.FindStringSubmatch(t)[1] == "referencias"
 			i++
-		case strings.HasPrefix(t, "<!--"):
+		case esComentario(t):
 			for i < len(lineas) && !strings.Contains(lineas[i], "-->") {
 				i++
 			}
@@ -171,7 +215,7 @@ func (d *documento) bloques(lineas []string, base string) {
 			i++
 		case reImagen.MatchString(t):
 			m := reImagen.FindStringSubmatch(t)
-			d.figura(m[1], filepath.Join(base, m[2]))
+			d.figura(m[1], filepath.Join(base, m[2]), m[3])
 			i++
 		case strings.HasPrefix(t, "|"):
 			j := i
@@ -194,18 +238,28 @@ func (d *documento) bloques(lineas []string, base string) {
 			for i < len(lineas) {
 				s := strings.TrimSpace(lineas[i])
 				if s == "" || strings.HasPrefix(s, "|") || strings.HasPrefix(s, "#") || strings.HasPrefix(s, "```") ||
-					strings.HasPrefix(s, "$$") || strings.HasPrefix(s, "<!--") || reImagen.MatchString(s) ||
+					strings.HasPrefix(s, "$$") || esComentario(s) || reImagen.MatchString(s) ||
 					(len(partes) > 0 && (strings.HasPrefix(s, "- ") || reNumerada.MatchString(s))) {
 					break
 				}
 				partes = append(partes, s)
 				i++
 			}
+			contenido := strings.Join(partes, " ")
+			if titulo, ok := strings.CutPrefix(contenido, "Tabla: "); ok {
+				tt, et := separarEtiqueta(titulo)
+				d.pie("Tabla", tt, et)
+				continue
+			}
+			if nota, ok := strings.CutPrefix(contenido, "Nota: "); ok {
+				d.nota(nota)
+				continue
+			}
 			ppr := `<w:jc w:val="both"/>`
 			if d.referencias { // APA 7: sangría francesa y sin justificar
 				ppr = `<w:spacing w:after="160"/><w:ind w:left="720" w:hanging="720"/><w:jc w:val="left"/>`
 			}
-			d.parrafo(strings.Join(partes, " "), ppr, texto(22))
+			d.parrafo(contenido, ppr, texto(22))
 		}
 	}
 	d.referencias = false // el estilo no pasa de un archivo al siguiente
@@ -253,18 +307,65 @@ func (d *documento) cita(s string) {
 	d.parrafo(s, `<w:jc w:val="both"/>`, texto(22))
 }
 
+// separarEtiqueta devuelve el título sin su etiqueta {#fig:id} o {#tab:id}.
+func separarEtiqueta(s string) (titulo, etiqueta string) {
+	if m := reEtiqueta.FindStringSubmatch(s); m != nil {
+		return m[1], m[2]
+	}
+	return s, ""
+}
+
+// pie escribe el pie de una figura o una tabla en formato APA 7: el número en
+// negrita y, en la línea siguiente, el título en cursiva, los dos encima del
+// elemento y en su misma página. El número lleva un marcador para el índice.
+func (d *documento) pie(tipo, titulo, etiqueta string) {
+	n := &d.figuras
+	if tipo == "Tabla" {
+		n = &d.tablas
+	}
+	*n++
+	if etiqueta != "" {
+		if d.vistas[etiqueta] {
+			d.aviso("etiqueta repetida {#%s}", etiqueta)
+		}
+		d.vistas[etiqueta] = true
+		if !d.fijas {
+			d.etiquetas[etiqueta] = *n
+		}
+	}
+	d.marcas++
+	marcador := fmt.Sprintf("_%s%d", tipo, *n)
+	d.entradas = append(d.entradas, entrada{Tipo: tipo, N: *n, Titulo: textoVisible(d.resolver(titulo)), Marcador: marcador})
+	num := estilo{Fuente: fuenteTexto, Negrita: true, SinCursiva: true, Tam: 24}
+	fmt.Fprintf(&d.b, `<w:p><w:pPr><w:keepNext/><w:spacing w:before="240" w:after="0"/><w:jc w:val="left"/></w:pPr>`+
+		`<w:bookmarkStart w:id="%d" w:name="%s"/><w:r><w:rPr>%s</w:rPr><w:t>%s %d</w:t></w:r><w:bookmarkEnd w:id="%[1]d"/></w:p>`,
+		d.marcas, marcador, num.rPr(), tipo, *n)
+	d.parrafo(titulo, `<w:keepNext/><w:spacing w:before="0" w:after="120"/><w:jc w:val="left"/>`,
+		estilo{Fuente: fuenteTexto, Cursiva: true, Tam: 24})
+}
+
+// nota escribe la nota general de una figura o una tabla (APA 7): «Nota.» en
+// cursiva y el texto en tamaño menor, debajo del elemento.
+func (d *documento) nota(s string) {
+	e := texto(20)
+	cur := e
+	cur.Cursiva = true
+	d.b.WriteString(`<w:p><w:pPr><w:spacing w:before="60" w:after="360"/><w:jc w:val="left"/></w:pPr>` +
+		`<w:r><w:rPr>` + cur.rPr() + `</w:rPr><w:t xml:space="preserve">Nota. </w:t></w:r>`)
+	d.b.WriteString(d.inline(s, e))
+	d.b.WriteString(`</w:p>`)
+}
+
 // captura deja un espacio enmarcado para pegar una captura de pantalla, con
 // su pie numerado como el de cualquier figura.
-func (d *documento) captura(descripcion string) {
-	d.figuras++
-	d.b.WriteString(`<w:p><w:pPr><w:keepNext/><w:pBdr>` +
+func (d *documento) captura(titulo, etiqueta string) {
+	d.pie("Figura", titulo, etiqueta)
+	d.b.WriteString(`<w:p><w:pPr><w:pBdr>` +
 		`<w:top w:val="single" w:sz="4" w:space="40" w:color="A6A6A6"/><w:left w:val="single" w:sz="4" w:space="4" w:color="A6A6A6"/>` +
 		`<w:bottom w:val="single" w:sz="4" w:space="40" w:color="A6A6A6"/><w:right w:val="single" w:sz="4" w:space="4" w:color="A6A6A6"/>` +
-		`</w:pBdr><w:spacing w:before="240" w:after="120"/><w:jc w:val="center"/></w:pPr>`)
+		`</w:pBdr><w:spacing w:before="120" w:after="240"/><w:jc w:val="center"/></w:pPr>`)
 	e := estilo{Fuente: fuenteTexto, Color: "808080", Tam: 20}
 	d.b.WriteString(`<w:r><w:rPr>` + e.rPr() + `</w:rPr><w:t>[Pegar aquí la captura]</w:t></w:r></w:p>`)
-	pie := estilo{Fuente: fuenteTexto, Cursiva: true, Color: "404040", Tam: 20}
-	d.parrafo(fmt.Sprintf("Figura %d. %s", d.figuras, descripcion), `<w:spacing w:before="0" w:after="240"/><w:jc w:val="center"/>`, pie)
 }
 
 // lista convierte una lista con viñetas o numerada; devuelve la línea siguiente.
@@ -309,7 +410,10 @@ func (d *documento) codigo(lineas []string) {
 		if k == len(lineas)-1 {
 			despues = 200
 		}
-		fmt.Fprintf(&d.b, `<w:p><w:pPr><w:shd w:val="clear" w:color="auto" w:fill="F2F2F2"/><w:spacing w:before="0" w:after="%d" w:line="240" w:lineRule="auto"/><w:ind w:left="113" w:right="113"/></w:pPr>`, despues)
+		// Todas las líneas con el mismo borde: Word dibuja una regla arriba de
+		// la primera y otra debajo de la última.
+		fmt.Fprintf(&d.b, `<w:p><w:pPr><w:pBdr><w:top w:val="single" w:sz="4" w:space="4" w:color="000000"/><w:bottom w:val="single" w:sz="4" w:space="4" w:color="000000"/></w:pBdr>`+
+			`<w:spacing w:before="0" w:after="%d" w:line="240" w:lineRule="auto"/><w:ind w:left="113" w:right="113"/></w:pPr>`, despues)
 		d.b.WriteString(`<w:r><w:rPr>` + e.rPr() + `</w:rPr><w:t xml:space="preserve">` + escapar(strings.ReplaceAll(l, "\t", "    ")) + `</w:t></w:r></w:p>`)
 	}
 }
@@ -357,28 +461,33 @@ func (d *documento) tabla(lineas []string) {
 		fmt.Fprintf(&d.b, `<w:gridCol w:w="%d"/>`, a)
 	}
 	d.b.WriteString(`</w:tblGrid>`)
+	// APA 7: tres reglas horizontales (sobre y bajo el encabezado, y al final),
+	// sin líneas verticales ni relleno.
+	const gruesa = `w:val="single" w:sz="12" w:space="0" w:color="000000"`
+	const fina = `w:val="single" w:sz="6" w:space="0" w:color="000000"`
 	for k, f := range filas {
-		encabezado := k == 0
+		encabezado, ultima := k == 0, k == len(filas)-1
 		d.b.WriteString(`<w:tr><w:trPr><w:cantSplit/>`)
 		if encabezado {
 			d.b.WriteString(`<w:tblHeader/>`)
 		}
 		d.b.WriteString(`</w:trPr>`)
+		var bordes string
+		switch {
+		case encabezado:
+			bordes = `<w:tcBorders><w:top ` + gruesa + `/><w:bottom ` + fina + `/></w:tcBorders>`
+		case ultima:
+			bordes = `<w:tcBorders><w:bottom ` + gruesa + `/></w:tcBorders>`
+		}
 		for j := 0; j < nc; j++ {
 			celda := ""
 			if j < len(f) {
 				celda = f[j]
 			}
 			e := texto(tam)
-			fondo := "FFFFFF"
-			switch {
-			case encabezado:
-				fondo, e.Color, e.Negrita = "000000", "FFFFFF", true
-			case k%2 == 0:
-				fondo = "F2F2F2"
-			}
-			fmt.Fprintf(&d.b, `<w:tc><w:tcPr><w:tcW w:w="%d" w:type="dxa"/><w:tcBorders><w:bottom w:val="single" w:sz="4" w:space="0" w:color="D9D9D9"/></w:tcBorders><w:shd w:val="clear" w:color="auto" w:fill="%s"/><w:vAlign w:val="center"/></w:tcPr>`, anchos[j], fondo)
-			fmt.Fprintf(&d.b, `<w:p><w:pPr><w:spacing w:before="0" w:after="0" w:line="240" w:lineRule="auto"/><w:jc w:val="%s"/></w:pPr>`, alin[j])
+			e.Negrita = encabezado
+			fmt.Fprintf(&d.b, `<w:tc><w:tcPr><w:tcW w:w="%d" w:type="dxa"/>%s<w:vAlign w:val="center"/></w:tcPr>`, anchos[j], bordes)
+			fmt.Fprintf(&d.b, `<w:p><w:pPr><w:spacing w:before="20" w:after="20" w:line="240" w:lineRule="auto"/><w:jc w:val="%s"/></w:pPr>`, alin[j])
 			d.b.WriteString(d.inline(celda, e))
 			d.b.WriteString(`</w:p></w:tc>`)
 		}
@@ -460,15 +569,15 @@ func textoVisible(s string) string {
 	return strings.NewReplacer("**", "", "`", "", "*", "").Replace(s)
 }
 
-// figura inserta una imagen SVG centrada y su pie numerado.
-func (d *documento) figura(alt, ruta string) {
+// figura inserta una imagen SVG con su pie APA encima.
+func (d *documento) figura(alt, ruta, etiqueta string) {
 	svg, err := os.ReadFile(filepath.Join(d.dir, ruta))
 	if err != nil {
 		d.aviso("no se pudo leer la figura %s: %v", ruta, err)
 		return
 	}
 	w, h := tamanoSVG(svg)
-	d.figuras++
+	d.pie("Figura", alt, etiqueta)
 	img := imagen{
 		SVG:    svg,
 		Nombre: fmt.Sprintf("figura%d", d.figuras),
@@ -479,14 +588,12 @@ func (d *documento) figura(alt, ruta string) {
 	cx := int64(anchoTexto) * emuPorDxa
 	cy := int64(float64(cx) * h / w)
 	d.docPr++
-	d.b.WriteString(`<w:p><w:pPr><w:keepNext/><w:spacing w:before="120" w:after="60"/><w:jc w:val="center"/></w:pPr><w:r><w:drawing>`)
+	d.b.WriteString(`<w:p><w:pPr><w:spacing w:before="0" w:after="120"/><w:jc w:val="center"/></w:pPr><w:r><w:drawing>`)
 	fmt.Fprintf(&d.b, `<wp:inline distT="0" distB="0" distL="0" distR="0"><wp:extent cx="%d" cy="%d"/><wp:docPr id="%d" name="%s" descr="%s"/>`, cx, cy, d.docPr, img.Nombre, escapar(alt))
 	d.b.WriteString(`<a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:pic>`)
 	fmt.Fprintf(&d.b, `<pic:nvPicPr><pic:cNvPr id="0" name="%s.svg"/><pic:cNvPicPr/></pic:nvPicPr>`, img.Nombre)
 	fmt.Fprintf(&d.b, `<pic:blipFill><a:blip r:embed="%s"><a:extLst><a:ext uri="{96DAC541-7B7A-43D3-8B79-37D633B846F1}"><asvg:svgBlip xmlns:asvg="http://schemas.microsoft.com/office/drawing/2016/SVG/main" r:embed="%s"/></a:ext></a:extLst></a:blip><a:stretch><a:fillRect/></a:stretch></pic:blipFill>`, img.RelPNG, img.RelSVG)
 	fmt.Fprintf(&d.b, `<pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="%d" cy="%d"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr></pic:pic></a:graphicData></a:graphic></wp:inline></w:drawing></w:r></w:p>`, cx, cy)
-	pie := estilo{Fuente: fuenteTexto, Cursiva: true, Color: "404040", Tam: 20}
-	d.parrafo(fmt.Sprintf("Figura %d. %s", d.figuras, alt), `<w:spacing w:before="0" w:after="240"/><w:jc w:val="center"/>`, pie)
 }
 
 var (
@@ -513,6 +620,7 @@ var (
 // inline convierte el formato en línea: **negrita**, *cursiva*, `código`,
 // [texto](url), <url> y $matemática$.
 func (d *documento) inline(s string, base estilo) string {
+	s = d.resolver(reComentario.ReplaceAllString(s, ""))
 	var b, pendiente strings.Builder
 	actual := base
 	volcar := func() {
@@ -571,6 +679,26 @@ func (d *documento) inline(s string, base estilo) string {
 	}
 	volcar()
 	return b.String()
+}
+
+// resolver cambia @fig:id y @tab:id por «Figura N» y «Tabla N». En la
+// primera pasada aún no se conocen todas las etiquetas: se dejan igual.
+func (d *documento) resolver(s string) string {
+	return reReferencia.ReplaceAllStringFunc(s, func(r string) string {
+		etiqueta := r[1:]
+		n, ok := d.etiquetas[etiqueta]
+		if !ok {
+			if d.fijas {
+				d.aviso("referencia a una etiqueta que no existe: %s", r)
+			}
+			return r
+		}
+		tipo := "Figura"
+		if strings.HasPrefix(etiqueta, "tab:") {
+			tipo = "Tabla"
+		}
+		return fmt.Sprintf("%s %d", tipo, n)
+	})
 }
 
 func indiceRuna(r []rune, desde int, c rune) int {

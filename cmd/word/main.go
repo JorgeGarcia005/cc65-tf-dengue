@@ -8,7 +8,11 @@
 //
 // Uso:
 //
-//	go run ./cmd/word -plantilla entregables/plantilla.docx
+//	go run ./cmd/word                                   # informe final (TB2)
+//	go run ./cmd/word -fuentes docs/informe/pc4 -entregable PC4
+//
+// -quitar borra de la carátula los párrafos que contienen esos textos (por
+// ejemplo, el nombre de un integrante que ya no está en el equipo).
 //
 // Los códigos de alumno (un .docx por integrante) se leen de
 // entregables/codigos.txt (uno por línea; la carpeta está en .gitignore) o de
@@ -35,15 +39,16 @@ import (
 
 func main() {
 	plantilla := flag.String("plantilla", "entregables/plantilla.docx", "informe anterior (.docx) del que se toman carátula y estilos")
-	fuentes := flag.String("fuentes", "docs/informe/pc3", "carpeta con las secciones Markdown")
+	fuentes := flag.String("fuentes", "docs/informe/tb2", "carpeta con las secciones Markdown")
 	salida := flag.String("salida", "entregables", "carpeta de salida")
-	entregable := flag.String("entregable", "PC3", "código del entregable (PC3, PC4, TB2)")
+	entregable := flag.String("entregable", "TB2", "código del entregable (PC3, PC4, TB2)")
 	// El enunciado (CC65-TB2-1ACC0065_202620, "Detalle de Entrega") fija el nombre
 	// 1ACC0065_YYY_202610_Informe_UXXXXXXXX aunque el ciclo sea 2026-20: se respeta tal cual.
 	ciclo := flag.String("ciclo", "202610", "código del nombre de archivo que exige el enunciado")
 	titulo := flag.String("titulo", "Riesgo de dengue con signos de alarma: regresión logística distribuida en Go", "título de la carátula")
 	tituloViejo := flag.String("titulo-plantilla", "SmartTransit: Predicción Concurrente de Demanda de Transporte", "título de la carátula de la plantilla")
 	entregableViejo := flag.String("entregable-plantilla", "TB1", "código de entregable que figura en la plantilla")
+	quitar := flag.String("quitar", "", "textos separados por coma: se borran de la carátula los párrafos que los contienen")
 	codigos := flag.String("codigos", "", "códigos de alumno separados por coma (por defecto, <salida>/codigos.txt)")
 	flag.Parse()
 
@@ -60,7 +65,7 @@ func main() {
 	docx, avisos, err := armar(p, *fuentes, secciones, reemplazos{
 		{*tituloViejo, *titulo},
 		{*entregableViejo, *entregable},
-	})
+	}, partirLista(*quitar))
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -181,7 +186,7 @@ var (
 )
 
 // armar construye el .docx completo.
-func armar(p *paquete, dir string, secciones []string, cambios reemplazos) ([]byte, []string, error) {
+func armar(p *paquete, dir string, secciones []string, cambios reemplazos, quitar []string) ([]byte, []string, error) {
 	doc := string(p.partes["word/document.xml"])
 	ini := strings.Index(doc, "<w:body>")
 	fin := strings.LastIndex(doc, "</w:body>")
@@ -216,15 +221,16 @@ func armar(p *paquete, dir string, secciones []string, cambios reemplazos) ([]by
 		return nil, nil, fmt.Errorf("plantilla sin <w:sectPr>")
 	}
 	caratula = reSectPr.ReplaceAllString(caratula, "")
+	caratula, faltan := quitarParrafos(caratula, quitar)
+	if len(faltan) > 0 {
+		return nil, nil, fmt.Errorf("la carátula no tiene los textos a quitar %q", faltan)
+	}
 
 	numBase, bulletID, decimal, err := numeracion(string(p.partes["word/numbering.xml"]))
 	if err != nil {
 		return nil, nil, err
 	}
-	d := nuevoDocumento(".", numBase, bulletID)
-	for _, s := range secciones {
-		d.Convertir(s)
-	}
+	d := convertirTodo(".", secciones, numBase, bulletID)
 
 	cabecera, err := declararNamespaces(doc[:ini+len("<w:body>")])
 	if err != nil {
@@ -233,7 +239,7 @@ func armar(p *paquete, dir string, secciones []string, cambios reemplazos) ([]by
 	var b strings.Builder
 	b.WriteString(cabecera)
 	b.WriteString(caratula)
-	b.WriteString(indice())
+	b.WriteString(indice(d.entradas))
 	b.WriteString(d.b.String())
 	b.WriteString(sect)
 	b.WriteString(doc[fin:])
@@ -376,18 +382,77 @@ func reemplazarParrafo(xmlStr, viejo, nuevo string) (string, bool) {
 	return xmlStr, false
 }
 
-// indice inserta el título y un campo TOC que Word completa al abrir. El
-// título lleva "salto de página antes" y no un salto explícito: si la carátula
-// ya llena la primera página, un salto explícito dejaría una página en blanco.
-func indice() string {
-	e := estilo{Fuente: fuenteTexto, Negrita: true, Tam: 32}
-	return `<w:p><w:pPr><w:pageBreakBefore/><w:spacing w:after="240"/></w:pPr><w:r><w:rPr>` + e.rPr() + `</w:rPr><w:t>Índice</w:t></w:r></w:p>` +
-		`<w:p><w:r><w:fldChar w:fldCharType="begin" w:dirty="true"/></w:r>` +
+// indice inserta el título y un campo TOC que Word completa al abrir y, si
+// hay figuras o tablas, sus índices. El título lleva "salto de página antes"
+// y no un salto explícito: si la carátula ya llena la primera página, un
+// salto explícito dejaría una página en blanco.
+//
+// Los índices de figuras y de tablas no son campos TOC \c: un pie APA tiene
+// el número y el título en párrafos distintos y el campo solo vería «Figura
+// N». Cada entrada se escribe con su título y un PAGEREF al marcador del pie,
+// que Word actualiza al abrir (updateFields) como el índice general.
+func indice(entradas []entrada) string {
+	var b strings.Builder
+	b.WriteString(tituloIndice("Índice"))
+	b.WriteString(`<w:p><w:r><w:fldChar w:fldCharType="begin" w:dirty="true"/></w:r>` +
 		`<w:r><w:instrText xml:space="preserve"> TOC \o "1-2" \h \z \u </w:instrText></w:r>` +
 		`<w:r><w:fldChar w:fldCharType="separate"/></w:r>` +
 		`<w:r><w:rPr>` + texto(22).rPr() + `</w:rPr><w:t>Abra el documento en Word y acepte actualizar los campos para generar el índice.</w:t></w:r>` +
-		`<w:r><w:fldChar w:fldCharType="end"/></w:r></w:p>` +
-		`<w:p><w:r><w:br w:type="page"/></w:r></w:p>`
+		`<w:r><w:fldChar w:fldCharType="end"/></w:r></w:p>`)
+	for _, tipo := range []string{"Figura", "Tabla"} {
+		primera := true
+		for _, e := range entradas {
+			if e.Tipo != tipo {
+				continue
+			}
+			if primera {
+				b.WriteString(tituloIndice(map[string]string{"Figura": "Índice de figuras", "Tabla": "Índice de tablas"}[tipo]))
+				primera = false
+			}
+			t := texto(22)
+			fmt.Fprintf(&b, `<w:p><w:pPr><w:tabs><w:tab w:val="right" w:leader="dot" w:pos="%d"/></w:tabs><w:spacing w:after="80"/><w:ind w:left="1134" w:hanging="1134"/></w:pPr>`, anchoTexto)
+			fmt.Fprintf(&b, `<w:r><w:rPr>%s</w:rPr><w:t xml:space="preserve">%s %d. %s</w:t></w:r><w:r><w:rPr>%[1]s</w:rPr><w:tab/></w:r>`, t.rPr(), e.Tipo, e.N, escapar(e.Titulo))
+			fmt.Fprintf(&b, `<w:r><w:fldChar w:fldCharType="begin" w:dirty="true"/></w:r><w:r><w:instrText xml:space="preserve"> PAGEREF %s \h </w:instrText></w:r>`+
+				`<w:r><w:fldChar w:fldCharType="separate"/></w:r><w:r><w:rPr>%s</w:rPr><w:t>–</w:t></w:r><w:r><w:fldChar w:fldCharType="end"/></w:r></w:p>`, e.Marcador, t.rPr())
+		}
+	}
+	b.WriteString(`<w:p><w:r><w:br w:type="page"/></w:r></w:p>`)
+	return b.String()
+}
+
+func tituloIndice(s string) string {
+	e := estilo{Fuente: fuenteTexto, Negrita: true, Tam: 32}
+	return `<w:p><w:pPr><w:pageBreakBefore/><w:spacing w:after="240"/></w:pPr><w:r><w:rPr>` + e.rPr() + `</w:rPr><w:t>` + escapar(s) + `</w:t></w:r></w:p>`
+}
+
+// quitarParrafos borra los párrafos cuyo texto contiene alguno de los textos
+// y devuelve los que no encontró.
+func quitarParrafos(xmlStr string, textos []string) (string, []string) {
+	var faltan []string
+	for _, q := range textos {
+		encontrado := false
+		xmlStr = reParrafo.ReplaceAllStringFunc(xmlStr, func(p string) string {
+			if strings.Contains(textoParrafo(p), q) {
+				encontrado = true
+				return ""
+			}
+			return p
+		})
+		if !encontrado {
+			faltan = append(faltan, q)
+		}
+	}
+	return xmlStr, faltan
+}
+
+func partirLista(s string) []string {
+	var out []string
+	for _, c := range strings.Split(s, ",") {
+		if c = strings.TrimSpace(c); c != "" {
+			out = append(out, c)
+		}
+	}
+	return out
 }
 
 // pngTransparente es la imagen de respaldo obligatoria junto a cada SVG; Word

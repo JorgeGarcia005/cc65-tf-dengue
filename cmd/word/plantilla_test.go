@@ -49,7 +49,7 @@ func generar(t *testing.T, raiz string, cambios reemplazos) (string, error) {
 		t.Fatal(err)
 	}
 	t.Chdir(dir)
-	docx, avisos, err := armar(plantillaMinima(raiz), ".", []string{"01-x.md"}, cambios)
+	docx, avisos, err := armar(plantillaMinima(raiz), ".", []string{"01-x.md"}, cambios, nil)
 	if err != nil {
 		return "", err
 	}
