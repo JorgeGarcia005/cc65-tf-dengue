@@ -15,6 +15,7 @@ export interface Vista {
   elemento: ReactElement
 }
 
+// informe:vistas
 // Matriz de vistas × rol (ADR-0007 y plan TB2): el analista de salud pública ve
 // riesgo, predicción y evaluación; el clúster es solo del admin.
 export const VISTAS: Vista[] = [
@@ -24,6 +25,7 @@ export const VISTAS: Vista[] = [
   { ruta: '/evaluacion', titulo: 'Evaluación del modelo', menu: 'Evaluación', roles: ['analista', 'admin'], elemento: <Evaluacion /> },
   { ruta: '/admin', titulo: 'Clúster y entrenamiento en vivo', menu: 'Clúster', roles: ['admin'], elemento: <Admin /> },
 ]
+// /informe:vistas
 
 /**
  * Adónde ir después del login: la vista que se pidió, solo si es una ruta interna

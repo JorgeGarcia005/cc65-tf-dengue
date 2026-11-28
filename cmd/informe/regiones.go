@@ -187,6 +187,10 @@ func generarRegion(nombre string) (string, error) {
 		return tablaAPI()
 	case nombre == "protocolo":
 		return regionProtocolo()
+	case nombre == "contratos":
+		return regionContratos()
+	case nombre == "postman":
+		return regionPostman()
 	}
 	return "", fmt.Errorf("región desconocida")
 }

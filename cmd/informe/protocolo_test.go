@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/JorgeGarcia005/cc65-tf-dengue/internal/api"
 	"github.com/JorgeGarcia005/cc65-tf-dengue/internal/cluster/protocolo"
 )
 
@@ -51,5 +52,26 @@ func TestEquilibrioClusterConElModeloLineal(t *testing.T) {
 	// Ahorro con 2 nodos: 1000 filas · 1 ms · 1/2 = 500 ms; equilibrio: 50 ms / 0,5 ms = 100 filas.
 	if len(eq) != 1 || math.Abs(eq[0].AhorroMs-500) > 1e-9 || eq[0].ComunicaMs != 50 || eq[0].FilasMinimas != 100 {
 		t.Fatalf("EquilibrioCluster = %+v", eq)
+	}
+}
+
+// Toda ruta documentada de api.Rutas() debe aparecer en la tabla de
+// contratos con al menos un código de respuesta.
+func TestContratosCubrenLasRutas(t *testing.T) {
+	ops, err := leerOpenAPI("../../docs/api/openapi.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, r := range api.Rutas() {
+		if !r.Documentar {
+			continue
+		}
+		op, ok := ops[r.Metodo+" "+r.Ruta]
+		if !ok || op.resumen == "" || len(op.codigos) == 0 {
+			t.Errorf("%s %s: %+v", r.Metodo, r.Ruta, op)
+		}
+	}
+	if op := ops["POST /api/v1/predicciones"]; op == nil || op.peticion != "Consulta" || op.respuesta != "Prediccion" {
+		t.Errorf("predicciones: %+v", op)
 	}
 }

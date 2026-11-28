@@ -1,0 +1,9 @@
+Tabla: Latencia de POST /api/v1/predicciones con JWT, medida en el cliente {#tab:latencia}
+
+| Corrida | Peticiones | Errores | HIT / MISS | Peticiones por segundo | p50 (ms) | p95 (ms) | p99 (ms) | Máx. (ms) | p95 < {{entero .APIJWT.Limite}} ms |
+|---|---:|---:|---|---:|---:|---:|---:|---:|:---:|
+{{- range .APIJWT.Corridas}}
+| {{if eq .Nombre "fria"}}Caché fría (consultas distintas){{else if eq .Nombre "caliente"}}Caché caliente (en Redis){{else}}{{.Nombre}}{{end}} | {{miles .Peticiones}} | {{.Errores}} | {{miles .Hits}} / {{miles .Misses}} | {{miles (entero .RPS)}} | {{dos .P50}} | {{dos .P95}} | {{dos .P99}} | {{dos .Max}} | {{if .Cumple}}{{sino (derefB .Cumple)}}{{else}}—{{end}} |
+{{- end}}
+
+Nota: `go run ./cmd/benchapi -exigir-p95 100ms` con {{.APIJWT.Concurrencia}} clientes concurrentes contra el sistema en Docker Compose ({{.APIJWT.SO}}), con un JWT del analista en cada petición; modelo `{{.APIJWT.VersionModelo}}`. La latencia va desde que el cliente envía la petición hasta que lee la respuesta completa. Fuente: `{{.APIJWTArchivo}}`.

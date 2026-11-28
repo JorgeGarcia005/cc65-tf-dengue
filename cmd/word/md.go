@@ -149,6 +149,10 @@ var (
 	// reArchivoCaptura separa el archivo [capturas/x.png] al final de una captura.
 	reArchivoCaptura = regexp.MustCompile(`^(.*?)\s*\[([^\]\s]+\.(?:png|svg))\]\s*$`)
 	reEvidencia      = regexp.MustCompile(`^<!--\s*evidencia:\s*(\S+)\s*-->\s*$`)
+	// reFalta: un reporte que cmd/informe no encontró al generar la sección
+	// (lo produce un paso posterior de docs/guias/jose-70.md). Cuenta como
+	// pendiente: -final falla mientras la sección no se regenere con él.
+	reFalta = regexp.MustCompile(`^<!--\s*falta:\s*(\S+)\s*-->\s*$`)
 	// reEtiqueta separa la etiqueta {#fig:id} o {#tab:id} al final de un título.
 	reEtiqueta   = regexp.MustCompile(`^(.*?)\s*\{#((?:fig|tab):[\w-]+)\}\s*$`)
 	reReferencia = regexp.MustCompile(`@((?:fig|tab):[\w-]+)`)
@@ -221,6 +225,11 @@ func (d *documento) bloques(lineas []string, base string) {
 				d.pendientes = append(d.pendientes, filepath.ToSlash(ruta))
 				d.parrafo("[Pendiente: evidencia "+filepath.ToSlash(ruta)+"]", `<w:jc w:val="center"/>`, estilo{Fuente: fuenteTexto, Color: "808080", Tam: 20})
 			}
+			i++
+		case reFalta.MatchString(t):
+			ruta := reFalta.FindStringSubmatch(t)[1]
+			d.pendientes = append(d.pendientes, ruta)
+			d.parrafo("[Pendiente: "+ruta+"]", `<w:jc w:val="center"/>`, estilo{Fuente: fuenteTexto, Color: "808080", Tam: 20})
 			i++
 		case reEstilo.MatchString(t):
 			d.referencias = reEstilo.FindStringSubmatch(t)[1] == "referencias"
