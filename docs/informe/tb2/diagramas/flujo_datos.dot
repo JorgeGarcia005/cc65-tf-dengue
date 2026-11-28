@@ -1,0 +1,62 @@
+// Diagrama de actividades (UML 2.5) del flujo de datos de punta a punta.
+// Fuente de docs/informe/tb2/fig/flujo_datos.svg: make figuras.
+// Acciones: rectángulos redondeados; objetos (archivos, colecciones): rectángulos.
+digraph flujo_datos {
+  graph [rankdir=TB, fontname="Times New Roman", fontsize=11, nodesep=0.35, ranksep=0.38,
+         splines=polyline, pad=0.1, newrank=true]
+  node  [fontname="Times New Roman", fontsize=10.5, penwidth=0.9, margin="0.12,0.05", height=0.36]
+  edge  [fontname="Times New Roman", fontsize=9, penwidth=0.8, arrowsize=0.6, arrowhead=vee]
+
+  inicio [shape=circle, style=filled, fillcolor=black, label="", width=0.16, height=0.16, fixedsize=true]
+  fin    [shape=doublecircle, style=filled, fillcolor=black, label="", width=0.12, height=0.12, fixedsize=true]
+
+  subgraph cluster_a {
+    label="Parte A: carga y preparación (cmd/loader, cmd/gold, cmd/entrenar)"; labeljust=l; fontsize=10; penwidth=0.7
+    bronze  [shape=box, label="[CSV bronze]\ndata/bronze/*.csv"]
+    limpiar [shape=box, style=rounded, label="Leer por bloques de bytes y\nlimpiar en paralelo (worker pool)"]
+    silver  [shape=box, label="[silver]\ndata/silver/dengue.csv"]
+    codif   [shape=box, style=rounded, label="Codificar variables, separar\nentrenamiento y prueba, partir en shards"]
+    gold    [shape=box, label="[gold]\ntrain.bin, test.bin, shard_s.bin"]
+    inicial [shape=box, style=rounded, label="Entrenar el modelo inicial"]
+    modelo  [shape=box, label="[modelo.json]"]
+    bronze -> limpiar -> silver -> codif -> gold -> inicial -> modelo
+  }
+
+  subgraph cluster_bc {
+    label="Partes B y C: clúster (cmd/coordinator, cmd/node)"; labeljust=l; fontsize=10; penwidth=0.7
+    registrar [shape=box, style=rounded, label="Registrar N nodos y\nasignar los shards"]
+    epoca     [shape=box, style=rounded, label="Difundir los pesos; cada nodo calcula\nun parcial por bloque de su shard"]
+    reducir   [shape=box, style=rounded, label="Reducir en orden de bloque\ny actualizar los pesos"]
+    decision  [shape=diamond, label="", width=0.3, height=0.3, fixedsize=true]
+    publicar  [shape=box, style=rounded, label="Publicar el modelo nuevo\n(versión, MongoDB)"]
+    registrar -> epoca -> reducir -> decision
+    decision -> epoca [label=" [quedan épocas]"]
+    decision -> publicar [label=" [última época]"]
+  }
+
+  subgraph cluster_c {
+    label="Parte C: API REST (internal/api)"; labeljust=l; fontsize=10; penwidth=0.7
+    predecir [shape=box, style=rounded, label="Predecir el riesgo de un caso\n(Redis primero, luego el modelo)"]
+    mongo    [shape=box, label="[MongoDB]\nmodelos, entrenamientos,\npredicciones"]
+    redis    [shape=box, label="[Redis]\npredicciones en caché"]
+  }
+
+  subgraph cluster_d {
+    label="Parte D: SPA Vigía (web/)"; labeljust=l; fontsize=10; penwidth=0.7
+    consultar [shape=box, style=rounded, label="Consultar riesgo, mapa\ny evaluación"]
+    lanzar    [shape=box, style=rounded, label="Lanzar un entrenamiento\n(POST /entrenamientos)"]
+    vivo      [shape=box, style=rounded, label="Ver el entrenamiento\nen vivo (WebSocket)"]
+  }
+
+  inicio -> bronze
+  gold -> registrar [style=dashed, label=" shards (volumen)"]
+  modelo -> predecir [style=dashed, label=" modelo inicial"]
+  lanzar -> epoca [label=" inicia (nodos ya\n registrados)"]
+  epoca -> vivo [style=dashed, label=" eventos"]
+  publicar -> predecir [label=" modelo vigente"]
+  publicar -> mongo [style=dashed]
+  consultar -> predecir
+  predecir -> redis [style=dashed]
+  predecir -> mongo [style=dashed, label=" registro"]
+  predecir -> fin
+}

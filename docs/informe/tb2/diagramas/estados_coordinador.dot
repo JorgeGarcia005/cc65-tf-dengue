@@ -1,0 +1,46 @@
+// Máquina de estados (UML 2.5) del coordinador en sus dos modos de arranque.
+// Fuente de docs/informe/tb2/fig/estados_coordinador.svg: make figuras.
+// Transiciones: evento [guarda] / acción. Código: cmd/coordinator/main.go y api.go.
+digraph estados_coordinador {
+  graph [rankdir=TB, fontname="Times New Roman", fontsize=11, nodesep=0.45, ranksep=0.42,
+         splines=polyline, pad=0.1, newrank=true]
+  node  [shape=box, style=rounded, fontname="Times New Roman", fontsize=10.5, penwidth=0.9, margin="0.14,0.06", height=0.4]
+  edge  [fontname="Times New Roman", fontsize=9, penwidth=0.8, arrowsize=0.6, arrowhead=vee]
+
+  inicio [shape=circle, style=filled, fillcolor=black, label="", width=0.16, height=0.16, fixedsize=true]
+  cargando [label="Iniciando\n(lee los flags, escucha TCP :9000)"]
+  inicio -> cargando [label=" arranque del contenedor"]
+
+  subgraph cluster_unico {
+    label="Modo entrenamiento único (API vacía)"; labeljust=l; fontsize=10; penwidth=0.7
+    u_carga    [label="Cargando los shards"]
+    u_espera   [label="Esperando nodos"]
+    u_carga -> u_espera
+    u_entrena  [label="Entrenando\n(EPOCAS épocas)"]
+    u_verifica [label="Verificando contra\nel secuencial"]
+    u_escribe  [label="Escribiendo el reporte"]
+    u_fin      [shape=doublecircle, style=filled, fillcolor=black, label="", width=0.12, height=0.12, fixedsize=true]
+    u_espera -> u_entrena [label=" N nodos registrados"]
+    u_entrena -> u_verifica [label=" fin [VERIFICAR=true]"]
+    u_entrena -> u_escribe [label=" fin [VERIFICAR=false]"]
+    u_verifica -> u_escribe [label=" [pesos idénticos\n bit a bit]"]
+    u_escribe -> u_fin [label=" / «fin» a los nodos"]
+  }
+
+  subgraph cluster_servicio {
+    label="Modo servicio (API=:8080): la API responde desde el arranque"; labeljust=l; fontsize=10; penwidth=0.7
+    s_prep    [label="Preparando: modelo inicial, MongoDB,\nRedis, cuentas y shards; abre la API"]
+    s_espera  [label="Esperando nodos"]
+    s_prep -> s_espera
+    s_listo   [label="Listo\n(acepta entrenamientos)"]
+    s_entrena [label="Entrenando\n(parámetros del pedido)"]
+    s_fin     [shape=doublecircle, style=filled, fillcolor=black, label="", width=0.12, height=0.12, fixedsize=true]
+    s_espera -> s_listo [label=" N nodos registrados"]
+    s_listo -> s_entrena [label=" POST /api/v1/entrenamientos\n [rol admin]"]
+    s_entrena -> s_listo [label=" fin / publica el modelo,\n guarda en MongoDB"]
+    s_listo -> s_fin [label=" SIGTERM / «fin»\n a los nodos"]
+  }
+
+  cargando -> u_carga [label=" [-api vacío]"]
+  cargando -> s_prep [label=" [-api=:8080]"]
+}
